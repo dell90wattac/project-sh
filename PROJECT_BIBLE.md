@@ -30,7 +30,7 @@ Built collaboratively: AI agents write all code, the user provides design direct
 | Audio | Web Audio API (not yet implemented) |
 | Language | Vanilla JS, ES Modules, no bundler |
 | Entry | `index.html` → `src/main.js` |
-| Dev server | `npx serve .` or VS Code Live Server |
+| Dev server | `node server.js` — serves with `no-cache` headers to prevent stale JS |
 
 ---
 
@@ -140,8 +140,12 @@ Project SH/
 ---
 
 ## Current Environment
-- Grand cathedral museum — dimensions and furniture defined in `src/world/world.js`
-- Entrance staircase, side staircases, back balcony, desk, benches, chandeliers
+- Compressed lobby — **14 m wide × 28 m deep × 5.5 m ceiling** (≈50×100 player-block units); dimensions in `src/world/world.js`
+- Entrance platform (Z +9..+14, Y=1.0) with 3-step descent to main floor
+- Two side staircases (X=±5.5, 8 steps) rising to full-width balcony at Y=2.5 (Z≈-7.9 to -14)
+- 3 column pairs (X=±3.0) creating nave + side aisles
+- Front desk (4.5 m, Z=-4), benches under balcony, water cooler in right aisle
+- 3 ceiling chandeliers with shortened chains (bottom at ≈3.3 m); 3 sconce pairs on side walls
 - One damage pillar hazard (placeholder enemy/hazard stand-in)
 - Starting loadout: handgun equipped, no ammo or items; pickups on the floor near spawn
 

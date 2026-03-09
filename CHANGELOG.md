@@ -4,6 +4,39 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 9] — 2026-03-09
+### Changed
+- **Room dimensions dramatically compressed** (`src/world/world.js`)
+  - Width: 20 m → **14 m** (X: ±7)
+  - Depth: 40 m → **28 m** (Z: ±14)
+  - Ceiling: 10 m → **5.5 m**
+  - Proportions are approximately 50×100 player-block units
+
+- **All world elements repositioned to match new room scale**
+  - Entry platform: Y=1.5 → **1.0**, Z=+9..+14
+  - Front staircase: 6 steps → **3 steps** (0.3 m rise each, 0.5 m run)
+  - Side staircases: 10 steps → **8 steps**, 2.5 m wide → **2.2 m**, centered at X=±5.5, `STAIR_HEIGHT` 3.5 m → **2.5 m**, start Z=-1.5, run 0.8 m each
+  - Balcony: full-width at Y=2.5, Z≈-7.9 to -14
+  - Column pairs: X=±4.5 → **X=±3.0**, Z=[+5, -1, -7]
+  - Front desk: 7 m → **4.5 m** wide, moved to Z=-4.0
+  - Benches: behind staircases at X=±5.0, Z=-9 (under balcony overhang)
+  - Water cooler: right side aisle at (6.2, 0, +5)
+  - Damage pillar: height matches `STAIR_HEIGHT` (2.5 m)
+  - Player spawn: Z=7 → **Z=4**
+
+- **Chandeliers resized for lower ceiling** (`src/main.js`)
+  - Outer chains: 3.0 m → **1.0 m**; inner arms: 1.2 m → **0.55 m**
+  - Bottom bulb at ≈3.3 m (was 3.7 m) — clears player eye level
+  - 4 chandeliers → **3**, hung at Y=5.2 at Z=[+4, -4, -10]
+
+- **Fog density increased**: 0.035 → **0.055** (tighter room reads hazier)
+
+- **Dev server cache fixed** (`server.js`)
+  - Added `Cache-Control: no-cache, no-store, must-revalidate` headers
+  - Browser was serving stale JS due to missing cache headers
+
+---
+
 ## [Session 8] — 2026-03-09
 ### Added
 - **Inventory drag-and-drop** (`src/ui/inventory.js`)
@@ -281,6 +314,7 @@ All notable changes to Project SH are documented here.
 ## Release Timeline
 | Version | Session | Date | Status |
 |---------|---------|------|--------|
+| v0.9 | Session 9 | 2026-03-09 | Room Scale Compression & Cache Fix |
 | v0.8 | Session 8 | 2026-03-09 | Drag-and-Drop Inventory & Item Use |
 | v0.7 | Session 7 | 2026-03-09 | Inventory Debugging & Item Rebalance |
 | v0.6 | Session 6 | 2026-03-08 | Item Registry & Pickups |
