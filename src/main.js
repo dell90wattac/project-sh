@@ -8,6 +8,7 @@ import { createGun } from './systems/weapons.js';
 import { createHUD } from './ui/hud.js';
 import { createHealth } from './systems/health.js';
 import { createDamageEffects } from './ui/damageEffects.js';
+import { createShambler, createGuard, createBloat, createCrawler, createCharred } from './entities/zombies.js';
 import { createWorldItems } from './systems/worldItems.js';
 
 // ─── Renderer ──────────────────────────────────────────────────────────────
@@ -117,6 +118,25 @@ scene.add(createChandelier(0, 13, 0));
 scene.add(createChandelier(-10, 13, -10));
 scene.add(createChandelier(10, 13, 10));
 scene.add(createChandelier(0, 13, -20));
+
+// ─── Zombie Showcase ───────────────────────────────────────────────────────
+// Spawn one of each zombie type in a row so the player can walk around and inspect them.
+function spawnZombies() {
+  const zombieSpawns = [
+    { factory: createShambler, x: -8, z: 5 },
+    { factory: createGuard, x: -4, z: 5 },
+    { factory: createBloat, x: 0, z: 5 },
+    { factory: createCrawler, x: 4, z: 5 },
+    { factory: createCharred, x: 8, z: 5 },
+  ];
+
+  for (const spawn of zombieSpawns) {
+    const zombie = spawn.factory(scene);
+    zombie.mesh.position.set(spawn.x, 0, spawn.z);
+  }
+}
+
+spawnZombies();
 
 // ─── Hazard Tick Damage ────────────────────────────────────────────────────
 const hazardTimers = {};
