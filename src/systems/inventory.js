@@ -132,6 +132,31 @@ export function createInventory() {
       equipped.quantity = quantity;
     },
 
+    // Unequip equipped item to a specific empty slot
+    unequipToSlot(slotIndex) {
+      if (!equipped.itemType) return false;
+      const slot = slots[slotIndex];
+      if (slot.itemType !== null) return false;
+      slot.itemType = equipped.itemType;
+      slot.quantity = equipped.quantity;
+      equipped.itemType = null;
+      equipped.quantity = 0;
+      return true;
+    },
+
+    // Swap equipped item with an occupied grid slot (both must be equippable)
+    swapEquippedWithSlot(slotIndex) {
+      const slot = slots[slotIndex];
+      if (!equipped.itemType || !slot.itemType) return false;
+      const tmpType = equipped.itemType;
+      const tmpQty = equipped.quantity;
+      equipped.itemType = slot.itemType;
+      equipped.quantity = slot.quantity;
+      slot.itemType = tmpType;
+      slot.quantity = tmpQty;
+      return true;
+    },
+
     // ─── Move / Swap Slots ────────────────────────────────────────────────
 
     moveItem(fromSlot, toSlot) {
