@@ -115,6 +115,34 @@ Project SH/
 
 ---
 
+## Git / Source Control
+
+**Repository:** https://github.com/dell90wattac/project-sh
+
+**IMPORTANT — Read this at the start of every session:**
+- If working in **Claude Code on the web** (not the home computer), always run `git pull` before doing anything else. Changes may have been made on the home machine that aren't on this machine yet.
+- If working on the **home computer**, pull first if you've been away: `git pull origin main`
+
+**To upload changes to GitHub** (when the user says "push to GitHub"):
+```
+git add .
+git commit -m "Description of what changed"
+git push origin main
+```
+
+**To download latest changes from GitHub** (when the user says "pull from GitHub", or at session start on a new machine):
+```
+git pull origin main
+```
+
+**To set up on a new computer for the first time:**
+```
+git clone https://github.com/dell90wattac/project-sh.git
+```
+Then `cd project-sh` and run `npm install` to restore node_modules (they are not stored in git).
+
+---
+
 ## Technical Notes
 - **Physics architecture:** Cannon-es (0.20.0) world active every frame. Player controller uses kinematic body (no gravity), collision detection via fast AABB (proven system, 60 FPS). Static world boxes registered as physics bodies — ready for dynamic enemies/objects. No physics-based puzzles; RE7-style inventory (pick up/put down). This hybrid approach: fast player movement + future-ready for enemy rigidbodies and raycasts.
 - **Flashlight implementation:** SpotLight child of leftHandGroup; automatically follows hand position/rotation via Three.js scene graph hierarchy. Penumbra 0.45 for soft edges, cone 32° with decay 1.4 for ambient spillage.
