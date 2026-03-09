@@ -145,11 +145,11 @@ function createChandelier(x, y, z) {
   return group;
 }
 
-// Hang chandeliers at Y=7 — lower into the visual field for compression
-scene.add(createChandelier( 0,  7,   0));
-scene.add(createChandelier(-5,  7,  -7));
-scene.add(createChandelier( 5,  7,   7));
-scene.add(createChandelier( 0,  7, -13));
+// Hang chandeliers at Y=9 — lower into the visual field for compression
+scene.add(createChandelier( 0,  9,   0));
+scene.add(createChandelier(-8,  9, -10));
+scene.add(createChandelier( 8,  9,  10));
+scene.add(createChandelier( 0,  9, -20));
 
 // ─── Hazard Tick Damage ────────────────────────────────────────────────────
 const hazardTimers = {};
