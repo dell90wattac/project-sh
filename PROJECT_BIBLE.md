@@ -98,9 +98,13 @@ Project SH/
 
 ### Inventory (`src/systems/inventory.js` + `src/systems/itemRegistry.js`)
 - 9-slot grid (3×3) + separate equipped weapon slot
-- Items defined in `itemRegistry.js`: stackable, usable, equippable, combinable flags
-- Combination recipes in `itemRegistry.js` (e.g. Herb + Spray = Mixed Medicine)
+- Items defined in `itemRegistry.js`: stackable, usable, equippable, combinable flags; stack limits and heal amounts live there, not here
+- Combination recipes in `itemRegistry.js` (e.g. Healing Item 1 + Healing Item 2 → Healing Item 3)
 - Toggle: **E** (also picks up world items when looking at one)
+- **Left-click** on a slot opens context menu (Use / Combine / Equip / Drop)
+- Combine mode: click Combine → cursor turns yellow → left-click target slot
+- Stack count shown in green when a slot is at max capacity
+- "INVENTORY FULL" notification when all 9 slots are occupied and pickup is attempted
 
 ### World Items (`src/systems/worldItems.js`)
 - 3D rotating pickups in scene; raycaster detects hover from screen center
@@ -136,7 +140,7 @@ Project SH/
 - Grand cathedral museum — dimensions and furniture defined in `src/world/world.js`
 - Entrance staircase, side staircases, back balcony, desk, benches, chandeliers
 - One damage pillar hazard (placeholder enemy/hazard stand-in)
-- Starting loadout defined in `main.js` (`resetGame` / init block)
+- Starting loadout: handgun equipped, no ammo or items; pickups on the floor near spawn
 
 ---
 
