@@ -23,7 +23,7 @@ document.body.insertBefore(renderer.domElement, document.getElementById('ui-root
 // ─── Scene ─────────────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x111014);
-scene.fog = new THREE.FogExp2(0x111014, 0.025);
+scene.fog = new THREE.FogExp2(0x111014, 0.035);
 
 // ─── Camera ────────────────────────────────────────────────────────────────
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 100);
@@ -61,13 +61,13 @@ damageEffects.onReset(() => {
 const worldItems = createWorldItems(scene, camera, inventory);
 
 // Three full stacks of handgun ammo (27 each) on the floor near spawn
-worldItems.spawnPickup('ammo', 27, new THREE.Vector3(-1.5, 0.3, -3));
-worldItems.spawnPickup('ammo', 27, new THREE.Vector3(0, 0.3, -3));
-worldItems.spawnPickup('ammo', 27, new THREE.Vector3(1.5, 0.3, -3));
+worldItems.spawnPickup('ammo', 27, new THREE.Vector3(-1.5, 0.3, -2));
+worldItems.spawnPickup('ammo', 27, new THREE.Vector3(0, 0.3, -2));
+worldItems.spawnPickup('ammo', 27, new THREE.Vector3(1.5, 0.3, -2));
 
 // Healing items on the floor for testing
-worldItems.spawnPickup('healingA', 1, new THREE.Vector3(-1, 0.3, -4.5));
-worldItems.spawnPickup('healingB', 1, new THREE.Vector3(1, 0.3, -4.5));
+worldItems.spawnPickup('healingA', 1, new THREE.Vector3(-1, 0.3, -3.5));
+worldItems.spawnPickup('healingB', 1, new THREE.Vector3(1, 0.3, -3.5));
 
 // ─── Inventory UI (needs health + drop callback) ──────────────────────────
 const inventoryUI = createInventoryUI(inventory, playerHealth, {
@@ -145,11 +145,11 @@ function createChandelier(x, y, z) {
   return group;
 }
 
-// Hang chandeliers at Y=9 — lower into the visual field for compression
-scene.add(createChandelier( 0,  9,   0));
-scene.add(createChandelier(-8,  9, -10));
-scene.add(createChandelier( 8,  9,  10));
-scene.add(createChandelier( 0,  9, -20));
+// Hang chandeliers at Y=7 — lower into the visual field for compression
+scene.add(createChandelier( 0,  7,   0));
+scene.add(createChandelier(-5,  7,  -7));
+scene.add(createChandelier( 5,  7,   7));
+scene.add(createChandelier( 0,  7, -13));
 
 // ─── Hazard Tick Damage ────────────────────────────────────────────────────
 const hazardTimers = {};
