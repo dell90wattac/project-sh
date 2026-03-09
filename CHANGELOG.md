@@ -4,6 +4,35 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 7] — 2026-03-09
+### Changed
+- **Inventory interaction: right-click → left-click**
+  - All inventory actions (context menu, combine mode) now triggered by left-click
+  - Removed separate right-click handler; unified into a single left-click handler
+  - Info text updated to "Left-click for options"
+
+- **Healing items renamed and rebalanced**
+  - `healingA` → **Healing Item 1** (heals 2 HP, was 5)
+  - `healingB` → **Healing Item 2** (heals 5 HP, was 3)
+  - `healingC` → **Healing Item 3** (heals 8 HP, combined result; `combinable: false`)
+  - Recipe unchanged: Healing Item 1 + Healing Item 2 → Healing Item 3
+
+- **Stack limits**
+  - Handgun ammo `maxStack`: 999 → **27** per slot; overflow fills a new stack
+  - All healing items `maxStack`: 99 → **3** per slot regardless of type
+
+- **Full-stack indicator** — stack count displays in **green** when slot is at max capacity
+
+- **Inventory full notification** — "INVENTORY FULL" message appears for 2 seconds when pickup fails because all 9 grid slots are occupied
+
+### Changed (Starting Loadout)
+- Removed starting ammo and healing items from player inventory
+- Replaced with world pickups near spawn:
+  - Three full ammo stacks (27 bullets each) on the floor
+  - One Healing Item 1 and one Healing Item 2 on the floor
+
+---
+
 ## [Session 6] — 2026-03-08
 ### Added
 - **Item Registry System** (`src/systems/itemRegistry.js`)
@@ -210,6 +239,7 @@ All notable changes to Project SH are documented here.
 ## Release Timeline
 | Version | Session | Date | Status |
 |---------|---------|------|--------|
+| v0.7 | Session 7 | 2026-03-09 | Inventory Debugging & Item Rebalance |
 | v0.6 | Session 6 | 2026-03-08 | Item Registry & Pickups |
 | v0.5 | Session 5 | 2026-03-08 | Health System & Damage Effects |
 | v0.4 | Session 4 | 2026-03-08 | Gun & Inventory |

@@ -32,6 +32,34 @@ export function createWorldItems(scene, camera, inventory) {
   const uiRoot = document.getElementById('ui-root') || document.body;
   uiRoot.appendChild(hoverLabel);
 
+  // ── Inventory full notification ──────────────────────────────────────
+  const fullLabel = document.createElement('div');
+  fullLabel.id = 'inventory-full-label';
+  fullLabel.style.cssText = `
+    position: fixed;
+    top: 48%;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #ff4444;
+    font-family: monospace;
+    font-size: 15px;
+    font-weight: bold;
+    text-align: center;
+    pointer-events: none;
+    z-index: 101;
+    text-shadow: 0 0 8px rgba(0,0,0,1), 0 0 2px rgba(0,0,0,1);
+    letter-spacing: 0.1em;
+    display: none;
+  `;
+  fullLabel.textContent = 'INVENTORY FULL';
+  uiRoot.appendChild(fullLabel);
+  let fullLabelTimer = 0;
+
+  function showFullNotification() {
+    fullLabel.style.display = 'block';
+    fullLabelTimer = 2.0;
+  }
+
   // ── Create pickup mesh ──────────────────────────────────────────────────
   function createPickupMesh(itemType, position) {
     const def = getItemDef(itemType);
@@ -105,11 +133,17 @@ export function createWorldItems(scene, camera, inventory) {
         inventory.setEquippedDirect(itemType, quantity);
       } else {
         const added = inventory.addItem(itemType, quantity);
-        if (!added) return false;
+        if (!added) {
+          showFullNotification();
+          return false;
+        }
       }
     } else {
       const added = inventory.addItem(itemType, quantity);
-      if (!added) return false;
+      if (!added) {
+        showFullNotification();
+        return false;
+      }
     }
 
     // Remove from world
@@ -150,6 +184,13 @@ export function createWorldItems(scene, camera, inventory) {
     // Slowly rotate all pickups for visibility
     for (const pickup of pickups) {
       pickup.mesh.rotation.y += dt * 1.5;
+    }
+    // Fade out inventory full notification
+    if (fullLabelTimer > 0) {
+      fullLabelTimer -= dt;
+      if (fullLabelTimer <= 0) {
+        fullLabel.style.display = 'none';
+      }
     }
   }
 
