@@ -100,16 +100,19 @@ Project SH/
 - 9-slot grid (3×3) + separate equipped weapon slot
 - Items defined in `itemRegistry.js`: stackable, usable, equippable, combinable flags; stack limits and heal amounts live there, not here
 - Combination recipes in `itemRegistry.js` (e.g. Healing Item 1 + Healing Item 2 → Healing Item 3)
-- Toggle: **E** (also picks up world items when looking at one)
-- **Left-click** on a slot opens context menu (Use / Combine / Equip / Drop)
-- Combine mode: click Combine → cursor turns yellow → left-click target slot
+- Toggle: **Q** (also picks up world items when looking at one via **E**)
+- **Left-click drag** to move items between slots; drop targets highlight green (valid) or red (invalid)
+  - Drag to empty slot: moves; same type with room: partial-fills stack, leaves remainder; same type full: STACK FULL; recipe match: combines; no recipe: CANNOT COMBINE; outside panel: drops on ground
+- **Right-click** on a slot opens virtual-cursor context menu: Use / Equip / Drop
+  - Menu interaction is pointer-lock safe — driven by virtual cursor, not native mouse events
+- Healing items heal the player when used; `usable: false` items (ammo, handgun) never show Use
 - Stack count shown in green when a slot is at max capacity
 - "INVENTORY FULL" notification when all 9 slots are occupied and pickup is attempted
 
 ### World Items (`src/systems/worldItems.js`)
 - 3D rotating pickups in scene; raycaster detects hover from screen center
 - Pickup range and hover label configurable in file
-- Dropped items spawn at player feet
+- Dropped items auto-spread: `findClearDropPosition` tests up to 13 candidate positions so no two pickups ever overlap on the ground
 
 ### Hazards (`src/world/world.js` + `src/main.js`)
 - World exports `hazards[]` alongside `colliders[]`

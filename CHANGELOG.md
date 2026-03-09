@@ -4,6 +4,48 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 8] — 2026-03-09
+### Added
+- **Inventory drag-and-drop** (`src/ui/inventory.js`)
+  - Left-click and drag any occupied grid slot or the equipped slot to move items
+  - Drag ghost icon follows the virtual cursor while dragging; source slot dims to 25% opacity
+  - Drop target slots highlight in real time: **green** = valid, **red** = invalid
+  - Drop rules:
+    - Empty slot → moves item there
+    - Same stackable type with room → fills target stack, leaves any remainder in source slot
+    - Same stackable type but target is already full → red border + **STACK FULL** feedback
+    - Different type with a combine recipe → combines (consumes ingredients, places result)
+    - Different type with no recipe → red border + **CANNOT COMBINE** feedback, item returns
+    - Equipped slot (from grid item) → equips if item is equippable, otherwise **CANNOT EQUIP**
+    - Outside the inventory panel → drops item on the ground at player's feet
+    - Inside panel but not on any slot → drag cancelled, item returns
+  - Escape key cancels an in-progress drag
+
+- **Right-click context menu** (`src/ui/inventory.js`)
+  - Right-click any occupied slot to open the action menu (Use / Equip / Drop)
+  - Menu is fully driven by the virtual cursor — hover highlight and click detection use `cursorX/cursorY` so it works correctly under pointer lock
+  - **Use** — only shown for `usable: true` items; calls `playerHealth.heal()` and decrements stack quantity. Shows **ALREADY AT FULL HP** if no healing applied
+  - **Equip** — only shown for `equippable: true` items not currently in the equipped slot
+  - **Drop** — only shown for `droppable: true` items; spawns the item in the world
+  - Non-usable items (e.g. ammo, handgun) never show a Use option
+
+- **Item use wired up** — healing items (H1 +2 HP, H2 +5 HP, H3 +8 HP) now correctly heal the player when used via the context menu; the item is consumed from the stack
+
+- **Ground item auto-spread** (`src/systems/worldItems.js`)
+  - `spawnDrop` now calls `findClearDropPosition` before placing a pickup mesh
+  - Tries 13 candidate positions (centre, 8 cardinal/diagonal offsets at 0.85 u, 4 wider offsets) in order; picks the first clear one
+  - Falls back to a random wider-radius position if all candidates are occupied
+  - Dropped items never overlap on the ground regardless of drop count
+
+- **New inventory methods** (`src/systems/inventory.js`)
+  - `unequipToSlot(slotIndex)` — unequips the equipped item to a specific empty grid slot
+  - `swapEquippedWithSlot(slotIndex)` — swaps equipped item with an equippable grid slot item
+
+### Removed
+- Combine mode (yellow cursor, two-step click flow) — superseded by direct drag-and-drop combining
+
+---
+
 ## [Session 7] — 2026-03-09
 ### Changed
 - **Inventory interaction: right-click → left-click**
@@ -239,6 +281,7 @@ All notable changes to Project SH are documented here.
 ## Release Timeline
 | Version | Session | Date | Status |
 |---------|---------|------|--------|
+| v0.8 | Session 8 | 2026-03-09 | Drag-and-Drop Inventory & Item Use |
 | v0.7 | Session 7 | 2026-03-09 | Inventory Debugging & Item Rebalance |
 | v0.6 | Session 6 | 2026-03-08 | Item Registry & Pickups |
 | v0.5 | Session 5 | 2026-03-08 | Health System & Damage Effects |
