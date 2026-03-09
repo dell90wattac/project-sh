@@ -165,13 +165,34 @@ export function createWorldItems(scene, camera, inventory) {
     }
   }
 
+  // ── Find a clear ground position near basePos (no existing pickup within minDist) ──
+  function findClearDropPosition(basePos) {
+    const minDist = 0.85;
+    // Try centre first, then 8 cardinal/diagonal offsets, then wider ring
+    const offsets = [
+      [0, 0],
+      [1, 0], [-1, 0], [0, 1], [0, -1],
+      [0.7, 0.7], [-0.7, 0.7], [0.7, -0.7], [-0.7, -0.7],
+      [1.5, 0], [-1.5, 0], [0, 1.5], [0, -1.5],
+    ];
+    for (const [ox, oz] of offsets) {
+      const candidate = new THREE.Vector3(basePos.x + ox * minDist, basePos.y, basePos.z + oz * minDist);
+      const clear = pickups.every(p => p.mesh.position.distanceTo(candidate) >= minDist);
+      if (clear) return candidate;
+    }
+    // Fallback: random offset on a wider radius
+    const angle = Math.random() * Math.PI * 2;
+    return new THREE.Vector3(basePos.x + Math.cos(angle) * minDist * 2, basePos.y, basePos.z + Math.sin(angle) * minDist * 2);
+  }
+
   // ── Drop an item from inventory into the world ──────────────────────────
   function spawnDrop(itemType, quantity, playerPosition, cameraDirection) {
-    const dropPos = new THREE.Vector3(
+    const basePos = new THREE.Vector3(
       playerPosition.x + cameraDirection.x * 1.5,
       0.3,
       playerPosition.z + cameraDirection.z * 1.5
     );
+    const dropPos = findClearDropPosition(basePos);
     const mesh = createPickupMesh(itemType, dropPos);
     if (mesh) {
       pickups.push({ mesh, itemType, quantity });

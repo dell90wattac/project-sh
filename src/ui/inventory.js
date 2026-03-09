@@ -420,9 +420,10 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
     // Same source and target: no-op, count as valid
     if (targetSlot === dragSourceSlot) return true;
 
-    // Same item type: valid if stackable
+    // Same item type: valid if stackable AND target isn't already full
     if (targetData.itemType === sourceData.itemType) {
-      return canStack(sourceData.itemType);
+      if (!canStack(sourceData.itemType)) return false;
+      return targetData.quantity < getMaxStack(targetData.itemType);
     }
 
     // Different types: valid only if a combine recipe exists
@@ -509,8 +510,13 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
             // Move to empty slot
             inventory.moveItem(dragSourceSlot, targetSlot);
           } else if (targetData.itemType === sourceData.itemType && canStack(sourceData.itemType)) {
-            // Stack same type
-            inventory.moveItem(dragSourceSlot, targetSlot);
+            // Stack same type — moveItem transfers as much as fits, remainder stays in source
+            const space = getMaxStack(targetData.itemType) - targetData.quantity;
+            if (space === 0) {
+              showCannotFeedback('STACK FULL');
+            } else {
+              inventory.moveItem(dragSourceSlot, targetSlot);
+            }
           } else {
             // Combine via recipe
             const combined = inventory.combineItems(dragSourceSlot, targetSlot);
