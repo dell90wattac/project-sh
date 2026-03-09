@@ -8,7 +8,6 @@ import { createGun } from './systems/weapons.js';
 import { createHUD } from './ui/hud.js';
 import { createHealth } from './systems/health.js';
 import { createDamageEffects } from './ui/damageEffects.js';
-import { createShambler, createGuard, createBloat, createCrawler, createCharred } from './entities/zombies.js';
 import { createWorldItems } from './systems/worldItems.js';
 
 // ─── Renderer ──────────────────────────────────────────────────────────────
@@ -100,47 +99,57 @@ inventoryUI.setToggleCallback((isOpen) => {
 // ─── Chandeliers ───────────────────────────────────────────────────────────
 function createChandelier(x, y, z) {
   const group = new THREE.Group();
-  const base = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.3), new THREE.MeshLambertMaterial({ color: 0x888888 }));
-  base.position.set(0, 0, 0);
+  // Main crown disc
+  const base = new THREE.Mesh(
+    new THREE.CylinderGeometry(1.1, 0.9, 0.35),
+    new THREE.MeshStandardMaterial({ color: 0x6A6050, roughness: 0.5, metalness: 0.6 })
+  );
   group.add(base);
-  for (let i = 0; i < 6; i++) {
-    const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 1.5), new THREE.MeshLambertMaterial({ color: 0x333333 }));
-    chain.position.set(Math.cos(i * Math.PI / 3) * 0.6, -0.75, Math.sin(i * Math.PI / 3) * 0.6);
+  // Outer ring of 12 long chains
+  for (let i = 0; i < 12; i++) {
+    const chain = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.025, 0.025, 3.0),
+      new THREE.MeshStandardMaterial({ color: 0x2A2418, roughness: 0.4, metalness: 0.8 })
+    );
+    chain.position.set(Math.cos(i * Math.PI / 6) * 0.85, -1.5, Math.sin(i * Math.PI / 6) * 0.85);
     group.add(chain);
   }
-  const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.2), new THREE.MeshBasicMaterial({ color: 0xffffff, emissive: 0x444444 }));
-  bulb.position.set(0, -1.5, 0);
-  group.add(bulb);
-  const light = new THREE.PointLight(0xffffff, 5, 30);
-  light.position.set(0, -1.5, 0);
+  // Inner ring of 6 shorter arms
+  for (let i = 0; i < 6; i++) {
+    const arm = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.04, 0.04, 1.2),
+      new THREE.MeshStandardMaterial({ color: 0x5A4A30, roughness: 0.4, metalness: 0.7 })
+    );
+    arm.position.set(Math.cos(i * Math.PI / 3) * 0.45, -2.5, Math.sin(i * Math.PI / 3) * 0.45);
+    group.add(arm);
+    // Candle-bulb at each arm tip
+    const bulb = new THREE.Mesh(
+      new THREE.SphereGeometry(0.12, 8, 8),
+      new THREE.MeshBasicMaterial({ color: 0xFFF8E0 })
+    );
+    bulb.position.set(Math.cos(i * Math.PI / 3) * 0.45, -3.2, Math.sin(i * Math.PI / 3) * 0.45);
+    group.add(bulb);
+  }
+  // Central hanging bulb
+  const mainBulb = new THREE.Mesh(
+    new THREE.SphereGeometry(0.22, 10, 10),
+    new THREE.MeshBasicMaterial({ color: 0xFFFBF0 })
+  );
+  mainBulb.position.set(0, -3.3, 0);
+  group.add(mainBulb);
+  // Light source
+  const light = new THREE.PointLight(0xFFEFCC, 5.5, 28);
+  light.position.set(0, -3.3, 0);
   group.add(light);
   group.position.set(x, y, z);
   return group;
 }
 
-scene.add(createChandelier(0, 13, 0));
-scene.add(createChandelier(-10, 13, -10));
-scene.add(createChandelier(10, 13, 10));
-scene.add(createChandelier(0, 13, -20));
-
-// ─── Zombie Showcase ───────────────────────────────────────────────────────
-// Spawn one of each zombie type in a row so the player can walk around and inspect them.
-function spawnZombies() {
-  const zombieSpawns = [
-    { factory: createShambler, x: -8, z: 5 },
-    { factory: createGuard, x: -4, z: 5 },
-    { factory: createBloat, x: 0, z: 5 },
-    { factory: createCrawler, x: 4, z: 5 },
-    { factory: createCharred, x: 8, z: 5 },
-  ];
-
-  for (const spawn of zombieSpawns) {
-    const zombie = spawn.factory(scene);
-    zombie.mesh.position.set(spawn.x, 0, spawn.z);
-  }
-}
-
-spawnZombies();
+// Hang chandeliers at Y=9 — lower into the visual field for compression
+scene.add(createChandelier( 0,  9,   0));
+scene.add(createChandelier(-8,  9, -10));
+scene.add(createChandelier( 8,  9,  10));
+scene.add(createChandelier( 0,  9, -20));
 
 // ─── Hazard Tick Damage ────────────────────────────────────────────────────
 const hazardTimers = {};
