@@ -1,8 +1,8 @@
 // ─── Inventory UI ──────────────────────────────────────────────────────────
-// 3x3 grid + equipped weapon slot. Right-click context menu (Use, Combine, Drop, Equip).
+// 3x3 grid + equipped weapon slot. Left-click context menu (Use, Combine, Drop, Equip).
 // Combine mode: click Combine → cursor turns yellow → click target slot.
 
-import { getItemDef } from '../systems/itemRegistry.js';
+import { getItemDef, getMaxStack } from '../systems/itemRegistry.js';
 
 export function createInventoryUI(inventory, playerHealth, callbacks) {
   let isOpen = false;
@@ -233,7 +233,7 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
 
   // ── Info text ─────────────────────────────────────────────────────────
   const infoText = document.createElement('div');
-  infoText.textContent = 'Press E to close  •  Right-click for options';
+  infoText.textContent = 'Press E to close  •  Left-click for options';
   infoText.style.cssText = `
     color: #666;
     font-size: 11px;
@@ -387,22 +387,32 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
   // ── Suppress native context menu ──────────────────────────────────────
   document.addEventListener('contextmenu', e => e.preventDefault());
 
-  // ── Right-click handler ───────────────────────────────────────────────
+  // ── Left-click handler: context menu + combine mode ───────────────────
   document.addEventListener('mousedown', e => {
-    if (e.button !== 2 || !isOpen) return;
+    if (e.button !== 0 || !isOpen) return;
 
-    // Close context menu if already showing
+    // If context menu is open, close it (unless clicking inside menu)
     if (contextMenu.style.display !== 'none') {
+      const menuRect = contextMenu.getBoundingClientRect();
+      if (cursorX >= menuRect.left && cursorX <= menuRect.right &&
+          cursorY >= menuRect.top && cursorY <= menuRect.bottom) {
+        return; // Let the menu option handle it
+      }
       hideContextMenu();
       return;
     }
 
-    // Don't open context menu during combine mode
+    // Combine mode: attempt combination on target slot
     if (combineMode) {
+      const targetSlot = getSlotUnderCursor(cursorX, cursorY);
+      if (targetSlot !== -1 && targetSlot !== combineSourceSlot) {
+        inventory.combineItems(combineSourceSlot, targetSlot);
+      }
       exitCombineMode();
       return;
     }
 
+    // Show context menu on left-click on an occupied slot
     const slotIdx = getSlotUnderCursor(cursorX, cursorY);
     const eqHover = isEquippedUnderCursor(cursorX, cursorY);
 
@@ -416,33 +426,6 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
       if (eq.itemType) {
         showContextMenu(-1, cursorX, cursorY, true);
       }
-    }
-  });
-
-  // ── Left-click handler ────────────────────────────────────────────────
-  document.addEventListener('mousedown', e => {
-    if (e.button !== 0 || !isOpen) return;
-
-    // Close context menu if open
-    if (contextMenu.style.display !== 'none') {
-      // Check if click is on the context menu — if so, let event propagate to the option
-      const menuRect = contextMenu.getBoundingClientRect();
-      if (cursorX >= menuRect.left && cursorX <= menuRect.right &&
-          cursorY >= menuRect.top && cursorY <= menuRect.bottom) {
-        return; // Let the menu option handle it
-      }
-      hideContextMenu();
-      return;
-    }
-
-    // Combine mode: attempt combination on target
-    if (combineMode) {
-      const targetSlot = getSlotUnderCursor(cursorX, cursorY);
-      if (targetSlot !== -1 && targetSlot !== combineSourceSlot) {
-        inventory.combineItems(combineSourceSlot, targetSlot);
-      }
-      exitCombineMode();
-      return;
     }
   });
 
@@ -508,8 +491,16 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
             ui.iconDiv.style.opacity = '1';
             ui.nameLabel.textContent = def.name;
             ui.nameLabel.style.display = 'block';
-            ui.countText.textContent = slot.quantity > 1 ? slot.quantity : '';
-            ui.countText.style.display = slot.quantity > 1 ? 'block' : 'none';
+
+            if (slot.quantity > 1) {
+              const maxStack = getMaxStack(slot.itemType);
+              const isFull = slot.quantity >= maxStack;
+              ui.countText.textContent = slot.quantity;
+              ui.countText.style.color = isFull ? '#00ff00' : '#fff';
+              ui.countText.style.display = 'block';
+            } else {
+              ui.countText.style.display = 'none';
+            }
           }
         } else {
           ui.iconDiv.style.opacity = '0';

@@ -37,8 +37,6 @@ const world = createWorld(scene, physicsWorld);
 
 // ─── Inventory & Gun ───────────────────────────────────────────────────────
 const inventory = createInventory();
-inventory.addItem('ammo', 100);
-inventory.addItem('healingB', 1);
 inventory.setEquippedDirect('handgun', 1);
 const gun = createGun(inventory, physicsWorld, camera);
 
@@ -63,8 +61,14 @@ damageEffects.onReset(() => {
 // ─── World Items / Pickups ─────────────────────────────────────────────────
 const worldItems = createWorldItems(scene, camera, inventory);
 
-// Place a Healing Herb on the front desk for testing
-worldItems.spawnPickup('healingA', 1, new THREE.Vector3(2, 1.6, -10));
+// Three full stacks of handgun ammo (27 each) on the floor near spawn
+worldItems.spawnPickup('ammo', 27, new THREE.Vector3(-1.5, 0.3, -3));
+worldItems.spawnPickup('ammo', 27, new THREE.Vector3(0, 0.3, -3));
+worldItems.spawnPickup('ammo', 27, new THREE.Vector3(1.5, 0.3, -3));
+
+// Healing items on the floor for testing
+worldItems.spawnPickup('healingA', 1, new THREE.Vector3(-1, 0.3, -4.5));
+worldItems.spawnPickup('healingB', 1, new THREE.Vector3(1, 0.3, -4.5));
 
 // ─── Inventory UI (needs health + drop callback) ──────────────────────────
 const inventoryUI = createInventoryUI(inventory, playerHealth, {
