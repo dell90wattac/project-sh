@@ -23,7 +23,7 @@ document.body.insertBefore(renderer.domElement, document.getElementById('ui-root
 // ─── Scene ─────────────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x111014);
-scene.fog = new THREE.FogExp2(0x111014, 0.035);
+scene.fog = new THREE.FogExp2(0x111014, 0.055);
 
 // ─── Camera ────────────────────────────────────────────────────────────────
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 100);
@@ -97,59 +97,58 @@ inventoryUI.setToggleCallback((isOpen) => {
 });
 
 // ─── Chandeliers ───────────────────────────────────────────────────────────
+// Chains shortened for 5.5 m ceiling — bottom bulb at ~3.2 m, clear of head.
 function createChandelier(x, y, z) {
   const group = new THREE.Group();
-  // Main crown disc
+  // Crown disc (smaller for lower ceiling)
   const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.1, 0.9, 0.35),
+    new THREE.CylinderGeometry(0.80, 0.65, 0.22),
     new THREE.MeshStandardMaterial({ color: 0x6A6050, roughness: 0.5, metalness: 0.6 })
   );
   group.add(base);
-  // Outer ring of 12 long chains
-  for (let i = 0; i < 12; i++) {
+  // Outer ring of 10 chains — 1.0 m long (was 3.0)
+  for (let i = 0; i < 10; i++) {
     const chain = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.025, 0.025, 3.0),
+      new THREE.CylinderGeometry(0.022, 0.022, 1.0),
       new THREE.MeshStandardMaterial({ color: 0x2A2418, roughness: 0.4, metalness: 0.8 })
     );
-    chain.position.set(Math.cos(i * Math.PI / 6) * 0.85, -1.5, Math.sin(i * Math.PI / 6) * 0.85);
+    chain.position.set(Math.cos(i * Math.PI / 5) * 0.65, -0.5, Math.sin(i * Math.PI / 5) * 0.65);
     group.add(chain);
   }
-  // Inner ring of 6 shorter arms
-  for (let i = 0; i < 6; i++) {
+  // Inner ring of 5 arms — 0.55 m long (was 1.2)
+  for (let i = 0; i < 5; i++) {
     const arm = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.04, 0.04, 1.2),
+      new THREE.CylinderGeometry(0.035, 0.035, 0.55),
       new THREE.MeshStandardMaterial({ color: 0x5A4A30, roughness: 0.4, metalness: 0.7 })
     );
-    arm.position.set(Math.cos(i * Math.PI / 3) * 0.45, -2.5, Math.sin(i * Math.PI / 3) * 0.45);
+    arm.position.set(Math.cos(i * Math.PI / 2.5) * 0.38, -1.40, Math.sin(i * Math.PI / 2.5) * 0.38);
     group.add(arm);
-    // Candle-bulb at each arm tip
     const bulb = new THREE.Mesh(
-      new THREE.SphereGeometry(0.12, 8, 8),
+      new THREE.SphereGeometry(0.10, 8, 8),
       new THREE.MeshBasicMaterial({ color: 0xFFF8E0 })
     );
-    bulb.position.set(Math.cos(i * Math.PI / 3) * 0.45, -3.2, Math.sin(i * Math.PI / 3) * 0.45);
+    bulb.position.set(Math.cos(i * Math.PI / 2.5) * 0.38, -1.78, Math.sin(i * Math.PI / 2.5) * 0.38);
     group.add(bulb);
   }
   // Central hanging bulb
   const mainBulb = new THREE.Mesh(
-    new THREE.SphereGeometry(0.22, 10, 10),
+    new THREE.SphereGeometry(0.17, 10, 10),
     new THREE.MeshBasicMaterial({ color: 0xFFFBF0 })
   );
-  mainBulb.position.set(0, -3.3, 0);
+  mainBulb.position.set(0, -1.88, 0);
   group.add(mainBulb);
-  // Light source
-  const light = new THREE.PointLight(0xFFEFCC, 5.5, 28);
-  light.position.set(0, -3.3, 0);
+  // Light source (shorter range for smaller room)
+  const light = new THREE.PointLight(0xFFEFCC, 4.5, 16);
+  light.position.set(0, -1.88, 0);
   group.add(light);
   group.position.set(x, y, z);
   return group;
 }
 
-// Hang chandeliers at Y=7 — lower into the visual field for compression
-scene.add(createChandelier( 0,  7,   0));
-scene.add(createChandelier(-5,  7,  -7));
-scene.add(createChandelier( 5,  7,   7));
-scene.add(createChandelier( 0,  7, -13));
+// 3 chandeliers at Y=5.2 — bottom bulb at ~3.3 m, well above eye level
+scene.add(createChandelier(0,  5.2,  4));
+scene.add(createChandelier(0,  5.2, -4));
+scene.add(createChandelier(0,  5.2, -10));
 
 // ─── Hazard Tick Damage ────────────────────────────────────────────────────
 const hazardTimers = {};

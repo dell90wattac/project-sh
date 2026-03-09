@@ -1,9 +1,9 @@
 import * as THREE from 'three';
 
 /**
- * Test room — RCPD-lobby inspired layout.
- * Compressed ~50% tighter for claustrophobic grandeur: 20×40×10m room with
- * columns, wainscoting, dense balustrades, layered lighting, and heavy furniture.
+ * Test room — RCPD-lobby inspired.
+ * Dense, tight proportions: 14×28×5.5m (≈50×100 player-block units).
+ * Lower ceiling, compressed furnishings, narrow aisles between columns and stairs.
  */
 export function createWorld(scene, physicsWorld) {
   const colliders = [];
@@ -38,7 +38,7 @@ export function createWorld(scene, physicsWorld) {
   const floorTexture = new THREE.CanvasTexture(floorCanvas);
   floorTexture.wrapS = THREE.RepeatWrapping;
   floorTexture.wrapT = THREE.RepeatWrapping;
-  floorTexture.repeat.set(5, 5);
+  floorTexture.repeat.set(4, 4);
 
   const M = {
     floor:      new THREE.MeshStandardMaterial({ map: floorTexture, roughness: 0.75 }),
@@ -79,282 +79,265 @@ export function createWorld(scene, physicsWorld) {
     return mesh;
   }
 
-  // ─── Dimensions (compressed ~50%) ───────────────────────────────────────
-  const W          = 20;     // room width  (X: -10 to +10)
-  const CEIL       = 10;     // ceiling height
-  const PLATFORM_Y = 1.5;    // entry platform floor surface
-  const STAIR_HEIGHT = 3.5;  // balcony height
-  const BACK_Z     = -20;
-  const FRONT_Z    =  20;
-  const DEPTH      = 40;
+  // ─── Room dimensions: 14 × 28 × 5.5 (≈ 50×100 player blocks) ───────────
+  const W            = 14;     // width  (X: -7 to +7)
+  const CEIL         = 5.5;    // ceiling height
+  const DEPTH        = 28;     // total depth (Z: -14 to +14)
+  const BACK_Z       = -14;
+  const FRONT_Z      =  14;
+  const PLATFORM_Y   = 0.9;    // entry platform surface height
+  const STAIR_HEIGHT = 2.5;    // balcony level
 
   // ─── Floors ──────────────────────────────────────────────────────────────
-  // Main floor: Z -13 → +13
-  box(W, 0.2, 26, 0, -0.1, 0, M.floor);
-  // Entry platform: Z +13 → +20
-  box(W, 0.2, 7, 0, PLATFORM_Y - 0.1, 16.5, M.floor);
+  // Main floor: Z -9 to +9  (18 m long)
+  box(W, 0.2, 18, 0, -0.1, 0, M.floor);
+  // Entry platform: Z +9 to +14  (5 m long)
+  box(W, 0.2, 5, 0, PLATFORM_Y - 0.1, 11.5, M.floor);
 
   // ─── Walls & Ceiling ─────────────────────────────────────────────────────
-  box(0.2, CEIL, DEPTH, -10, CEIL / 2, 0, M.wall);       // left
-  box(0.2, CEIL, DEPTH,  10, CEIL / 2, 0, M.wall);       // right
-  box(W,   CEIL, 0.2,    0, CEIL / 2, BACK_Z,  M.wall);  // back
-  box(W,   CEIL, 0.2,    0, CEIL / 2, FRONT_Z, M.wall);  // front
-  box(W,   0.2,  DEPTH,  0, CEIL + 0.1, 0,     M.ceiling);
+  box(0.2, CEIL, DEPTH, -7,  CEIL / 2, 0,       M.wall);   // left
+  box(0.2, CEIL, DEPTH,  7,  CEIL / 2, 0,       M.wall);   // right
+  box(W,   CEIL, 0.2,    0,  CEIL / 2, BACK_Z,  M.wall);   // back
+  box(W,   CEIL, 0.2,    0,  CEIL / 2, FRONT_Z, M.wall);   // front
+  box(W,   0.2,  DEPTH,  0,  CEIL + 0.1, 0,     M.ceiling);
 
-  // ─── Wainscoting (lower wall panels) ─────────────────────────────────────
-  decor(0.12, 1.5, 38,   -9.94, 0.75, 0,      M.wainscot);
-  decor(0.12, 1.5, 38,    9.94, 0.75, 0,      M.wainscot);
-  decor(20,   1.5, 0.12,  0, 0.75, BACK_Z  + 0.06, M.wainscot);
-  decor(20,   1.5, 0.12,  0, 0.75, FRONT_Z - 0.06, M.wainscot);
+  // ─── Wainscoting ─────────────────────────────────────────────────────────
+  decor(0.11, 1.0, 27,  -6.94, 0.50, 0,                 M.wainscot);
+  decor(0.11, 1.0, 27,   6.94, 0.50, 0,                 M.wainscot);
+  decor(W,    1.0, 0.11, 0,    0.50, BACK_Z  + 0.055,   M.wainscot);
+  decor(W,    1.0, 0.11, 0,    0.50, FRONT_Z - 0.055,   M.wainscot);
 
   // ─── Crown Molding ───────────────────────────────────────────────────────
-  decor(0.18, 0.28, DEPTH, -9.91, CEIL - 0.14, 0,          M.wainscot);
-  decor(0.18, 0.28, DEPTH,  9.91, CEIL - 0.14, 0,          M.wainscot);
-  decor(W,    0.28, 0.18,   0, CEIL - 0.14, BACK_Z  + 0.09, M.wainscot);
-  decor(W,    0.28, 0.18,   0, CEIL - 0.14, FRONT_Z - 0.09, M.wainscot);
+  decor(0.13, 0.20, DEPTH, -6.93, CEIL - 0.10, 0,           M.wainscot);
+  decor(0.13, 0.20, DEPTH,  6.93, CEIL - 0.10, 0,           M.wainscot);
+  decor(W,    0.20, 0.13,   0,    CEIL - 0.10, BACK_Z  + 0.065, M.wainscot);
+  decor(W,    0.20, 0.13,   0,    CEIL - 0.10, FRONT_Z - 0.065, M.wainscot);
 
-  // ─── Down Staircase (entry platform → main floor) ────────────────────────
-  // 6 steps × 0.25m each = 1.5m drop (matching PLATFORM_Y)
-  for (let i = 0; i < 6; i++) {
-    const h = (6 - i) * 0.25;
-    const z = 16 - i * 0.5;
+  // ─── Entry Staircase (platform → main floor, 3 steps × 0.3 m) ───────────
+  for (let i = 0; i < 3; i++) {
+    const h = (3 - i) * 0.30;
+    const z = 11.5 - i * 0.5;
     box(W, h, 0.5, 0, h / 2, z, M.stair);
   }
 
   // Newel posts
-  box(0.25, 2.0, 0.25, -9.9, 1.0, 14.0, M.railing);
-  box(0.25, 2.0, 0.25,  9.9, 1.0, 14.0, M.railing);
-  box(0.25, 2.1, 0.25, -9.9, 1.05, 16.5, M.railing);
-  box(0.25, 2.1, 0.25,  9.9, 1.05, 16.5, M.railing);
+  box(0.18, 1.35, 0.18, -6.9, 0.675, 9.5,  M.railing);
+  box(0.18, 1.35, 0.18,  6.9, 0.675, 9.5,  M.railing);
+  box(0.18, 1.40, 0.18, -6.9, 0.700, 12.2, M.railing);
+  box(0.18, 1.40, 0.18,  6.9, 0.700, 12.2, M.railing);
 
-  // Top & bottom rails
-  box(W + 0.2, 0.07, 0.07, 0, 1.65, 13.5, M.railing);
-  box(W + 0.2, 0.07, 0.07, 0, 1.65, 16.5, M.railing);
-  // Balusters along front staircase — 13 evenly spaced
-  for (let i = 0; i < 13; i++) {
-    const bx = -9.5 + i * 1.58;
-    decor(0.07, 1.6, 0.07, bx, 0.83, 13.5, M.railing);
+  // Rails
+  box(W + 0.2, 0.06, 0.06, 0, 1.36, 9.5,  M.railing);
+  box(W + 0.2, 0.06, 0.06, 0, 1.36, 12.2, M.railing);
+  // Balusters (11 evenly spaced across 14 m)
+  for (let i = 0; i < 11; i++) {
+    decor(0.06, 1.26, 0.06, -6.3 + i * 1.26, 0.67, 9.5, M.railing);
   }
 
-  // ─── Marble Columns (3 pairs, create columned nave) ───────────────────────
-  const COLUMN_PAIRS = [
-    { z: +8 },
-    { z: -1 },
-    { z: -9 },
-  ];
+  // ─── Marble Columns (3 pairs) ─────────────────────────────────────────────
+  const COLUMN_PAIRS = [{ z: +5 }, { z: -1 }, { z: -7 }];
   for (const { z } of COLUMN_PAIRS) {
-    for (const cx of [-4.5, 4.5]) {
-      box(0.75, CEIL - 1, 0.75, cx, (CEIL - 1) / 2, z, M.column);    // shaft
-      box(1.15, 0.55, 1.15, cx, 0.275, z, M.column);                  // plinth
-      box(1.25, 0.4, 1.25, cx, CEIL - 0.8, z, M.column);              // capital
+    for (const cx of [-3.0, 3.0]) {
+      box(0.55, CEIL - 0.6, 0.55, cx, (CEIL - 0.6) / 2, z, M.column); // shaft
+      box(0.85, 0.36, 0.85, cx, 0.18, z, M.column);                    // plinth
+      box(0.95, 0.26, 0.95, cx, CEIL - 0.47, z, M.column);             // capital
     }
   }
 
   // ─── Front Desk ──────────────────────────────────────────────────────────
-  // Main counter body
-  box(7, 1.1, 0.7, 0, 0.55, -7, M.desk);
-  // Marble counter top
-  box(7.2, 0.08, 0.9, 0, 1.12, -6.95, M.deskTop);
-  // Back panel (tall dark wood)
-  box(7, 2.5, 0.2, 0, 1.25, -7.75, M.desk);
-  // Raised center check-in tower
-  box(2.2, 0.55, 0.72, 0, 1.42, -7, M.desk);
-  box(2.3, 0.07, 0.85, 0, 1.72, -6.98, M.deskTop);
+  box(4.5, 0.95, 0.60, 0, 0.475, -4.0, M.desk);                // counter body
+  box(4.7, 0.07, 0.76, 0, 0.975, -3.95, M.deskTop);            // marble top
+  box(4.5, 2.10, 0.18, 0, 1.05,  -4.70, M.desk);               // back panel
+  box(1.8, 0.45, 0.65, 0, 1.22,  -4.0,  M.desk);               // center tower
+  box(1.9, 0.06, 0.78, 0, 1.47,  -3.98, M.deskTop);            // tower top
 
-  // Pigeon-hole shelves on back panel (3 rows × 6 columns)
+  // Pigeon-hole shelves (3 rows × 5 columns)
   for (let row = 0; row < 3; row++) {
-    for (let col = -2; col <= 3; col++) {
-      decor(0.06, 0.35, 0.22, col * 1.05 - 0.25, 1.6 + row * 0.45, -7.68, M.wainscot);
+    for (let col = -2; col <= 2; col++) {
+      decor(0.05, 0.30, 0.20, col * 0.80, 1.40 + row * 0.40, -4.63, M.wainscot);
     }
   }
 
-  // Computer monitor
-  decor(0.06, 0.34, 0.46, 0, 1.32, -6.9, M.black);
-  decor(0.5,  0.34, 0.06, 0, 1.49, -7.12, M.darkGrey);
+  // Monitor
+  decor(0.05, 0.30, 0.40,  0,     1.26, -3.92, M.black);
+  decor(0.45, 0.30, 0.05,  0,     1.40, -4.10, M.darkGrey);
 
   // Telephone
-  decor(0.22, 0.09, 0.30, -0.85, 1.18, -6.9, M.black);
+  decor(0.20, 0.08, 0.26, -0.75,  1.02, -3.92, M.black);
 
   // Desk lamp
-  decor(0.12, 0.06, 0.12, 1.0, 1.16, -6.85, M.lamp);
-  decor(0.06, 0.48, 0.06, 1.0, 1.42, -6.85, M.lamp);
-  decor(0.30, 0.20, 0.30, 1.0, 1.69, -6.85, M.lampShade);
-  const deskLampLight = new THREE.PointLight(0xFFE890, 1.8, 5);
-  deskLampLight.position.set(1.0, 1.6, -6.85);
+  decor(0.10, 0.05, 0.10,  0.88,  1.00, -3.90, M.lamp);
+  decor(0.05, 0.42, 0.05,  0.88,  1.23, -3.90, M.lamp);
+  decor(0.26, 0.18, 0.26,  0.88,  1.47, -3.90, M.lampShade);
+  const deskLampLight = new THREE.PointLight(0xFFE890, 1.6, 4.5);
+  deskLampLight.position.set(0.88, 1.42, -3.90);
   scene.add(deskLampLight);
 
   // Inbox tray + paper
-  decor(0.36, 0.04, 0.30, 0.45, 1.16, -6.85, M.metal);
-  decor(0.30, 0.02, 0.24, 0.45, 1.19, -6.85, M.paper);
+  decor(0.32, 0.04, 0.26,  0.40,  1.00, -3.90, M.metal);
+  decor(0.26, 0.02, 0.20,  0.40,  1.03, -3.90, M.paper);
 
-  // Pencil cup + pencils
-  decor(0.1, 0.16, 0.1, 0.25, 1.17, -6.78, M.desk);
-  for (let i = 0; i < 4; i++) {
-    decor(0.015, 0.22, 0.015, 0.23 + i * 0.018, 1.28, -6.78, new THREE.MeshStandardMaterial({ color: 0xFFDD00 }));
+  // Pencil cup
+  decor(0.09, 0.14, 0.09,  0.22,  1.01, -3.84, M.desk);
+  for (let i = 0; i < 3; i++) {
+    decor(0.013, 0.19, 0.013, 0.20 + i * 0.016, 1.10, -3.84,
+      new THREE.MeshStandardMaterial({ color: 0xFFDD00 }));
   }
 
-  // Chair (left of center)
-  box(0.65, 0.08, 0.65, -1.3, 0.52, -6.9, M.bench);
-  decor(0.07, 0.46, 0.65, -1.3, 0.77, -7.18, M.bench);
-  decor(0.06, 0.52, 0.06, -1.62, 0.26, -6.58, M.lamp);
-  decor(0.06, 0.52, 0.06, -0.98, 0.26, -6.58, M.lamp);
-  decor(0.06, 0.52, 0.06, -1.62, 0.26, -7.22, M.lamp);
-  decor(0.06, 0.52, 0.06, -0.98, 0.26, -7.22, M.lamp);
+  // Chair
+  box(0.58, 0.07, 0.58, -1.2, 0.48, -3.80, M.bench);
+  decor(0.06, 0.40, 0.58,  -1.2, 0.70, -4.04, M.bench);
+  decor(0.05, 0.48, 0.05,  -1.5, 0.24, -3.52, M.lamp);
+  decor(0.05, 0.48, 0.05,  -0.9, 0.24, -3.52, M.lamp);
+  decor(0.05, 0.48, 0.05,  -1.5, 0.24, -4.06, M.lamp);
+  decor(0.05, 0.48, 0.05,  -0.9, 0.24, -4.06, M.lamp);
 
-  // Filing cabinet behind desk
-  box(0.52, 1.1, 0.65, -2.5, 0.55, -7.5, M.desk);
-  decor(0.45, 0.06, 0.02, -2.5, 0.72, -7.19, M.metal);
-  decor(0.45, 0.06, 0.02, -2.5, 1.05, -7.19, M.metal);
+  // Filing cabinet
+  box(0.46, 1.00, 0.58, -2.2, 0.50, -4.45, M.desk);
+  decor(0.40, 0.05, 0.02, -2.2, 0.64, -4.17, M.metal);
+  decor(0.40, 0.05, 0.02, -2.2, 0.95, -4.17, M.metal);
 
-  // Water cooler
-  box(0.8, 1.9, 0.8, 8.5, 0.95, -7, M.wainscot);
-  decor(0.5, 0.55, 0.5, 8.5, 2.2, -7, new THREE.MeshStandardMaterial({ color: 0x6688CC, roughness: 0.4, metalness: 0.3 }));
-  decor(0.62, 0.08, 0.62, 8.5, 2.5, -7, M.metal);
+  // Water cooler (right side aisle before stairs start)
+  box(0.65, 1.70, 0.65, 6.2, 0.85, 5.0, M.wainscot);
+  decor(0.42, 0.50, 0.42, 6.2, 1.95, 5.0,
+    new THREE.MeshStandardMaterial({ color: 0x6688CC, roughness: 0.4, metalness: 0.3 }));
+  decor(0.54, 0.07, 0.54, 6.2, 2.20, 5.0, M.metal);
 
   // ─── Left Staircase (against left wall → balcony) ────────────────────────
-  const NUM_STEPS = 10;
-  const STEP_RISE = STAIR_HEIGHT / NUM_STEPS;   // 0.35m per step
-  const STEP_RUN  = 1.0;
+  const NUM_STEPS  = 8;
+  const STEP_RISE  = STAIR_HEIGHT / NUM_STEPS;  // 0.3125 m
+  const STEP_RUN   = 0.80;
+  const STAIR_X    = -5.5;
+  const STAIR_W    = 2.2;    // stair width; outer edge = -6.6, inner edge = -4.4
+  const STAIR_Z0   = -1.5;   // Z of first step centre
 
   for (let i = 0; i < NUM_STEPS; i++) {
     const h = (i + 1) * STEP_RISE;
-    const z = -4 - i * STEP_RUN;
-    box(2.5, h, STEP_RUN, -8, h / 2, z, M.stair);
+    const z = STAIR_Z0 - i * STEP_RUN;
+    box(STAIR_W, h, STEP_RUN, STAIR_X, h / 2, z, M.stair);
   }
 
-  // Left staircase: wall-side baseboard
-  box(0.08, STAIR_HEIGHT + 0.3, NUM_STEPS * STEP_RUN, -9.25, STAIR_HEIGHT / 2, -4 - (NUM_STEPS * STEP_RUN) / 2, M.railing);
-  // Left staircase: inner vertical balusters (stepping up)
-  const leftInnerX = -6.75;
-  for (let i = 0; i < 9; i++) {
-    const bz   = -4 - i * (NUM_STEPS * STEP_RUN / 8);
-    const topY = (i / 8) * STAIR_HEIGHT;
-    const postH = topY + 0.65;
-    decor(0.07, postH, 0.07, leftInnerX, postH / 2, bz, M.railing);
-  }
-  decor(0.05, STAIR_HEIGHT, NUM_STEPS * STEP_RUN, leftInnerX, STAIR_HEIGHT / 2, -4 - (NUM_STEPS * STEP_RUN) / 2, M.railing);
+  // Wall-side baseboard
+  const STAIR_LEN = NUM_STEPS * STEP_RUN;
+  const STAIR_MID_Z = STAIR_Z0 - STAIR_LEN / 2 + STEP_RUN / 2;
+  box(0.07, STAIR_HEIGHT + 0.25, STAIR_LEN, -6.6, STAIR_HEIGHT / 2, STAIR_MID_Z, M.railing);
 
-  // ─── Right Staircase (against right wall) ────────────────────────────────
+  // Inner balusters (graduated height)
+  const leftInnerX = -4.4;
+  for (let i = 0; i < 7; i++) {
+    const bz   = STAIR_Z0 - i * (STAIR_LEN / 6);
+    const topY = (i / 6) * STAIR_HEIGHT;
+    const ph   = topY + 0.58;
+    decor(0.06, ph, 0.06, leftInnerX, ph / 2, bz, M.railing);
+  }
+  decor(0.04, STAIR_HEIGHT, STAIR_LEN, leftInnerX, STAIR_HEIGHT / 2, STAIR_MID_Z, M.railing);
+
+  // ─── Right Staircase (mirror) ─────────────────────────────────────────────
   for (let i = 0; i < NUM_STEPS; i++) {
     const h = (i + 1) * STEP_RISE;
-    const z = -4 - i * STEP_RUN;
-    box(2.5, h, STEP_RUN, 8, h / 2, z, M.stair);
+    const z = STAIR_Z0 - i * STEP_RUN;
+    box(STAIR_W, h, STEP_RUN, -STAIR_X, h / 2, z, M.stair);
   }
 
-  box(0.08, STAIR_HEIGHT + 0.3, NUM_STEPS * STEP_RUN, 9.25, STAIR_HEIGHT / 2, -4 - (NUM_STEPS * STEP_RUN) / 2, M.railing);
-  const rightInnerX = 6.75;
-  for (let i = 0; i < 9; i++) {
-    const bz   = -4 - i * (NUM_STEPS * STEP_RUN / 8);
-    const topY = (i / 8) * STAIR_HEIGHT;
-    const postH = topY + 0.65;
-    decor(0.07, postH, 0.07, rightInnerX, postH / 2, bz, M.railing);
+  box(0.07, STAIR_HEIGHT + 0.25, STAIR_LEN, 6.6, STAIR_HEIGHT / 2, STAIR_MID_Z, M.railing);
+
+  const rightInnerX = 4.4;
+  for (let i = 0; i < 7; i++) {
+    const bz   = STAIR_Z0 - i * (STAIR_LEN / 6);
+    const topY = (i / 6) * STAIR_HEIGHT;
+    const ph   = topY + 0.58;
+    decor(0.06, ph, 0.06, rightInnerX, ph / 2, bz, M.railing);
   }
-  decor(0.05, STAIR_HEIGHT, NUM_STEPS * STEP_RUN, rightInnerX, STAIR_HEIGHT / 2, -4 - (NUM_STEPS * STEP_RUN) / 2, M.railing);
+  decor(0.04, STAIR_HEIGHT, STAIR_LEN, rightInnerX, STAIR_HEIGHT / 2, STAIR_MID_Z, M.railing);
 
   // ─── Balcony ─────────────────────────────────────────────────────────────
-  const BALCONY_Z = -4 - NUM_STEPS * STEP_RUN;   // -14
-  box(W, 0.2, 4, 0, STAIR_HEIGHT - 0.1, BALCONY_Z + 2, M.floor);
+  const BALCONY_Z_FRONT = STAIR_Z0 - STAIR_LEN;          // ≈ -7.9
+  const BALCONY_DEPTH   = Math.abs(BACK_Z - BALCONY_Z_FRONT); // ≈ 6.1
+  const BALCONY_MID_Z   = (BALCONY_Z_FRONT + BACK_Z) / 2;
 
-  // Dense front balustrade: bottom rail + top rail + 19 balusters
-  box(W, 0.10, 0.10, 0, STAIR_HEIGHT + 0.05, BALCONY_Z, M.railing);
-  box(W, 0.10, 0.10, 0, STAIR_HEIGHT + 1.05, BALCONY_Z, M.railing);
-  for (let i = 0; i < 19; i++) {
-    decor(0.08, 0.90, 0.08, -9 + i * 1.0, STAIR_HEIGHT + 0.55, BALCONY_Z, M.railing);
+  box(W, 0.2, BALCONY_DEPTH, 0, STAIR_HEIGHT - 0.1, BALCONY_MID_Z, M.floor);
+
+  // Front balustrade: bottom rail + top rail + 12 balusters
+  box(W, 0.09, 0.09, 0, STAIR_HEIGHT + 0.04, BALCONY_Z_FRONT, M.railing);
+  box(W, 0.09, 0.09, 0, STAIR_HEIGHT + 0.88, BALCONY_Z_FRONT, M.railing);
+  for (let i = 0; i < 12; i++) {
+    decor(0.07, 0.76, 0.07, -6.3 + i * 1.14, STAIR_HEIGHT + 0.46, BALCONY_Z_FRONT, M.railing);
   }
-  // Side guard rails
-  box(0.07, 1.1, 4, -10, STAIR_HEIGHT + 0.55, BALCONY_Z + 2, M.railing);
-  box(0.07, 1.1, 4,  10, STAIR_HEIGHT + 0.55, BALCONY_Z + 2, M.railing);
+  // Side rails
+  box(0.06, 0.94, BALCONY_DEPTH, -7.0, STAIR_HEIGHT + 0.47, BALCONY_MID_Z, M.railing);
+  box(0.06, 0.94, BALCONY_DEPTH,  7.0, STAIR_HEIGHT + 0.47, BALCONY_MID_Z, M.railing);
   // Back rail
-  box(W, 0.07, 0.07, 0, STAIR_HEIGHT + 1.0, BALCONY_Z + 4, M.railing);
+  box(W, 0.06, 0.06, 0, STAIR_HEIGHT + 0.88, BACK_Z + 0.5, M.railing);
 
-  // ─── Benches ─────────────────────────────────────────────────────────────
+  // ─── Benches (under balcony overhang, in side-aisle behind stairs) ────────
   // Left bench
-  box(2.5, 0.10, 0.85, -6.5, 0.52, -10, M.bench);
-  box(0.10, 0.52, 0.85, -7.75, 0.26, -10, M.bench);
-  box(0.10, 0.52, 0.85, -5.25, 0.26, -10, M.bench);
-  box(0.10, 0.52, 0.85, -6.5, 0.78, -10.43, M.bench);
-  decor(0.10, 0.28, 0.85, -7.75, 0.67, -10, M.bench);
-  decor(0.10, 0.28, 0.85, -5.25, 0.67, -10, M.bench);
-  decor(0.22, 0.03, 0.65, -6.7, 0.54, -9.82, M.magazine);
-  decor(0.22, 0.03, 0.65, -6.2, 0.54, -9.82, M.paper);
-
-  // Left side table
-  box(0.60, 0.50, 0.55, -8.7, 0.25, -10, M.bench);
-  box(0.68, 0.06, 0.63, -8.7, 0.53, -10, M.bench);
-  decor(0.22, 0.03, 0.65, -8.7, 0.57, -10, M.magazine);
+  box(1.8, 0.09, 0.72, -5.0, 0.48, -9.0, M.bench);
+  box(0.09, 0.48, 0.72, -5.9, 0.24, -9.0, M.bench);
+  box(0.09, 0.48, 0.72, -4.1, 0.24, -9.0, M.bench);
+  box(0.09, 0.48, 0.72, -5.0, 0.72, -9.37, M.bench);
+  decor(0.19, 0.03, 0.55, -5.1, 0.50, -8.86, M.magazine);
+  decor(0.19, 0.03, 0.55, -4.7, 0.50, -8.86, M.paper);
 
   // Right bench
-  box(2.5, 0.10, 0.85, 6.5, 0.52, -10, M.bench);
-  box(0.10, 0.52, 0.85, 5.25, 0.26, -10, M.bench);
-  box(0.10, 0.52, 0.85, 7.75, 0.26, -10, M.bench);
-  box(0.10, 0.52, 0.85, 6.5, 0.78, -10.43, M.bench);
-  decor(0.10, 0.28, 0.85, 5.25, 0.67, -10, M.bench);
-  decor(0.10, 0.28, 0.85, 7.75, 0.67, -10, M.bench);
-  decor(0.22, 0.03, 0.65, 6.3, 0.54, -9.82, M.magazine);
-  decor(0.22, 0.03, 0.65, 6.8, 0.54, -9.82, M.paper);
+  box(1.8, 0.09, 0.72,  5.0, 0.48, -9.0, M.bench);
+  box(0.09, 0.48, 0.72,  4.1, 0.24, -9.0, M.bench);
+  box(0.09, 0.48, 0.72,  5.9, 0.24, -9.0, M.bench);
+  box(0.09, 0.48, 0.72,  5.0, 0.72, -9.37, M.bench);
+  decor(0.19, 0.03, 0.55,  4.9, 0.50, -8.86, M.magazine);
+  decor(0.19, 0.03, 0.55,  5.3, 0.50, -8.86, M.paper);
 
-  // Right side table
-  box(0.60, 0.50, 0.55, 8.7, 0.25, -10, M.bench);
-  box(0.68, 0.06, 0.63, 8.7, 0.53, -10, M.bench);
-  decor(0.22, 0.03, 0.65, 8.7, 0.57, -10, M.magazine);
-
-  // ─── Standing Lamps ──────────────────────────────────────────────────────
-  // Left lamp (near bench)
-  box(0.15, 2.1, 0.15, -6.5, 1.05, -9, M.lamp);
-  decor(0.5, 0.35, 0.5, -6.5, 2.27, -9, M.lampShade);
-  const lampLight1 = new THREE.PointLight(0xFFDF80, 2.2, 10);
-  lampLight1.position.set(-6.5, 2.1, -9);
+  // ─── Standing Lamps (beside benches) ─────────────────────────────────────
+  box(0.12, 1.85, 0.12, -4.8, 0.925, -8.2, M.lamp);
+  decor(0.42, 0.30, 0.42, -4.8, 1.95, -8.2, M.lampShade);
+  const lampLight1 = new THREE.PointLight(0xFFDF80, 1.8, 8);
+  lampLight1.position.set(-4.8, 1.85, -8.2);
   scene.add(lampLight1);
 
-  // Right lamp (near bench)
-  box(0.15, 2.1, 0.15, 6.5, 1.05, -9, M.lamp);
-  decor(0.5, 0.35, 0.5, 6.5, 2.27, -9, M.lampShade);
-  const lampLight2 = new THREE.PointLight(0xFFDF80, 2.2, 10);
-  lampLight2.position.set(6.5, 2.1, -9);
+  box(0.12, 1.85, 0.12,  4.8, 0.925, -8.2, M.lamp);
+  decor(0.42, 0.30, 0.42,  4.8, 1.95, -8.2, M.lampShade);
+  const lampLight2 = new THREE.PointLight(0xFFDF80, 1.8, 8);
+  lampLight2.position.set(4.8, 1.85, -8.2);
   scene.add(lampLight2);
 
-  // ─── Wall Sconces (6 total — 3 per side wall) ────────────────────────────
-  const sconceZPositions = [8, 0, -8];
-  for (const sz of sconceZPositions) {
-    // Left wall
-    decor(0.30, 0.10, 0.40, -9.75, 3.05, sz, M.lamp);
-    decor(0.38, 0.28, 0.38, -9.55, 3.15, sz, M.lampShade);
-    const sl = new THREE.PointLight(0xFFE0A0, 1.6, 8);
-    sl.position.set(-8.8, 3.1, sz);
+  // ─── Wall Sconces (3 pairs, lower mount for shorter walls) ───────────────
+  const sconceZ = [6, 0, -7];
+  for (const sz of sconceZ) {
+    decor(0.26, 0.09, 0.34, -6.87, 2.40, sz, M.lamp);
+    decor(0.32, 0.24, 0.32, -6.70, 2.48, sz, M.lampShade);
+    const sl = new THREE.PointLight(0xFFE0A0, 1.4, 7);
+    sl.position.set(-6.0, 2.44, sz);
     scene.add(sl);
 
-    // Right wall
-    decor(0.30, 0.10, 0.40, 9.75, 3.05, sz, M.lamp);
-    decor(0.38, 0.28, 0.38, 9.55, 3.15, sz, M.lampShade);
-    const sr = new THREE.PointLight(0xFFE0A0, 1.6, 8);
-    sr.position.set(8.8, 3.1, sz);
+    decor(0.26, 0.09, 0.34,  6.87, 2.40, sz, M.lamp);
+    decor(0.32, 0.24, 0.32,  6.70, 2.48, sz, M.lampShade);
+    const sr = new THREE.PointLight(0xFFE0A0, 1.4, 7);
+    sr.position.set(6.0, 2.44, sz);
     scene.add(sr);
   }
 
-  // ─── Lighting ─────────────────────────────────────────────────────────────
+  // ─── Ceiling Point Lights (raised clear of player head) ──────────────────
   scene.add(new THREE.AmbientLight(0x30282C, 0.12));
 
   [
-    [0,   CEIL - 1,  3  ],
-    [0,   CEIL - 1, -7  ],
-    [-6,  CEIL - 1, -3  ],
-    [ 6,  CEIL - 1, -3  ],
-    [0,   CEIL - 1,  14 ],
+    [ 0,  5.0,  4 ],
+    [ 0,  5.0, -5 ],
+    [-4,  5.0,  0 ],
+    [ 4,  5.0,  0 ],
+    [ 0,  5.0, 12 ],
   ].forEach(([x, y, z]) => {
-    const pl = new THREE.PointLight(0xFFF4E8, 2.5, 24, 1.8);
+    const pl = new THREE.PointLight(0xFFF4E8, 2.2, 18, 1.8);
     pl.position.set(x, y, z);
     scene.add(pl);
   });
 
-  // ─── Damage Pillar (deals 1 damage/sec on contact) ────────────────────────
-  const pillarMat = new THREE.MeshStandardMaterial({ color: 0x3a1a1a, roughness: 0.7, metalness: 0.3 });
-  const pillarX = 3.5, pillarZ = 0;
-  const pillarRadius = 0.5;
-  const pillarHeight = 3;
+  // ─── Damage Pillar ────────────────────────────────────────────────────────
+  const pillarRadius = 0.40;
+  const pillarHeight = 2.5;   // matches STAIR_HEIGHT, fills to balcony soffit
+  const pillarX = 2.5, pillarZ = 0;
 
   const pillarMesh = new THREE.Mesh(
     new THREE.CylinderGeometry(pillarRadius, pillarRadius, pillarHeight, 12),
-    pillarMat
+    new THREE.MeshStandardMaterial({ color: 0x3a1a1a, roughness: 0.7, metalness: 0.3 })
   );
   pillarMesh.position.set(pillarX, pillarHeight / 2, pillarZ);
   pillarMesh.castShadow = true;
@@ -362,10 +345,10 @@ export function createWorld(scene, physicsWorld) {
   scene.add(pillarMesh);
 
   const capMesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(pillarRadius * 1.2, pillarRadius * 1.2, 0.15, 12),
+    new THREE.CylinderGeometry(pillarRadius * 1.2, pillarRadius * 1.2, 0.12, 12),
     new THREE.MeshStandardMaterial({ color: 0x2a0a0a, roughness: 0.5, metalness: 0.5 })
   );
-  capMesh.position.set(pillarX, pillarHeight + 0.075, pillarZ);
+  capMesh.position.set(pillarX, pillarHeight + 0.06, pillarZ);
   scene.add(capMesh);
 
   colliders.push(new THREE.Box3().setFromObject(pillarMesh));
@@ -374,7 +357,7 @@ export function createWorld(scene, physicsWorld) {
     {
       type: 'damagePillar',
       position: { x: pillarX, z: pillarZ },
-      radius: pillarRadius + 0.6,
+      radius: pillarRadius + 0.5,
       damagePerSecond: 1,
       damageType: 'generic',
     },
