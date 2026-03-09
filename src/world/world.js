@@ -62,7 +62,6 @@ export function createWorld(scene, physicsWorld) {
     magazine:   new THREE.MeshStandardMaterial({ color: 0x8B2020, roughness: 0.9 }),
   };
 
-  // Utility: create box, add to scene, register collider
   function box(w, h, d, x, y, z, mat) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     mesh.position.set(x, y, z);
@@ -118,8 +117,8 @@ export function createWorld(scene, physicsWorld) {
 
   // ─── Down Staircase (entry platform → main floor) ────────────────────────
   for (let i = 0; i < 6; i++) {
-    const h = (6 - i) * 0.33;
-    const z = 24 - i * 0.5;
+    const h = (6 - i) * 0.25;
+    const z = 16 - i * 0.5;
     box(W, h, 0.5, 0, h / 2, z, M.stair);
   }
 
@@ -224,8 +223,8 @@ export function createWorld(scene, physicsWorld) {
 
   for (let i = 0; i < NUM_STEPS; i++) {
     const h = (i + 1) * STEP_RISE;
-    const z = -8 - i * STEP_RUN;
-    box(3.5, h, STEP_RUN, -12, h / 2, z, M.stair);
+    const z = -4 - i * STEP_RUN;
+    box(2.5, h, STEP_RUN, -8, h / 2, z, M.stair);
   }
 
   // Left staircase: wall-side baseboard
@@ -244,8 +243,8 @@ export function createWorld(scene, physicsWorld) {
   // ─── Right Staircase (against right wall) ────────────────────────────────
   for (let i = 0; i < NUM_STEPS; i++) {
     const h = (i + 1) * STEP_RISE;
-    const z = -8 - i * STEP_RUN;
-    box(3.5, h, STEP_RUN, 12, h / 2, z, M.stair);
+    const z = -4 - i * STEP_RUN;
+    box(2.5, h, STEP_RUN, 8, h / 2, z, M.stair);
   }
 
   // Right staircase: wall-side baseboard
@@ -360,7 +359,7 @@ export function createWorld(scene, physicsWorld) {
 
   // ─── Damage Pillar (deals 1 damage/sec on contact) ────────────────────────
   const pillarMat = new THREE.MeshStandardMaterial({ color: 0x3a1a1a, roughness: 0.7, metalness: 0.3 });
-  const pillarX = 5, pillarZ = 0;
+  const pillarX = 3.5, pillarZ = 0;
   const pillarRadius = 0.5;
   const pillarHeight = 3;
 
