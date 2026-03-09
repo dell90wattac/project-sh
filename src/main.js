@@ -200,6 +200,7 @@ overlay.addEventListener('click', () => {
 const clock = new THREE.Clock();
 
 let lastEKeyState = false;
+let lastQKeyState = false;
 
 function loop() {
   requestAnimationFrame(loop);
@@ -225,15 +226,18 @@ function loop() {
 
   // ─── Input ──────────────────────────────────────────────────────────────
   if (!dead) {
-    // E key: pickup if hovering item, otherwise toggle inventory
+    // Q key: toggle inventory
+    const qKeyPressed = player.keys['KeyQ'];
+    if (qKeyPressed && !lastQKeyState) {
+      inventoryUI.toggle();
+    }
+    lastQKeyState = qKeyPressed;
+
+    // E key: pickup item
     const eKeyPressed = player.keys['KeyE'];
     if (eKeyPressed && !lastEKeyState) {
-      if (inventoryUI.isOpen()) {
-        inventoryUI.toggle();
-      } else if (worldItems.getHovered()) {
+      if (!inventoryUI.isOpen() && worldItems.getHovered()) {
         worldItems.tryPickup();
-      } else {
-        inventoryUI.toggle();
       }
     }
     lastEKeyState = eKeyPressed;

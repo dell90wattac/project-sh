@@ -233,7 +233,7 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
 
   // ── Info text ─────────────────────────────────────────────────────────
   const infoText = document.createElement('div');
-  infoText.textContent = 'Press E to close  •  Left-click for options';
+  infoText.textContent = 'Press Q to close  •  Left-click for options';
   infoText.style.cssText = `
     color: #666;
     font-size: 11px;
