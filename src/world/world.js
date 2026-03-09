@@ -365,7 +365,7 @@ export function createWorld(scene, physicsWorld) {
 
   const pillarMesh = new THREE.Mesh(
     new THREE.CylinderGeometry(pillarRadius, pillarRadius, pillarHeight, 12),
-    pillarMat
+    new THREE.MeshStandardMaterial({ color: 0x3a1a1a, roughness: 0.7, metalness: 0.3 })
   );
   pillarMesh.position.set(pillarX, pillarHeight / 2, pillarZ);
   pillarMesh.castShadow = true;
@@ -373,10 +373,10 @@ export function createWorld(scene, physicsWorld) {
   scene.add(pillarMesh);
 
   const capMesh = new THREE.Mesh(
-    new THREE.CylinderGeometry(pillarRadius * 1.2, pillarRadius * 1.2, 0.15, 12),
+    new THREE.CylinderGeometry(pillarRadius * 1.2, pillarRadius * 1.2, 0.12, 12),
     new THREE.MeshStandardMaterial({ color: 0x2a0a0a, roughness: 0.5, metalness: 0.5 })
   );
-  capMesh.position.set(pillarX, pillarHeight + 0.075, pillarZ);
+  capMesh.position.set(pillarX, pillarHeight + 0.06, pillarZ);
   scene.add(capMesh);
 
   colliders.push(new THREE.Box3().setFromObject(pillarMesh));

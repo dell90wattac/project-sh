@@ -97,6 +97,7 @@ inventoryUI.setToggleCallback((isOpen) => {
 });
 
 // ─── Chandeliers ───────────────────────────────────────────────────────────
+// Chains shortened for 5.5 m ceiling — bottom bulb at ~3.2 m, clear of head.
 function createChandelier(x, y, z) {
   const group = new THREE.Group();
   // Main crown disc
