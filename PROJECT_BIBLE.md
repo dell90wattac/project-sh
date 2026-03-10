@@ -41,16 +41,21 @@ Project SH/
 ├── src/
 │   ├── main.js                  ← Game loop, scene setup, hazard/death logic
 │   ├── world/
-│   │   └── world.js             ← Environment geometry, colliders[], hazards[]
+│   │   └── world.js             ← Environment geometry, colliders[], hazards[], door
+│   ├── entities/
+│   │   ├── door.js              ← Door mesh entity (pivot, panel, handle)
+│   │   └── zombies.js           ← (placeholder)
 │   ├── player/
 │   │   ├── player.js            ← Movement, collision, gravity, low-HP sway
-│   │   └── viewmodel.js         ← First-person hands, flashlight, gun animations
+│   │   └── viewmodel.js         ← First-person hands, flashlight, gun + door animations
 │   ├── systems/
+│   │   ├── door.js              ← Door physics: torque model, auto-close, air cushion, pushback
 │   │   ├── health.js            ← Universal health factory (player + enemies)
 │   │   ├── inventory.js         ← 9-slot grid + equipped slot logic
 │   │   ├── weapons.js           ← Gun: fire, reload, ammo economy
 │   │   ├── itemRegistry.js      ← All item definitions + combination recipes
 │   │   ├── worldItems.js        ← 3D pickups, raycaster hover, pickup/drop
+│   │   ├── fog.js               ← Fog system
 │   │   └── physics.js           ← Cannon-es world wrapper
 │   └── ui/
 │       ├── hud.js               ← Health pips + ammo counter (bottom-right)
@@ -85,6 +90,7 @@ Project SH/
 - Dual first-person hands: left (flashlight), right (gun)
 - Independent bob/sway per hand; recoil and reload animations
 - Flashlight is a SpotLight parented to left hand — toggle with **F**
+- **Door push pose:** hands rise, spread, and rotate palms-out toward door surface; sway/bob/recoil suppressed proportionally; dynamic forward press when door is moving; subtle micro-motion while holding
 
 ### Health (`src/systems/health.js`)
 - Factory: `createHealth(maxHP)` — shared by player and enemies
@@ -114,6 +120,14 @@ Project SH/
 - Pickup range and hover label configurable in file
 - Dropped items auto-spread: `findClearDropPosition` tests up to 13 candidate positions so no two pickups ever overlap on the ground
 
+### Door (`src/entities/door.js` + `src/systems/door.js`)
+- Entity: pivot-hinged panel with handle; configurable dimensions in entity file
+- Physics: torque-based model using moment of inertia ($I = \frac{1}{3} m L^2$); lever arm matters (push near hinge = weak, push far edge = strong)
+- Bidirectional swing; auto-close spring with heavy damping; air cushion near frame for gentle settle with slight overshoot
+- Pushback system prevents player from walking through; called after `player.update()` each frame
+- Viewmodel interaction blend drives hand pose transition (see Viewmodel section)
+- Tunable constants (mass, spring, damping, cushion) in `src/systems/door.js`
+
 ### Hazards (`src/world/world.js` + `src/main.js`)
 - World exports `hazards[]` alongside `colliders[]`
 - Each hazard: `{ position, radius, damagePerSecond, damageType }`
@@ -142,14 +156,49 @@ Project SH/
 ## Current Environment
 - Compressed lobby — **14 m wide × 28 m deep × 5.5 m ceiling** (≈50×100 player-block units); dimensions in `src/world/world.js`
 - **Entry zone** (Z +9..+14): Elevated platform with 3-step descent to main floor
-- **Front hall** (Z +2..+7): Open reception area; 2 benches with side tables flanking the walkway; standing lamps illuminate seating
+- **Front hall** (Z +2..+7): Open reception area; 2 benches with side tables flanking the walkway (left bench at Z=4.5); standing lamps illuminate seating
 - **Central zone** (Z -2..+2): Front desk (4.5 m wide) positioned at Z=0, centered in room. Mid-level column pair (X=±3, Z=+1)
+- **Door** (left wall, Z=2.0–3.0): 1.0 m wide hinged door in left wall opening; physics-driven bidirectional swing; connects to small side room
+- **Side room** (X≈-9.3, Z=2.5): 4×4 m square room beyond the door; floor, ceiling, 3 walls, interior light
 - **Transition zone** (Z -3..-5): Back column pair (X=±3, Z=-3); one damage pillar hazard at center; wall sconces light the approach to stairs
-- **Staircase zone** (Z -5..-11.4): Dual side staircases flush against walls (left X=-7 to -4.8, right X=+4.8 to +7), ascending 8 steps with inner railings. Wall-side baseboard at X=±7, inner railing at X=±4.8
-- **Balcony** (Z -11.4..-13.8, Y=2.4): Upper gallery overlooking main floor; front railing spans center only (X=-4.8 to +4.8) with gaps where stairs connect; newel posts at X=±4.8; side rails along walls; back rail near back wall
+- **Staircase zone** (Z -5..-11.4): Dual side staircases flush against walls (left X=-7 to -4.8, right X=+4.8 to +7), ascending 8 steps with inner railings
+- **Balcony** (Z -11.4..-13.8, Y=2.4): Upper gallery overlooking main floor; front railing spans center only (X=-4.8 to +4.8) with gaps where stairs connect
 - **Lighting**: 3 chandeliers along center axis (Z=[0, 6, -4]); 3 ceiling point lights above entry, seating, and desk; 4 sconce pairs on side walls (Z=[8, 3, -2, -5])
 - **Pickups**: Ammo (3 stacks, 27 rounds each) in front of desk (Z=+1.5); healing items behind desk (Z=-1.0)
 - **Starting loadout**: Handgun equipped with no ammo; items available for pickup on floor
+
+```
+Overhead View (North = -Z, facing front wall)
+
+         X = -7              X = 0              X = +7
+          │                   │                   │
+  Z=-14 ──┼───────────────────┼───────────────────┤  ← Back wall
+          │      BALCONY (Y=2.4)                  │
+  Z=-11.4 │ ┌─stairs─┐ [railing] ┌─stairs─┐      │
+          │ │  LEFT   │           │ RIGHT  │      │
+  Z=-5  ──│ └─────────┘           └────────┘──────│  ← Stair start
+          │       [col]    ◉hazard   [col]        │
+  Z=-3    │                                       │
+          │              ┌──desk──┐               │
+  Z=0   ──│       [col]  │ FRONT  │  [col]  ──────│
+          │              └────────┘               │
+          │                                       │
+  Z=2.0 ──┤ ╔═DOOR═╗                              │
+    ┌─────┤ ║      ║                              │
+    │SIDE │ ║ hinge║                              │
+    │ROOM │ ╚══════╝                              │
+    └─────┤                                       │
+  Z=3.0   │                                       │
+          │  [bench]              [bench]          │
+  Z=4.5   │  [lamp]               [lamp]          │
+          │       [col]           [col]            │
+  Z=+5    │                                       │
+          │         ┌──────────────┐               │
+  Z=+7  ──│─────────┤  DOWN STEPS  ├──────────────│
+          │         └──────────────┘               │
+          │            ENTRY PLATFORM              │
+  Z=+14 ──┼───────────────────┼───────────────────┤  ← Front wall
+```
 
 ---
 

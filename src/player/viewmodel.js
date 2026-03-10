@@ -182,7 +182,7 @@ export function createViewModel(camera) {
   const rightSwayOffset = new THREE.Vector2(0.3, 0);    // Right hand lags slightly on sway
   let bobPhase = 0;
 
-  function update(dt, isMoving, isSprinting, mouseDX, mouseDY, flashlightOn, gunState = {}) {
+  function update(dt, isMoving, isSprinting, mouseDX, mouseDY, flashlightOn, gunState = {}, doorInteraction = null) {
     // ── Muzzle Flash System ──────────────────────────────────────────────
     // Detect shot: isFiring transitions from false to true
     const currentFireState = gunState.isFiring || false;
@@ -251,10 +251,61 @@ export function createViewModel(camera) {
     }
 
     // ── Apply to LEFT HAND (higher frequency bob, leads on sway) ────────
-    leftHandGroup.position.x = -0.08 + (swayCurrent.x + leftSwayOffset.x) * 0.6 + bobX * 0.4;
-    leftHandGroup.position.y = -0.1 + (swayCurrent.y + leftSwayOffset.y) * 0.4 + bobY * 0.6;
-    leftHandGroup.rotation.y = (swayCurrent.x + leftSwayOffset.x) * 0.3;
-    leftHandGroup.rotation.x = -(swayCurrent.y + leftSwayOffset.y) * 0.2;
+    // Door interaction pose (hands up / flatten to door)
+    let doorBlend = doorInteraction?.doorBlend || 0;
+    if (!Number.isFinite(doorBlend)) doorBlend = 0;
+    doorBlend = Math.max(0, Math.min(1, doorBlend));
+    let doorYaw = 0;
+    if (doorBlend > 0.001 && doorInteraction?.doorNormal) {
+      const invCamQuat = camera.quaternion.clone().invert();
+      const localNormal = doorInteraction.doorNormal.clone().applyQuaternion(invCamQuat);
+      localNormal.y = 0;
+      if (localNormal.lengthSq() > 0.0001) {
+        localNormal.normalize();
+        const doorTangent = new THREE.Vector3(localNormal.z, 0, -localNormal.x).normalize();
+        const forward = new THREE.Vector3(0, 0, -1);
+        if (doorTangent.dot(forward) < 0) doorTangent.negate();
+        doorYaw = Math.atan2(doorTangent.x, -doorTangent.z);
+        if (!Number.isFinite(doorYaw)) doorYaw = 0;
+        doorYaw = Math.max(-0.3, Math.min(0.3, doorYaw));
+      }
+    }
+
+    // ── Door push animation ─────────────────────────────────────────────
+    // Smoothed door blend for animation (avoids popping)
+    const db = doorBlend;
+    // Dynamic push motion: hands press forward more when door is actively moving
+    const doorAngVel = doorInteraction?.doorAngularVel || 0;
+    const pushIntensity = Math.min(1, Math.abs(doorAngVel) * 3.0);
+
+    // Base pose offsets (hands rise and move forward toward door)
+    const doorLift = 0.18 * db;            // raise hands up to door height
+    const doorForward = (-0.12 - 0.06 * pushIntensity) * db;  // push forward, more when actively pushing
+    const doorSpread = 0.06 * db;          // hands spread apart (palms on door)
+    const doorYawApply = doorYaw * db * 0.5;
+
+    // Palms rotate outward to face the door (pitch wrists back, roll palms flat)
+    const doorPitchL = -0.55 * db;         // left wrist tilts back (palm faces forward)
+    const doorPitchR = -0.55 * db;         // right wrist tilts back
+    const doorRollL = 0.2 * db;            // left palm rolls slightly outward
+    const doorRollR = -0.2 * db;           // right palm rolls slightly outward
+
+    // Subtle breathing/pressing micro-motion when holding against door
+    const pushTime = performance.now() * 0.001;
+    const microPush = db > 0.3 ? Math.sin(pushTime * 2.5) * 0.004 * db : 0;
+
+    // ── Apply to LEFT HAND ──────────────────────────────────────────────
+    leftHandGroup.position.x = -0.08 + (swayCurrent.x + leftSwayOffset.x) * 0.6 * (1 - db * 0.7) + bobX * 0.4 * (1 - db);
+    leftHandGroup.position.y = -0.1 + (swayCurrent.y + leftSwayOffset.y) * 0.4 * (1 - db * 0.7) + bobY * 0.6 * (1 - db);
+    leftHandGroup.rotation.y = (swayCurrent.x + leftSwayOffset.x) * 0.3 * (1 - db);
+    leftHandGroup.rotation.x = -(swayCurrent.y + leftSwayOffset.y) * 0.2 * (1 - db);
+
+    leftHandGroup.position.y += doorLift;
+    leftHandGroup.position.z = -0.15 + doorForward + microPush;
+    leftHandGroup.position.x += -doorSpread;
+    leftHandGroup.rotation.y += doorYawApply;
+    leftHandGroup.rotation.x += doorPitchL;
+    leftHandGroup.rotation.z = doorRollL;
 
     // Update leftHandGroup matrix for world transforms
     leftHandGroup.updateMatrixWorld(true);
@@ -264,11 +315,18 @@ export function createViewModel(camera) {
     const flashLocalForward = new THREE.Vector3(0, 0, -60);
     flashlightTarget.position.copy(flashLocalForward);
 
-    // ── Apply to RIGHT HAND (weapon stays steadier, lags on sway) ───────
-    rightHandGroup.position.x = 0.08 + (swayCurrent.x + rightSwayOffset.x) * 0.4 + bobX * 0.5 + recoilKick;
-    rightHandGroup.position.y = -0.1 + (swayCurrent.y + rightSwayOffset.y) * 0.3 + bobY + reloadLift;
-    rightHandGroup.rotation.y = (swayCurrent.x + rightSwayOffset.x) * 0.35 + recoilKick * 2;
-    rightHandGroup.rotation.x = -(swayCurrent.y + rightSwayOffset.y) * 0.25 + recoilKick * 3 + reloadRotation;
+    // ── Apply to RIGHT HAND ─────────────────────────────────────────────
+    rightHandGroup.position.x = 0.08 + (swayCurrent.x + rightSwayOffset.x) * 0.4 * (1 - db * 0.7) + bobX * 0.5 * (1 - db) + recoilKick * (1 - db);
+    rightHandGroup.position.y = -0.1 + (swayCurrent.y + rightSwayOffset.y) * 0.3 * (1 - db) + bobY * (1 - db) + reloadLift * (1 - db);
+    rightHandGroup.rotation.y = (swayCurrent.x + rightSwayOffset.x) * 0.35 * (1 - db) + recoilKick * 2 * (1 - db);
+    rightHandGroup.rotation.x = -(swayCurrent.y + rightSwayOffset.y) * 0.25 * (1 - db) + recoilKick * 3 * (1 - db) + reloadRotation * (1 - db);
+
+    rightHandGroup.position.y += doorLift;
+    rightHandGroup.position.z = -0.15 + doorForward + microPush;
+    rightHandGroup.position.x += doorSpread;
+    rightHandGroup.rotation.y += doorYawApply;
+    rightHandGroup.rotation.x += doorPitchR;
+    rightHandGroup.rotation.z = doorRollR;
     
     // Update rightHandGroup matrix for world transforms (ensures muzzle flash light direction is correct)
     rightHandGroup.updateMatrixWorld(true);

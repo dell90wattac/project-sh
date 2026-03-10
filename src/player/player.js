@@ -149,7 +149,7 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
   }
 
   // ─── Update ──────────────────────────────────────────────────────────────
-  function update(dt, gunState = {}) {
+  function update(dt, gunState = {}, doorInteraction = null) {
     // Require pointer lock or fallback mode to be active
     if (!controls.isLocked && !fallbackActive) return;
 
@@ -235,7 +235,7 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
     }
 
     // ── Viewmodel ────────────────────────────────────────────────────────
-    viewmodel.update(dt, isMoving && onGround, sprint, mouseDX, mouseDY, flashlightOn, gunState);
+    viewmodel.update(dt, isMoving && onGround, sprint, mouseDX, mouseDY, flashlightOn, gunState, doorInteraction);
     mouseDX = 0;
     mouseDY = 0;
 
@@ -244,6 +244,10 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
 
   function getPosition() {
     return body.position;
+  }
+
+  function getVelocity() {
+    return velocity;
   }
 
   function resetPosition() {
@@ -262,6 +266,8 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
     keys,
     controls,
     getPosition,
+    getVelocity,
     resetPosition,
   };
 }
+
