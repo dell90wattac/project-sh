@@ -4,6 +4,55 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 11] — 2026-03-09
+### Added
+- **Door entity + door physics system** (`src/entities/door.js`, `src/systems/door.js`)
+  - Door entity: pivot-hinged `BoxGeometry` panel with handle; configurable width (1.0 m), height (2.2 m), thickness (0.08 m)
+  - Physics-based torque model: player hitbox overlap generates contact force; force × lever arm → torque → angular acceleration, divided by moment of inertia ($I = \frac{1}{3} m L^2$, 40 kg door)
+  - Bidirectional swing — detects which side the player is on and pushes accordingly
+  - Push detection zone (0.59 m) is wider than pushback zone (0.34 m) so force registers before collision resolution cancels the overlap
+  - `applyPlayerPushback()` — soft collision that prevents walking through the door, called after `player.update()` each frame
+  - Auto-close spring (0.02 strength, 0.998 damping) — barely perceptible creep back to closed, like gravity on heavy worn hinges
+  - Air cushion near frame — exponential dampening (`pow(0.75, closeness)`) in a ~3° zone as the door approaches closed; only brakes *before* crossing the frame, allowing slight overshoot and natural settle
+  - Snap-to-closed at <0.06° and near-zero velocity
+  - Max swing angle: ±117° (`π × 0.65`)
+
+- **Door push hand animation** (`src/player/viewmodel.js`)
+  - Both hands rise, press forward, and spread apart as `doorBlend` increases (proximity + facing)
+  - Palms rotate outward (pitch back + roll) to face the door surface
+  - Normal weapon sway, walk bob, recoil, and reload animations fade out proportionally during door interaction
+  - Dynamic forward press intensifies when the door is actively moving (`doorAngularVel`)
+  - Subtle micro-motion oscillation when hands are held against the door
+  - `rotation.z` set via assignment (not `+=`) to prevent frame accumulation
+  - `position.z` set to base + offset (not `+=`) — fixes original bug where hands left the body permanently
+
+- **Door opening in left wall** (`src/world/world.js`)
+  - Left wall split into two segments with 1.0 m door opening at Z=2.0–3.0
+  - Wainscoting and crown molding also split to match
+  - Decorative door frame (lintel + two jambs) in wainscot material
+  - Door entity placed at hinge position (X=-6.9, Z=2.0)
+  - Door removed from static `colliders[]` — collision handled dynamically by door system
+
+- **Small room beyond door** (`src/world/world.js`)
+  - 4 m × 4 m square room on left side of wall (centered on door opening)
+  - Floor, ceiling, 3 walls (front, back, far side); shared materials with main lobby
+  - Interior point light (warm, 1.4 intensity, 6 m range)
+
+- **Door system integration** (`src/main.js`)
+  - `createDoorSystem()` imported and wired; updates each frame before player
+  - `doorSystem.getInteraction()` passed to `player.update()` → viewmodel
+  - `doorSystem.applyPlayerPushback()` called after player movement
+
+### Changed
+- **Left bench and side table moved** — Z=3.0 → **Z=4.5** to clear the door swing area (`src/world/world.js`)
+
+### Fixed
+- **Hands permanently leaving body** — `position.z += doorForward` accumulated every frame; changed to `position.z = -0.15 + doorForward`
+- **Door impossible to open** — door `Box3` was in static `colliders[]`, pushback prevented player from reaching push zone
+- **Door couldn't be pushed from back side** — bidirectional `side` detection based on player's local X position relative to door plane
+
+---
+
 ## [Session 10] — 2026-03-09
 ### Changed
 - **Layout reorganization for coherent spatial flow** (`src/world/world.js`)

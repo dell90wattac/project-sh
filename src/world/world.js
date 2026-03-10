@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { createDoor } from '../entities/door.js';
 
 /**
  * Test room — RCPD-lobby inspired layout.
@@ -89,6 +90,19 @@ export function createWorld(scene, physicsWorld) {
   const STAIR_HEIGHT = 2.5;
   const BACK_Z     = -14;
   const FRONT_Z    =  14;
+  const LEFT_WALL_X = -7;
+  const RIGHT_WALL_X = 7;
+  const WALL_THICK = 0.2;
+
+  // Door parameters (left wall)
+  const DOOR_WIDTH = 1.0;
+  const DOOR_HEIGHT = 2.2;
+  const DOOR_THICK = 0.08;
+  const DOOR_HINGE_Z = 2.0;
+  const DOOR_OPENING_MIN_Z = DOOR_HINGE_Z;
+  const DOOR_OPENING_MAX_Z = DOOR_HINGE_Z + DOOR_WIDTH;
+  const DOOR_OPENING_CENTER_Z = (DOOR_OPENING_MIN_Z + DOOR_OPENING_MAX_Z) / 2;
+  const DOOR_INNER_X = LEFT_WALL_X + WALL_THICK / 2;
 
   // ─── Floors ──────────────────────────────────────────────────────────────
   box(W, 0.2, 20, 0, -0.1, 0, M.floor);
@@ -97,21 +111,45 @@ export function createWorld(scene, physicsWorld) {
 
   // ─── Walls & Ceiling ─────────────────────────────────────────────────────
   const DEPTH = 28;
-  box(0.2, CEIL, DEPTH, -7, CEIL / 2, 0, M.wall);
-  box(0.2, CEIL, DEPTH,  7, CEIL / 2, 0, M.wall);
+  // Left wall split to create a door opening
+  const leftWallFrontDepth = DOOR_OPENING_MIN_Z - BACK_Z;
+  const leftWallBackDepth = FRONT_Z - DOOR_OPENING_MAX_Z;
+  if (leftWallFrontDepth > 0) {
+    const centerZ = (BACK_Z + DOOR_OPENING_MIN_Z) / 2;
+    box(WALL_THICK, CEIL, leftWallFrontDepth, LEFT_WALL_X, CEIL / 2, centerZ, M.wall);
+  }
+  if (leftWallBackDepth > 0) {
+    const centerZ = (DOOR_OPENING_MAX_Z + FRONT_Z) / 2;
+    box(WALL_THICK, CEIL, leftWallBackDepth, LEFT_WALL_X, CEIL / 2, centerZ, M.wall);
+  }
+  box(WALL_THICK, CEIL, DEPTH,  RIGHT_WALL_X, CEIL / 2, 0, M.wall);
   box(W,   CEIL, 0.2,   0, CEIL / 2, BACK_Z,  M.wall);
   box(W,   CEIL, 0.2,   0, CEIL / 2, FRONT_Z, M.wall);
   box(W,   0.2,  DEPTH, 0, CEIL + 0.1, 0,     M.ceiling);
 
   // ─── Wainscoting (lower wall panels) ─────────────────────────────────────
   // Slightly proud of walls to cast shadow lines, makes room feel tighter
-  decor(0.12, 1.5, 26,   -6.94, 0.75, 0,      M.wainscot); // left
+  // Left wainscot split to leave door opening
+  const leftWainscotDepthA = DOOR_OPENING_MIN_Z - BACK_Z - 0.2;
+  const leftWainscotDepthB = FRONT_Z - DOOR_OPENING_MAX_Z - 0.2;
+  if (leftWainscotDepthA > 0) {
+    decor(0.12, 1.5, leftWainscotDepthA, -6.94, 0.75, (BACK_Z + DOOR_OPENING_MIN_Z) / 2, M.wainscot);
+  }
+  if (leftWainscotDepthB > 0) {
+    decor(0.12, 1.5, leftWainscotDepthB, -6.94, 0.75, (DOOR_OPENING_MAX_Z + FRONT_Z) / 2, M.wainscot);
+  }
   decor(0.12, 1.5, 26,    6.94, 0.75, 0,      M.wainscot); // right
   decor(14,   1.5, 0.12,  0, 0.75, BACK_Z  + 0.06, M.wainscot); // back
   decor(14,   1.5, 0.12,  0, 0.75, FRONT_Z - 0.06, M.wainscot); // front
 
   // ─── Crown Molding ───────────────────────────────────────────────────────
-  decor(0.18, 0.20, 28,   -6.91, CEIL - 0.10, 0,          M.wainscot); // left
+  // Left crown molding split to leave door opening
+  if (leftWallFrontDepth > 0) {
+    decor(0.18, 0.20, leftWallFrontDepth, -6.91, CEIL - 0.10, (BACK_Z + DOOR_OPENING_MIN_Z) / 2, M.wainscot);
+  }
+  if (leftWallBackDepth > 0) {
+    decor(0.18, 0.20, leftWallBackDepth, -6.91, CEIL - 0.10, (DOOR_OPENING_MAX_Z + FRONT_Z) / 2, M.wainscot);
+  }
   decor(0.18, 0.20, 28,    6.91, CEIL - 0.10, 0,          M.wainscot); // right
   decor(14,   0.20, 0.18,  0, CEIL - 0.10, BACK_Z  + 0.09, M.wainscot); // back
   decor(14,   0.20, 0.18,  0, CEIL - 0.10, FRONT_Z - 0.09, M.wainscot); // front
@@ -295,19 +333,19 @@ export function createWorld(scene, physicsWorld) {
 
   // ─── Benches (front hall, between columns and walls) ─────────────────────
   // Left bench
-  box(2.0, 0.10, 0.70, -4.5, 0.52, 3.0, M.bench);           // seat
-  box(0.10, 0.50, 0.70, -5.5, 0.25, 3.0, M.bench);          // left leg
-  box(0.10, 0.50, 0.70, -3.5, 0.25, 3.0, M.bench);          // right leg
-  box(0.10, 0.50, 0.70, -4.5, 0.75, 2.62, M.bench);         // back
-  decor(0.10, 0.26, 0.70, -5.5, 0.64, 3.0, M.bench);        // left armrest
-  decor(0.10, 0.26, 0.70, -3.5, 0.64, 3.0, M.bench);        // right armrest
-  decor(0.20, 0.03, 0.56, -4.7, 0.54, 3.15, M.magazine);    // magazine 1
-  decor(0.20, 0.03, 0.56, -4.2, 0.54, 3.15, M.paper);       // magazine 2
+  box(2.0, 0.10, 0.70, -4.5, 0.52, 4.5, M.bench);           // seat
+  box(0.10, 0.50, 0.70, -5.5, 0.25, 4.5, M.bench);          // left leg
+  box(0.10, 0.50, 0.70, -3.5, 0.25, 4.5, M.bench);          // right leg
+  box(0.10, 0.50, 0.70, -4.5, 0.75, 4.12, M.bench);         // back
+  decor(0.10, 0.26, 0.70, -5.5, 0.64, 4.5, M.bench);        // left armrest
+  decor(0.10, 0.26, 0.70, -3.5, 0.64, 4.5, M.bench);        // right armrest
+  decor(0.20, 0.03, 0.56, -4.7, 0.54, 4.65, M.magazine);    // magazine 1
+  decor(0.20, 0.03, 0.56, -4.2, 0.54, 4.65, M.paper);       // magazine 2
 
   // Left side table
-  box(0.50, 0.45, 0.48, -5.9, 0.22, 3.0, M.bench);
-  box(0.56, 0.05, 0.54, -5.9, 0.47, 3.0, M.bench);
-  decor(0.20, 0.03, 0.56, -5.9, 0.51, 3.0, M.magazine);
+  box(0.50, 0.45, 0.48, -5.9, 0.22, 4.5, M.bench);
+  box(0.56, 0.05, 0.54, -5.9, 0.47, 4.5, M.bench);
+  decor(0.20, 0.03, 0.56, -5.9, 0.51, 4.5, M.magazine);
 
   // Right bench
   box(2.0, 0.10, 0.70, 4.5, 0.52, 3.0, M.bench);
@@ -408,5 +446,47 @@ export function createWorld(scene, physicsWorld) {
     },
   ];
 
-  return { colliders, hazards, update: () => {} };
+  // --- Door (left wall, swings both ways) ---
+  const door = createDoor({
+    width: DOOR_WIDTH,
+    height: DOOR_HEIGHT,
+    thickness: DOOR_THICK,
+    color: 0x6F4A2A,
+  });
+  door.pivot.position.set(DOOR_INNER_X, 0, DOOR_HINGE_Z);
+  scene.add(door.pivot);
+
+  // Door frame (decorative)
+  decor(0.06, DOOR_HEIGHT + 0.1, 0.08, LEFT_WALL_X + 0.04, DOOR_HEIGHT / 2, DOOR_OPENING_MIN_Z - 0.02, M.wainscot);
+  decor(0.06, DOOR_HEIGHT + 0.1, 0.08, LEFT_WALL_X + 0.04, DOOR_HEIGHT / 2, DOOR_OPENING_MAX_Z + 0.02, M.wainscot);
+  decor(0.06, 0.08, DOOR_WIDTH + 0.2, LEFT_WALL_X + 0.04, DOOR_HEIGHT + 0.04, DOOR_OPENING_CENTER_Z, M.wainscot);
+
+  // Door collision is handled dynamically by the door system (not a static collider)
+
+  // --- Small room beyond the door (simple square) ---
+  const ROOM_W = 4.0;
+  const ROOM_D = 4.0;
+  const ROOM_CENTER_X = LEFT_WALL_X - ROOM_W / 2 - 0.2;
+  const ROOM_CENTER_Z = DOOR_OPENING_CENTER_Z;
+  const ROOM_MIN_Z = ROOM_CENTER_Z - ROOM_D / 2;
+  const ROOM_MAX_Z = ROOM_CENTER_Z + ROOM_D / 2;
+  const ROOM_FAR_X = ROOM_CENTER_X - ROOM_W / 2;
+
+  // Floor & ceiling
+  box(ROOM_W, 0.2, ROOM_D, ROOM_CENTER_X, -0.1, ROOM_CENTER_Z, M.floor);
+  box(ROOM_W, 0.2, ROOM_D, ROOM_CENTER_X, CEIL + 0.1, ROOM_CENTER_Z, M.ceiling);
+
+  // Side walls (front/back)
+  box(ROOM_W, CEIL, WALL_THICK, ROOM_CENTER_X, CEIL / 2, ROOM_MIN_Z, M.wall);
+  box(ROOM_W, CEIL, WALL_THICK, ROOM_CENTER_X, CEIL / 2, ROOM_MAX_Z, M.wall);
+
+  // Back wall (far side)
+  box(WALL_THICK, CEIL, ROOM_D, ROOM_FAR_X, CEIL / 2, ROOM_CENTER_Z, M.wall);
+
+  // Small point light inside room
+  const roomLight = new THREE.PointLight(0xFFEAC8, 1.4, 6);
+  roomLight.position.set(ROOM_CENTER_X, CEIL - 0.6, ROOM_CENTER_Z);
+  scene.add(roomLight);
+
+  return { colliders, hazards, door, update: () => {} };
 }

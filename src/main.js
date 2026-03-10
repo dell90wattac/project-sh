@@ -10,6 +10,7 @@ import { createHealth } from './systems/health.js';
 import { createDamageEffects } from './ui/damageEffects.js';
 import { createWorldItems } from './systems/worldItems.js';
 import { createFog } from './systems/fog.js';
+import { createDoorSystem } from './systems/door.js';
 
 // ─── Renderer ──────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -83,6 +84,7 @@ const inventoryUI = createInventoryUI(inventory, playerHealth, {
 
 // ─── Player ────────────────────────────────────────────────────────────────
 const player = createPlayer(camera, scene, world, physicsWorld, inventoryUI, playerHealth);
+const doorSystem = world.door ? createDoorSystem(world.door, player, camera) : null;
 
 // ─── HUD ───────────────────────────────────────────────────────────────────
 const hud = createHUD(gun, playerHealth);
@@ -226,7 +228,10 @@ function loop() {
   stepPhysics(physicsWorld, dt);
 
   if (!dead) {
-    player.update(dt, gunState);
+    if (doorSystem) doorSystem.update(dt);
+    const doorInteraction = doorSystem ? doorSystem.getInteraction() : null;
+    player.update(dt, gunState, doorInteraction);
+    if (doorSystem) doorSystem.applyPlayerPushback(player);
     worldItems.update(dt);
   }
 
