@@ -1,24 +1,24 @@
-# PROJECT SH — Design Bible
-*High-level reference for AI agents. Keep entries brief and structural. Session details go in CHANGELOG.md.*
+# PROJECT SH - Design Bible
+High-level reference for AI agents. Keep entries structural and durable. Session-by-session detail belongs in CHANGELOG.md.
 
 ---
 
 ## Concept
-First-person survival horror in the browser. No game engine — pure Three.js + vanilla JS.
-Built collaboratively: AI agents write all code, the user provides design direction.
+First-person survival horror in the browser. No game engine, pure Three.js + vanilla JS.
+Built collaboratively: AI agents implement code while the user drives design direction.
 
 ---
 
 ## Git / Source Control
-**Repository:** https://github.com/dell90wattac/project-sh
+Repository: https://github.com/dell90wattac/project-sh
 
-> **START OF SESSION RULE:** Always `git pull origin main` before making any changes. This applies on any machine, including Claude Code on the web.
+Start-of-session rule: always pull latest main before editing.
 
 | Action | Command |
 |--------|---------|
 | Pull latest | `git pull origin main` |
 | Push changes | `git add . && git commit -m "message" && git push origin main` |
-| First-time setup on new machine | `git clone https://github.com/dell90wattac/project-sh.git` then `npm install` |
+| First-time setup | `git clone https://github.com/dell90wattac/project-sh.git` then `npm install` |
 
 ---
 
@@ -26,206 +26,173 @@ Built collaboratively: AI agents write all code, the user provides design direct
 | Layer | Tech |
 |-------|------|
 | Renderer | Three.js 0.169.0 (CDN importmap) |
-| Physics | Cannon-es 0.20.0 (CDN) |
+| Physics | cannon-es 0.20.0 (CDN) |
 | Audio | Web Audio API (not yet implemented) |
-| Language | Vanilla JS, ES Modules, no bundler |
-| Entry | `index.html` → `src/main.js` |
-| Dev server | `node server.js` — serves with `no-cache` headers to prevent stale JS |
+| Language | Vanilla JS (ES modules), no bundler |
+| Entry | index.html -> src/main.js |
+| Dev server | node server.js (no-cache headers) |
 
 ---
 
 ## Project Structure
 ```
 Project SH/
-├── index.html                   ← Entry point, importmap, overlay UI
-├── src/
-│   ├── main.js                  ← Game loop, scene setup, hazard/death logic
-│   ├── world/
-│   │   └── world.js             ← Environment geometry, colliders[], hazards[], door
-│   ├── entities/
-│   │   ├── door.js              ← Door mesh entity (pivot, panel, handle)
-│   │   └── zombies.js           ← (placeholder)
-│   ├── player/
-│   │   ├── player.js            ← Movement, collision, gravity, low-HP sway
-│   │   └── viewmodel.js         ← First-person hands, flashlight, gun + door animations
-│   ├── systems/
-│   │   ├── door.js              ← Door physics: torque model, auto-close, air cushion, pushback
-│   │   ├── health.js            ← Universal health factory (player + enemies)
-│   │   ├── inventory.js         ← 9-slot grid + equipped slot logic
-│   │   ├── weapons.js           ← Gun: fire, reload, ammo economy
-│   │   ├── itemRegistry.js      ← All item definitions + combination recipes
-│   │   ├── worldItems.js        ← 3D pickups, raycaster hover, pickup/drop
-│   │   ├── fog.js               ← Fog system
-│   │   └── physics.js           ← Cannon-es world wrapper
-│   └── ui/
-│       ├── hud.js               ← Health pips + ammo counter (bottom-right)
-│       ├── inventory.js         ← Inventory UI, context menu, combine mode
-│       └── damageEffects.js     ← Vignette, heartbeat pulse, death screen
-├── assets/
-│   ├── textures/
-│   ├── models/
-│   ├── audio/
-│   └── data/                    ← JSON configs (future)
-├── CHANGELOG.md                 ← Full session history and implementation notes
-└── PROJECT_BIBLE.md             ← This file
+|- index.html
+|- server.js
+|- src/
+|  |- main.js
+|  |- world/
+|  |  |- world.js
+|  |- entities/
+|  |  |- door.js
+|  |  |- zombies.js
+|  |- player/
+|  |  |- player.js
+|  |  |- viewmodel.js
+|  |- systems/
+|  |  |- door.js
+|  |  |- fog.js
+|  |  |- health.js
+|  |  |- inventory.js
+|  |  |- itemRegistry.js
+|  |  |- physics.js
+|  |  |- roomCulling.js
+|  |  |- weapons.js
+|  |  |- worldItems.js
+|  |- ui/
+|  |  |- damageEffects.js
+|  |  |- hud.js
+|  |  |- inventory.js
+|  |  |- perfOverlay.js
+|- CHANGELOG.md
+|- PROJECT_BIBLE.md
 ```
 
 ---
 
 ## Gameplay Pillars
-1. **Tension over action** — scarcity, darkness, and sound drive fear
-2. **Exploration** — environments reward careful movement
-3. **Survival** — health, ammo, and items are scarce resources to manage
+1. Tension over action: scarcity, darkness, and atmosphere drive fear.
+2. Exploration: spaces reward deliberate movement and observation.
+3. Survival: health, ammo, and item decisions matter.
 
 ---
 
 ## Systems Overview
 
-### Player (`src/player/player.js`)
-- WASD + Shift sprint, spacebar jump, pointer lock mouse-look
-- AABB collision with step-climbing; custom gravity (no physics engine for player)
-- Camera sway at low HP — tunable in `player.js`
+### Player (src/player/player.js)
+- WASD movement, sprint, jump, and mouse-look.
+- Player collision stays fast AABB-based against world colliders.
+- Pointer-lock lifecycle is managed with a fallback mode for environments where lock cannot engage.
+- Cursor state is synchronized with gameplay/inventory state.
 
-### Viewmodel (`src/player/viewmodel.js`)
-- Dual first-person hands: left (flashlight), right (gun)
-- Independent bob/sway per hand; recoil and reload animations
-- Flashlight is a SpotLight parented to left hand — toggle with **F**
-- **Door push pose:** hands rise, spread, and rotate palms-out toward door surface; sway/bob/recoil suppressed proportionally; dynamic forward press when door is moving; subtle micro-motion while holding
+### Viewmodel (src/player/viewmodel.js)
+- Dual-hand first-person rig: flashlight hand + weapon hand.
+- Bob, sway, recoil, and reload blend by state.
+- Door interaction blend drives the push pose.
+- Flashlight uses dual-cone lighting (main beam + short-range spill) to keep close-surface illumination natural.
 
-### Health (`src/systems/health.js`)
-- Factory: `createHealth(maxHP)` — shared by player and enemies
-- Scale 1–10. Supports damage types and flat resistances
-- Callbacks: `onDamage`, `onDeath`, `onHeal`; `reset()` for respawn
+### Health (src/systems/health.js)
+- Shared health factory for player and future enemies.
+- Damage, heal, death callbacks; reset flow for respawn.
 
-### Gun (`src/systems/weapons.js`)
-- Semi-auto hitscan raycast. Magazine + reserve ammo tracked separately
-- **Real bullet economy:** unspent rounds lost on reload (see file for tunable constants)
-- Fire: **left-click** | Reload: **R**
+### Weapons (src/systems/weapons.js)
+- Semi-auto hitscan, magazine and reserve tracking.
+- Reload uses real bullet-economy behavior.
 
-### Inventory (`src/systems/inventory.js` + `src/systems/itemRegistry.js`)
-- 9-slot grid (3×3) + separate equipped weapon slot
-- Items defined in `itemRegistry.js`: stackable, usable, equippable, combinable flags; stack limits and heal amounts live there, not here
-- Combination recipes in `itemRegistry.js` (e.g. Healing Item 1 + Healing Item 2 → Healing Item 3)
-- Toggle: **Q** (also picks up world items when looking at one via **E**)
-- **Left-click drag** to move items between slots; drop targets highlight green (valid) or red (invalid)
-  - Drag to empty slot: moves; same type with room: partial-fills stack, leaves remainder; same type full: STACK FULL; recipe match: combines; no recipe: CANNOT COMBINE; outside panel: drops on ground
-- **Right-click** on a slot opens virtual-cursor context menu: Use / Equip / Drop
-  - Menu interaction is pointer-lock safe — driven by virtual cursor, not native mouse events
-- Healing items heal the player when used; `usable: false` items (ammo, handgun) never show Use
-- Stack count shown in green when a slot is at max capacity
-- "INVENTORY FULL" notification when all 9 slots are occupied and pickup is attempted
+### Inventory + Registry (src/systems/inventory.js, src/systems/itemRegistry.js, src/ui/inventory.js)
+- 3x3 grid plus separate equipped slot.
+- Drag/drop movement, stacking, recipe-based combining, and context-menu actions.
+- Virtual cursor interaction remains pointer-lock-safe.
 
-### World Items (`src/systems/worldItems.js`)
-- 3D rotating pickups in scene; raycaster detects hover from screen center
-- Pickup range and hover label configurable in file
-- Dropped items auto-spread: `findClearDropPosition` tests up to 13 candidate positions so no two pickups ever overlap on the ground
+### World Items (src/systems/worldItems.js)
+- World pickups are room-owned and visibility-aware.
+- Hover raycast excludes hidden-room pickups.
+- Dropped pickups auto-spread to avoid overlap.
 
-### Door (`src/entities/door.js` + `src/systems/door.js`)
-- Entity: pivot-hinged panel with handle; configurable dimensions in entity file
-- Physics: torque-based model using moment of inertia ($I = \frac{1}{3} m L^2$); lever arm matters (push near hinge = weak, push far edge = strong)
-- Bidirectional swing; auto-close spring with heavy damping; air cushion near frame for gentle settle with slight overshoot
-- Pushback system prevents player from walking through; called after `player.update()` each frame
-- Viewmodel interaction blend drives hand pose transition (see Viewmodel section)
-- Tunable constants (mass, spring, damping, cushion) in `src/systems/door.js`
+### Room Culling (src/systems/roomCulling.js, src/world/world.js)
+- Room graph visibility culling uses BFS from current room.
+- Current-room resolution is overlap-aware and can prefer prior room at boundaries.
+- Visibility depth is runtime-adjustable.
+- Visibility updates are frame-budgeted (room-ops per frame) to avoid transition spikes.
+- Culling syncs room topology from world room IDs at runtime, so added/removed rooms are handled without per-room culling code edits.
+- Startup loading/warmup is room-count agnostic and normalizes to gameplay depth before click-to-begin.
+- Culling throughput is adaptively tuned by frame time and queue pressure, then clamped by room-count-scaled caps.
+- Player current-room visibility is prioritized to prevent entered-room hidden-state starvation.
+- Desired visibility targets are refreshed each update so stale culling state self-corrects after topology or transition changes.
 
-### Hazards (`src/world/world.js` + `src/main.js`)
-- World exports `hazards[]` alongside `colliders[]`
-- Each hazard: `{ position, radius, damagePerSecond, damageType }`
-- Tick damage handled in main loop — timer logic in `main.js`
+### Doors (src/entities/door.js, src/systems/door.js, src/main.js)
+- Multi-door runtime: one door system per world door reference.
+- Door physics uses torque + lever arm with tuned close behavior (spring/damping/cushion/friction).
+- Player pushback resolves door overlap after movement.
+- Doors connected to hidden rooms reset to closed.
 
-### HUD (`src/ui/hud.js`)
-- 10 health pips (color shifts green → orange → red) + ammo counter
-- All thresholds and colors tunable in `hud.js`
+### Hazards (src/world/world.js, src/main.js)
+- World exports hazard descriptors.
+- Main loop applies tick damage while in hazard range.
 
-### Damage Effects (`src/ui/damageEffects.js`)
-- CSS vignette with heartbeat pulse at low HP
-- Damage flash on any hit; death screen on HP = 0 with auto-reset
-- Timings and intensities tunable in file
+### HUD + Perf Overlay (src/ui/hud.js, src/ui/perfOverlay.js)
+- HUD shows health and ammo.
+- Perf overlay (F3) shows fps/ms, room/zone, room counts, culling queue/budget (`vis queue`, `vis ops`), draw calls, and triangles.
+
+### Damage Effects (src/ui/damageEffects.js)
+- Damage flash, low-health pulse, and death/reset presentation.
 
 ---
 
 ## Architecture Patterns
-- **Factory functions** everywhere: `createX(scene, ...)` returns `{ update(dt) }`
-- **`main.js` orchestrates** — imports all systems, calls `.update(dt)` each frame
-- **Pointer lock always active** — camera rotation frozen (not released) while inventory is open
-- **Collision:** `colliders[]` = `THREE.Box3` array from world; player resolves via smallest-axis overlap push
-- **Physics hybrid:** Player uses fast AABB; Cannon-es world ready for enemy rigidbodies
+- createX factory modules with explicit update loops.
+- src/main.js is the runtime orchestrator.
+- Room-first ownership model: world objects can belong to one or multiple rooms.
+- Visibility culling drives dependent systems (doors, world items, overlay telemetry).
+- Room graph integrations should remain room-ID agnostic (no hardcoded room lists in systems); rely on world room APIs.
+- Player remains AABB-based; cannon-es is available for dynamic entities.
 
 ---
 
 ## Current Environment
-- Compressed lobby — **14 m wide × 28 m deep × 5.5 m ceiling** (≈50×100 player-block units); dimensions in `src/world/world.js`
-- **Entry zone** (Z +9..+14): Elevated platform with 3-step descent to main floor
-- **Front hall** (Z +2..+7): Open reception area; 2 benches with side tables flanking the walkway (left bench at Z=4.5); standing lamps illuminate seating
-- **Central zone** (Z -2..+2): Front desk (4.5 m wide) positioned at Z=0, centered in room. Mid-level column pair (X=±3, Z=+1)
-- **Door** (left wall, Z=2.0–3.0): 1.0 m wide hinged door in left wall opening; physics-driven bidirectional swing; connects to small side room
-- **Side room** (X≈-9.3, Z=2.5): 4×4 m square room beyond the door; floor, ceiling, 3 walls, interior light
-- **Transition zone** (Z -3..-5): Back column pair (X=±3, Z=-3); one damage pillar hazard at center; wall sconces light the approach to stairs
-- **Staircase zone** (Z -5..-11.4): Dual side staircases flush against walls (left X=-7 to -4.8, right X=+4.8 to +7), ascending 8 steps with inner railings
-- **Balcony** (Z -11.4..-13.8, Y=2.4): Upper gallery overlooking main floor; front railing spans center only (X=-4.8 to +4.8) with gaps where stairs connect
-- **Lighting**: 3 chandeliers along center axis (Z=[0, 6, -4]); 3 ceiling point lights above entry, seating, and desk; 4 sconce pairs on side walls (Z=[8, 3, -2, -5])
-- **Pickups**: Ammo (3 stacks, 27 rounds each) in front of desk (Z=+1.5); healing items behind desk (Z=-1.0)
-- **Starting loadout**: Handgun equipped with no ammo; items available for pickup on floor
-
-```
-Overhead View (North = -Z, facing front wall)
-
-         X = -7              X = 0              X = +7
-          │                   │                   │
-  Z=-14 ──┼───────────────────┼───────────────────┤  ← Back wall
-          │      BALCONY (Y=2.4)                  │
-  Z=-11.4 │ ┌─stairs─┐ [railing] ┌─stairs─┐      │
-          │ │  LEFT   │           │ RIGHT  │      │
-  Z=-5  ──│ └─────────┘           └────────┘──────│  ← Stair start
-          │       [col]    ◉hazard   [col]        │
-  Z=-3    │                                       │
-          │              ┌──desk──┐               │
-  Z=0   ──│       [col]  │ FRONT  │  [col]  ──────│
-          │              └────────┘               │
-          │                                       │
-  Z=2.0 ──┤ ╔═DOOR═╗                              │
-    ┌─────┤ ║      ║                              │
-    │SIDE │ ║ hinge║                              │
-    │ROOM │ ╚══════╝                              │
-    └─────┤                                       │
-  Z=3.0   │                                       │
-          │  [bench]              [bench]          │
-  Z=4.5   │  [lamp]               [lamp]          │
-          │       [col]           [col]            │
-  Z=+5    │                                       │
-          │         ┌──────────────┐               │
-  Z=+7  ──│─────────┤  DOWN STEPS  ├──────────────│
-          │         └──────────────┘               │
-          │            ENTRY PLATFORM              │
-  Z=+14 ──┼───────────────────┼───────────────────┤  ← Front wall
-```
+- Core lobby remains the primary play space with connected offshoot chain rooms.
+- Active room IDs:
+  - lobby (label: Main Lobby, zone: lobby)
+  - sideRoomEast (label: Offshoot East, zone: offshootA)
+  - sideRoomMid (label: Offshoot Mid, zone: offshootB)
+  - sideRoomWest (label: Offshoot West, zone: offshootC)
+- Active room graph:
+  - lobby <-> sideRoomEast <-> sideRoomMid <-> sideRoomWest
+- Active doors:
+  - doorLobbyEast (lobby <-> sideRoomEast)
+  - doorEastMid (sideRoomEast <-> sideRoomMid)
+  - doorMidWest (sideRoomMid <-> sideRoomWest)
+- Runtime culling defaults:
+  - visibility-based culling (no stream unload)
+  - normal gameplay depth: 2
+  - startup warmup raises depth briefly, then restores normal depth
 
 ---
 
-## Roadmap (Next Up)
-- Enemy AI with Cannon-es rigidbodies and damage type resistances
-- Expanded maze environment with frustum culling (no loading screens)
-- Creaky door interactions between zones
-- Sound design: ambient, footsteps, gunfire, door creaks
-- Baked lightmaps for static environment; realtime only for flashlight + moving lights
+## Roadmap
+- Expand room graph from current chain toward 10-20 rooms.
+- Implement hybrid offscreen enemy behavior for non-visible rooms.
+- Add traversal polish like room-hide hysteresis if needed.
+- Add sound design (ambient, footsteps, gunfire, door creaks).
+- Move toward baked/static lighting where possible for scale.
 
 ---
 
 ## Architectural Decisions
 | Decision | Rationale |
 |----------|-----------|
-| No game engine — Three.js only | Full control, no abstraction overhead, browser-native |
-| Player uses AABB, not Cannon-es | Speed and reliability; Cannon reserved for enemies/dynamics |
-| Pointer lock never released | Avoids browser ESC prompt; quaternion freeze handles inventory |
-| Real bullet economy on reload | Creates tension and resource decision-making |
-| Universal health factory | Same system for player and all future enemies |
-| Item behavior in registry, not inventory | Keeps inventory logic generic; easy to add new items |
-| Frustum culling for maze (planned) | Performance headroom for sprawling open environment |
-| Baked lighting for environment (planned) | Keeps realtime light count low for large maze |
+| Three.js without full engine | Maximum control and low abstraction overhead |
+| Player uses AABB collisions | Stable and fast first-person movement |
+| Pointer lock preferred, fallback supported | Reliable input across browser/runtime contexts |
+| Room-graph visibility culling | Performance headroom with seamless traversal |
+| Shared-object room membership | Prevents pop-in on boundaries and shared partitions |
+| Door reset on room hide | Simpler state policy under culling |
+| Item behavior in registry | Keeps inventory logic generic and extensible |
+| Health factory reuse | Same architecture for player and enemies |
 
 ---
 
 ## Agent Maintenance Rules
-- **CHANGELOG.md** — update after every session with what changed and why
-- **PROJECT_BIBLE.md** — update only for new systems, major feature additions, or architectural shifts. No implementation detail, no numbers — use file pointers instead
-- **Tunable values** (speeds, timings, damage numbers) live in their respective source files as named constants — read the file, don't hardcode assumptions here
+- Update CHANGELOG.md after every session.
+- Update PROJECT_BIBLE.md only for architectural/system shifts.
+- Keep tunable numeric balance values in code constants, not this bible.

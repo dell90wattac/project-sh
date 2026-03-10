@@ -68,19 +68,59 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
 
   let cursorX = window.innerWidth / 2;
   let cursorY = window.innerHeight / 2;
+  let cursorNeedsAbsoluteSync = false;
+
+  function applyCursorPosition() {
+    cursorX = Math.max(0, Math.min(window.innerWidth, cursorX));
+    cursorY = Math.max(0, Math.min(window.innerHeight, cursorY));
+    cursor.style.left = (cursorX - 10) + 'px';
+    cursor.style.top = (cursorY - 10) + 'px';
+    if (isDragging && dragGhost) {
+      dragGhost.style.left = cursorX + 'px';
+      dragGhost.style.top = cursorY + 'px';
+    }
+  }
+
+  function setCursorAbsolute(clientX, clientY) {
+    cursorX = clientX;
+    cursorY = clientY;
+    applyCursorPosition();
+  }
+
+  function moveCursorByDelta(dx, dy) {
+    cursorX += dx;
+    cursorY += dy;
+    applyCursorPosition();
+  }
+
+  function syncCursorFromMouseEvent(e) {
+    if (!isOpen) return;
+
+    const pointerLocked = !!document.pointerLockElement;
+    if (cursorNeedsAbsoluteSync || !pointerLocked) {
+      setCursorAbsolute(e.clientX, e.clientY);
+      cursorNeedsAbsoluteSync = false;
+      return;
+    }
+
+    moveCursorByDelta(e.movementX || 0, e.movementY || 0);
+  }
 
   document.addEventListener('mousemove', e => {
-    if (isOpen) {
-      cursorX += e.movementX || 0;
-      cursorY += e.movementY || 0;
-      cursorX = Math.max(0, Math.min(window.innerWidth, cursorX));
-      cursorY = Math.max(0, Math.min(window.innerHeight, cursorY));
-      cursor.style.left = (cursorX - 10) + 'px';
-      cursor.style.top = (cursorY - 10) + 'px';
-      if (isDragging && dragGhost) {
-        dragGhost.style.left = cursorX + 'px';
-        dragGhost.style.top = cursorY + 'px';
-      }
+    syncCursorFromMouseEvent(e);
+  });
+
+  window.addEventListener('blur', () => {
+    cursorNeedsAbsoluteSync = true;
+  });
+
+  window.addEventListener('focus', () => {
+    cursorNeedsAbsoluteSync = true;
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'hidden') {
+      cursorNeedsAbsoluteSync = true;
     }
   });
 
@@ -98,6 +138,8 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
     padding: 20px;
     z-index: 1000;
     pointer-events: auto;
+    user-select: none;
+    -webkit-user-select: none;
   `;
 
   // ── Title ─────────────────────────────────────────────────────────────
@@ -295,8 +337,20 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
     font-family: monospace;
     font-size: 13px;
     pointer-events: none;
+    user-select: none;
+    -webkit-user-select: none;
   `;
   document.body.appendChild(contextMenu);
+
+  document.addEventListener('selectstart', e => {
+    if (!isOpen) return;
+    e.preventDefault();
+  });
+
+  document.addEventListener('dragstart', e => {
+    if (!isOpen) return;
+    e.preventDefault();
+  });
 
   function addMenuOption(label, action) {
     const opt = document.createElement('div');
@@ -578,6 +632,16 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
   document.addEventListener('mousedown', e => {
     if (!isOpen) return;
 
+    if (e.button === 0 || e.button === 2) {
+      e.preventDefault();
+    }
+
+    const pointerLocked = !!document.pointerLockElement;
+    if (cursorNeedsAbsoluteSync || !pointerLocked) {
+      setCursorAbsolute(e.clientX, e.clientY);
+      cursorNeedsAbsoluteSync = false;
+    }
+
     if (e.button === 2) {
       // Right-click: open context menu (not while dragging)
       if (isDragging) return;
@@ -654,8 +718,8 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
       if (isOpen) {
         cursorX = window.innerWidth / 2;
         cursorY = window.innerHeight / 2;
-        cursor.style.left = (cursorX - 10) + 'px';
-        cursor.style.top = (cursorY - 10) + 'px';
+        cursorNeedsAbsoluteSync = !document.pointerLockElement;
+        applyCursorPosition();
         this.update(0);
       } else {
         hideContextMenu();

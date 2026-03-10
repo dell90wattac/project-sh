@@ -5,8 +5,12 @@
 import * as THREE from 'three';
 import { getItemDef } from './itemRegistry.js';
 
-export function createWorldItems(scene, camera, inventory) {
-  const pickups = []; // Array of { mesh, itemType, quantity }
+export function createWorldItems(scene, camera, inventory, options = {}) {
+  const resolveRoomId = typeof options.resolveRoomId === 'function'
+    ? options.resolveRoomId
+    : () => 'lobby';
+
+  const pickups = []; // Array of { mesh, itemType, quantity, roomId }
   const raycaster = new THREE.Raycaster();
   raycaster.far = 3; // 3 unit pickup range
   const screenCenter = new THREE.Vector2(0, 0);
@@ -94,7 +98,7 @@ export function createWorldItems(scene, camera, inventory) {
   function updateRaycast() {
     raycaster.setFromCamera(screenCenter, camera);
 
-    const pickupMeshes = pickups.map(p => p.mesh);
+    const pickupMeshes = pickups.filter(p => p.mesh.visible).map(p => p.mesh);
     if (pickupMeshes.length === 0) {
       hoveredPickup = null;
       hoverLabel.style.display = 'none';
@@ -158,10 +162,11 @@ export function createWorldItems(scene, camera, inventory) {
   }
 
   // ── Spawn a pickup at a world position (level setup) ────────────────────
-  function spawnPickup(itemType, quantity, position) {
+  function spawnPickup(itemType, quantity, position, roomId = null) {
     const mesh = createPickupMesh(itemType, position);
     if (mesh) {
-      pickups.push({ mesh, itemType, quantity });
+      const ownedByRoom = roomId || resolveRoomId(position) || 'lobby';
+      pickups.push({ mesh, itemType, quantity, roomId: ownedByRoom });
     }
   }
 
@@ -195,7 +200,19 @@ export function createWorldItems(scene, camera, inventory) {
     const dropPos = findClearDropPosition(basePos);
     const mesh = createPickupMesh(itemType, dropPos);
     if (mesh) {
-      pickups.push({ mesh, itemType, quantity });
+      const ownedByRoom = resolveRoomId(dropPos) || 'lobby';
+      pickups.push({ mesh, itemType, quantity, roomId: ownedByRoom });
+    }
+  }
+
+  function setRoomVisibility(roomId, visible) {
+    for (const pickup of pickups) {
+      if (pickup.roomId !== roomId) continue;
+      pickup.mesh.visible = visible;
+      if (!visible && hoveredPickup === pickup) {
+        hoveredPickup = null;
+        hoverLabel.style.display = 'none';
+      }
     }
   }
 
@@ -234,6 +251,7 @@ export function createWorldItems(scene, camera, inventory) {
     tryPickup,
     spawnPickup,
     spawnDrop,
+    setRoomVisibility,
     getHovered,
     destroy,
   };

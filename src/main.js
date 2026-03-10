@@ -11,6 +11,8 @@ import { createDamageEffects } from './ui/damageEffects.js';
 import { createWorldItems } from './systems/worldItems.js';
 import { createFog } from './systems/fog.js';
 import { createDoorSystem } from './systems/door.js';
+import { createRoomCulling } from './systems/roomCulling.js';
+import { createPerfOverlay } from './ui/perfOverlay.js';
 
 // ─── Renderer ──────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -61,7 +63,11 @@ damageEffects.onReset(() => {
 });
 
 // ─── World Items / Pickups ─────────────────────────────────────────────────
-const worldItems = createWorldItems(scene, camera, inventory);
+const worldItems = createWorldItems(scene, camera, inventory, {
+  resolveRoomId(position) {
+    return world.getRoomAtPosition ? world.getRoomAtPosition(position, 0.2) : 'lobby';
+  },
+});
 
 // Three full stacks of handgun ammo (27 each) in front of desk
 worldItems.spawnPickup('ammo', 27, new THREE.Vector3(-1.5, 0.3, 1.5));
@@ -84,10 +90,129 @@ const inventoryUI = createInventoryUI(inventory, playerHealth, {
 
 // ─── Player ────────────────────────────────────────────────────────────────
 const player = createPlayer(camera, scene, world, physicsWorld, inventoryUI, playerHealth);
-const doorSystem = world.door ? createDoorSystem(world.door, player, camera) : null;
+const worldDoors = Array.isArray(world.doors) && world.doors.length > 0
+  ? world.doors
+  : (world.door ? [{ id: 'doorPrimary', roomIds: ['lobby'], door: world.door }] : []);
+
+const doorSystems = worldDoors.map(doorRef => ({
+  ...doorRef,
+  system: createDoorSystem(doorRef.door, player, camera),
+}));
+
+function getBestDoorInteraction() {
+  if (doorSystems.length === 0) return null;
+
+  let best = null;
+  for (const doorEntry of doorSystems) {
+    const interaction = doorEntry.system.getInteraction();
+    if (!best || interaction.doorBlend > best.doorBlend) {
+      best = interaction;
+    }
+  }
+  return best;
+}
+
+const NORMAL_VISIBILITY_DEPTH = 2;
+const NORMAL_ROOM_OPS_PER_FRAME = 2;
+const STARTUP_ROOM_OPS_PER_FRAME = 48;
+const STARTUP_MIN_LOADING_SECONDS = 0.9;
+const GAMEPLAY_MIN_ROOM_OPS_PER_FRAME = NORMAL_ROOM_OPS_PER_FRAME;
+const STARTUP_MIN_ROOM_OPS_PER_FRAME = 8;
+const TARGET_FRAME_MS = 16.7;
+const SLOW_FRAME_MS = 24.0;
+const FAST_FRAME_MS = 14.5;
+
+const roomCulling = createRoomCulling(world, player, worldItems, {
+  visibilityDepth: NORMAL_VISIBILITY_DEPTH,
+  roomOpsPerFrame: STARTUP_ROOM_OPS_PER_FRAME,
+  boundaryPadding: 0.2,
+  onVisibilityChange(roomId, isVisible) {
+    if (isVisible) return;
+    for (const doorEntry of doorSystems) {
+      if (!doorEntry.roomIds || !doorEntry.roomIds.includes(roomId)) continue;
+      if (doorEntry.system && doorEntry.system.resetToClosed) {
+        doorEntry.system.resetToClosed();
+      }
+    }
+  },
+});
+
+function getWorldRoomCount() {
+  if (!world.getRoomIds) return NORMAL_VISIBILITY_DEPTH;
+  const roomIds = world.getRoomIds();
+  return Array.isArray(roomIds) && roomIds.length > 0
+    ? roomIds.length
+    : NORMAL_VISIBILITY_DEPTH;
+}
+
+const startupTargetRoomCount = Math.max(1, getWorldRoomCount());
+const warmupDepth = Math.max(NORMAL_VISIBILITY_DEPTH, Math.max(0, startupTargetRoomCount - 1));
+roomCulling.setVisibilityDepth(warmupDepth);
+
+let adaptiveGameplayRoomOps = NORMAL_ROOM_OPS_PER_FRAME;
+let adaptiveStartupRoomOps = STARTUP_ROOM_OPS_PER_FRAME;
+
+function clampInt(value, min, max) {
+  return Math.max(min, Math.min(max, Math.floor(value)));
+}
+
+function computeRoomOpsCap(totalRooms, isStartup) {
+  const roomScale = Math.max(1, Math.ceil(totalRooms / 4));
+  if (isStartup) {
+    return clampInt(roomScale * 8, STARTUP_MIN_ROOM_OPS_PER_FRAME, STARTUP_ROOM_OPS_PER_FRAME);
+  }
+  return clampInt(roomScale * 3, NORMAL_ROOM_OPS_PER_FRAME, 18);
+}
+
+function updateAdaptiveRoomOps(dt, pendingChanges, totalRooms, isStartup) {
+  const frameMs = dt * 1000;
+  const clampedRooms = Math.max(1, totalRooms);
+  const queuePressure = Math.max(0, Math.min(1, pendingChanges / clampedRooms));
+
+  if (isStartup) {
+    const cap = computeRoomOpsCap(clampedRooms, true);
+    let next = adaptiveStartupRoomOps;
+
+    if (frameMs >= SLOW_FRAME_MS) {
+      next -= queuePressure > 0.6 ? 2 : 1;
+    } else if (pendingChanges > 0) {
+      if (queuePressure > 0.7) next += 2;
+      else if (queuePressure > 0.25) next += 1;
+    } else if (frameMs < TARGET_FRAME_MS) {
+      next -= 1;
+    }
+
+    adaptiveStartupRoomOps = clampInt(next, STARTUP_MIN_ROOM_OPS_PER_FRAME, cap);
+    roomCulling.setRoomOpsPerFrame(adaptiveStartupRoomOps);
+    return adaptiveStartupRoomOps;
+  }
+
+  const cap = computeRoomOpsCap(clampedRooms, false);
+  let next = adaptiveGameplayRoomOps;
+
+  if (frameMs >= SLOW_FRAME_MS) {
+    next -= queuePressure > 0.5 ? 2 : 1;
+  } else if (pendingChanges > 0) {
+    if (frameMs <= TARGET_FRAME_MS) {
+      if (queuePressure > 0.7) next += 2;
+      else if (queuePressure > 0.2) next += 1;
+    }
+  } else {
+    if (frameMs > TARGET_FRAME_MS && next > NORMAL_ROOM_OPS_PER_FRAME) {
+      next -= 1;
+    } else if (frameMs < FAST_FRAME_MS && next < NORMAL_ROOM_OPS_PER_FRAME) {
+      next += 1;
+    }
+  }
+
+  adaptiveGameplayRoomOps = clampInt(next, GAMEPLAY_MIN_ROOM_OPS_PER_FRAME, cap);
+  roomCulling.setRoomOpsPerFrame(adaptiveGameplayRoomOps);
+  return adaptiveGameplayRoomOps;
+}
 
 // ─── HUD ───────────────────────────────────────────────────────────────────
 const hud = createHUD(gun, playerHealth);
+const perfOverlay = createPerfOverlay();
 
 // ─── Camera state for inventory ────────────────────────────────────────────
 let savedCameraQuaternion = null;
@@ -97,6 +222,10 @@ inventoryUI.setToggleCallback((isOpen) => {
     savedCameraQuaternion = camera.quaternion.clone();
   } else {
     savedCameraQuaternion = null;
+  }
+
+  if (player.refreshCursorMode) {
+    player.refreshCursorMode();
   }
 });
 
@@ -151,9 +280,17 @@ function createChandelier(x, y, z) {
 }
 
 // Hang chandeliers along center axis — entry, desk, transition
-scene.add(createChandelier( 0, 5.1,  0));
-scene.add(createChandelier( 0, 5.1,  6));
-scene.add(createChandelier( 0, 5.1, -4));
+function addLobbyChandelier(x, y, z) {
+  const chandelier = createChandelier(x, y, z);
+  scene.add(chandelier);
+  if (world.registerExternalRoomObject) {
+    world.registerExternalRoomObject('lobby', chandelier);
+  }
+}
+
+addLobbyChandelier(0, 5.1, 0);
+addLobbyChandelier(0, 5.1, 6);
+addLobbyChandelier(0, 5.1, -4);
 
 // ─── Hazard Tick Damage ────────────────────────────────────────────────────
 const hazardTimers = {};
@@ -194,30 +331,145 @@ function resetGame() {
 
 // ─── Start overlay ─────────────────────────────────────────────────────────
 const overlay = document.getElementById('overlay');
-overlay.addEventListener('click', () => {
+const overlayTitle = overlay ? overlay.querySelector('h1') : null;
+const overlaySubtitle = overlay ? overlay.querySelector('p') : null;
+
+let isStartupLoading = true;
+let canStartGameplay = false;
+let loadingElapsed = 0;
+let startupPhase = 'prewarm';
+let startupRenderPassesRemaining = Math.max(2, startupTargetRoomCount + 1);
+
+if (overlay) {
+  overlay.style.display = 'flex';
+  overlay.style.opacity = '1';
+  overlay.style.cursor = 'wait';
+  overlay.style.pointerEvents = 'none';
+}
+
+function setOverlayText(title, subtitle) {
+  if (overlayTitle) overlayTitle.textContent = title;
+  if (overlaySubtitle) overlaySubtitle.textContent = subtitle;
+}
+
+function beginGameplay() {
+  if (!canStartGameplay || !overlay) return;
+
+  isStartupLoading = false;
+
   try {
     player.lock();
     setTimeout(() => {
-      if (!document.pointerLockElement) {
+      if (!player.controls.isLocked && !player.hasEverPointerLock()) {
         player.enableFallback();
       }
-    }, 200);
+    }, 700);
   } catch {
     player.enableFallback();
   }
+
   overlay.style.opacity = '0';
-  setTimeout(() => overlay.style.display = 'none', 1000);
-});
+  setTimeout(() => {
+    overlay.style.display = 'none';
+  }, 1000);
+}
+
+if (overlay) {
+  overlay.addEventListener('click', beginGameplay);
+}
+
+setOverlayText('Loading', 'warming rooms...');
+
+function updateStartupLoading(dt) {
+  loadingElapsed += dt;
+
+  if (startupPhase === 'prewarm') {
+    roomCulling.update();
+
+    if (startupRenderPassesRemaining > 0) {
+      startupRenderPassesRemaining -= 1;
+    }
+
+    const warmupDenominator = Math.max(1, startupTargetRoomCount + 1);
+    const passProgress = 1 - (startupRenderPassesRemaining / warmupDenominator);
+    const progressPct = Math.round(Math.min(1, Math.max(0, passProgress)) * 100);
+    setOverlayText('Loading', `warming rooms ${progressPct}%`);
+
+    if (startupRenderPassesRemaining <= 0 && loadingElapsed >= STARTUP_MIN_LOADING_SECONDS) {
+      startupPhase = 'normalize';
+      roomCulling.setVisibilityDepth(NORMAL_VISIBILITY_DEPTH);
+    }
+    return;
+  }
+
+  roomCulling.update();
+  const pending = roomCulling.getPendingVisibilityChanges ? roomCulling.getPendingVisibilityChanges() : 0;
+  const currentTotalRooms = Math.max(1, getWorldRoomCount());
+  updateAdaptiveRoomOps(dt, pending, currentTotalRooms, true);
+  const settleProgress = currentTotalRooms > 0
+    ? 1 - Math.min(1, pending / currentTotalRooms)
+    : 1;
+  const progressPct = Math.round(Math.min(1, Math.max(0, settleProgress)) * 100);
+  setOverlayText('Loading', `optimizing visibility ${progressPct}%`);
+
+  if (pending > 0) return;
+  if (loadingElapsed < STARTUP_MIN_LOADING_SECONDS) return;
+
+  canStartGameplay = true;
+  adaptiveGameplayRoomOps = NORMAL_ROOM_OPS_PER_FRAME;
+  roomCulling.setRoomOpsPerFrame(adaptiveGameplayRoomOps);
+
+  if (overlay) {
+    overlay.style.cursor = 'pointer';
+    overlay.style.pointerEvents = 'all';
+  }
+  setOverlayText('Project SH', 'click to begin');
+}
 
 // ─── Clock & Loop ──────────────────────────────────────────────────────────
 const clock = new THREE.Clock();
 
 let lastEKeyState = false;
-let lastQKeyState = false;
+
+window.addEventListener('keydown', e => {
+  if (e.code !== 'KeyQ' || e.repeat) return;
+  if (isStartupLoading || playerHealth.isDead()) return;
+
+  inventoryUI.toggle();
+
+  // Closing inventory from this keydown is a user gesture, so attempt immediate relock.
+  if (!inventoryUI.isOpen() && !player.controls.isLocked) {
+    try {
+      player.lock();
+    } catch {
+      // Some browsers may still deny; click-to-relock fallback remains active.
+    }
+  }
+});
 
 function loop() {
   requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.05);
+
+  if (isStartupLoading) {
+    updateStartupLoading(dt);
+    fog.update(dt);
+    renderer.render(scene, camera);
+
+    const startupStats = roomCulling.getStats();
+    perfOverlay.update(dt, {
+      currentRoomId: startupStats.currentRoomId,
+      currentRoomLabel: startupStats.currentRoomLabel,
+      currentZone: startupStats.currentZone,
+      visibleRooms: startupStats.visibleRooms,
+      totalRooms: startupStats.totalRooms,
+      pendingVisibilityChanges: startupStats.pendingVisibilityChanges,
+      roomOpsPerFrame: startupStats.roomOpsPerFrame,
+      drawCalls: renderer.info.render.calls,
+      triangles: renderer.info.render.triangles,
+    });
+    return;
+  }
 
   const dead = playerHealth.isDead();
 
@@ -228,12 +480,23 @@ function loop() {
   stepPhysics(physicsWorld, dt);
 
   if (!dead) {
-    if (doorSystem) doorSystem.update(dt);
-    const doorInteraction = doorSystem ? doorSystem.getInteraction() : null;
+    for (const doorEntry of doorSystems) {
+      doorEntry.system.update(dt);
+    }
+    const doorInteraction = getBestDoorInteraction();
     player.update(dt, gunState, doorInteraction);
-    if (doorSystem) doorSystem.applyPlayerPushback(player);
+    for (const doorEntry of doorSystems) {
+      doorEntry.system.applyPlayerPushback(player);
+    }
     worldItems.update(dt);
   }
+
+  roomCulling.update();
+  const pendingRoomVisibilityChanges = roomCulling.getPendingVisibilityChanges
+    ? roomCulling.getPendingVisibilityChanges()
+    : 0;
+  const roomCount = getWorldRoomCount();
+  updateAdaptiveRoomOps(dt, pendingRoomVisibilityChanges, roomCount, false);
 
   // Freeze camera rotation while inventory open
   if (inventoryUI.isOpen() && savedCameraQuaternion) {
@@ -242,13 +505,6 @@ function loop() {
 
   // ─── Input ──────────────────────────────────────────────────────────────
   if (!dead) {
-    // Q key: toggle inventory
-    const qKeyPressed = player.keys['KeyQ'];
-    if (qKeyPressed && !lastQKeyState) {
-      inventoryUI.toggle();
-    }
-    lastQKeyState = qKeyPressed;
-
     // E key: pickup item
     const eKeyPressed = player.keys['KeyE'];
     if (eKeyPressed && !lastEKeyState) {
@@ -278,6 +534,19 @@ function loop() {
   fog.update(dt);
 
   renderer.render(scene, camera);
+
+  const roomStats = roomCulling.getStats();
+  perfOverlay.update(dt, {
+    currentRoomId: roomStats.currentRoomId,
+    currentRoomLabel: roomStats.currentRoomLabel,
+    currentZone: roomStats.currentZone,
+    visibleRooms: roomStats.visibleRooms,
+    totalRooms: roomStats.totalRooms,
+    pendingVisibilityChanges: roomStats.pendingVisibilityChanges,
+    roomOpsPerFrame: roomStats.roomOpsPerFrame,
+    drawCalls: renderer.info.render.calls,
+    triangles: renderer.info.render.triangles,
+  });
 }
 
 loop();

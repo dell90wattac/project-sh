@@ -4,6 +4,129 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 15] — 2026-03-10
+### Changed
+- **Flashlight beam tuning for more natural coverage** (`src/player/viewmodel.js`)
+  - Moved flashlight light origin closer to the held flashlight model so emission aligns better with the lens
+  - Softened beam edges and widened circumference using cone/penumbra tuning
+  - Shifted beam color to subtle warm-white and rebalanced intensity/falloff for cleaner readability
+
+### Fixed
+- **Close-range flashlight beam pinching on walls and doors** (`src/player/viewmodel.js`)
+  - Added a secondary short-range spill spotlight layered with the primary beam
+  - Kept both lights locked to flashlight state so toggle behavior remains consistent
+  - Reduced tiny-hotspot behavior when player stands very close to nearby surfaces
+
+### Notes
+- Flashlight now uses a dual-cone setup (focused main beam + wide soft spill) for better near-field lighting response.
+
+---
+
+## [Session 14] — 2026-03-10
+### Fixed
+- **Restored lost runtime integrations after rollback/lost edits** (`src/world/world.js`, `src/systems/worldItems.js`, `src/systems/door.js`, `src/player/player.js`)
+  - Reinstated room graph ownership model and room metadata APIs in world runtime
+  - Reinstated offshoot room chain (`sideRoomEast`, `sideRoomMid`, `sideRoomWest`) and linked multi-door setup
+  - Reinstated room-aware pickup ownership and visibility filtering for culling
+  - Reinstated door close tuning + `resetToClosed()` for room-hide orchestration
+  - Reinstated pointer-lock/fallback handoff and cursor-mode synchronization expected by startup flow
+
+### Notes
+- This session reimplemented the previously shipped culling/room/door/input architecture so `main.js` and `roomCulling.js` are again aligned with world/player/systems APIs.
+
+---
+
+## [Session 13] — 2026-03-10
+### Added
+- **Scalable room-topology synchronization in culling** (`src/systems/roomCulling.js`)
+  - Room culling now refreshes room IDs from `world.getRoomIds()` continuously instead of relying on a one-time startup snapshot
+  - Added topology sync handling for room additions/removals so visibility sets stay valid without manual rewiring
+  - Pending visibility queue and per-frame visibility budget continue to work with updated room graphs automatically
+
+### Changed
+- **Startup loading made room-count agnostic** (`src/main.js`)
+  - Startup warmup and progress calculations now derive from runtime room count helpers rather than fixed room-count snapshots
+  - Visibility-settle progress now scales using current world room count, making load-screen behavior stable as the map expands
+
+- **Adaptive culling budgeting added for scalable frame stability** (`src/main.js`, `src/systems/roomCulling.js`, `src/ui/perfOverlay.js`)
+  - Added frame-time + queue-pressure adaptive control for `roomOpsPerFrame` during startup normalization and gameplay
+  - Runtime culling throughput now scales by room graph size caps rather than static per-frame operations only
+  - Perf overlay now reports `vis ops` (current room-ops budget) alongside `vis queue` for live tuning
+
+- **Transition hitch mitigation generalized** (`src/systems/roomCulling.js`, `src/main.js`, `src/world/world.js`, `src/ui/perfOverlay.js`)
+  - Incremental room visibility application remains frame-budgeted for smoother traversal between connected rooms
+  - Redundant world visibility writes are skipped in `setRoomVisibility`, reducing avoidable per-room object visibility recomputation
+  - Perf overlay includes `vis queue` so culling backlog can be monitored while tuning large room graphs
+
+### Result
+- Room-culling performance behavior now scales cleanly for newly added rooms and ongoing room-layout edits with no extra per-room code updates in the culling/runtime loop.
+- Room transitions have less hitch risk across small and large room graphs because culling throughput can rise under queue pressure and back off on slow frames.
+
+### Fixed
+- **Entered-room visibility starvation under low culling budgets** (`src/systems/roomCulling.js`, `src/main.js`)
+  - Prioritized immediate visibility for the player's current room before normal queue processing so newly entered spaces cannot stay hidden
+  - Re-anchored culling scan cursor to the current room whenever visibility signature changes to reduce delayed room re-show
+  - Raised gameplay adaptive floor to baseline culling budget to avoid under-provisioned visibility throughput
+
+- **Hidden-room state desync causing permanent unloaded geometry** (`src/systems/roomCulling.js`)
+  - Fixed topology sync logic that could incorrectly mark intentionally hidden rooms as already visible in culling state
+  - Added strict initialization path for only truly new room IDs discovered at runtime
+  - Culling now refreshes desired visibility set every update so stale internal sets self-correct after topology/transition changes
+
+### Notes
+- Session closed with room reload/culling regression resolved and traversal now stable with only a minor occasional hitch remaining during heavy transition moments.
+
+---
+
+## [Session 12] — 2026-03-10 
+### Added
+- **Room graph + visibility architecture foundation** (`src/world/world.js`, `src/systems/roomCulling.js`, `src/main.js`)
+  - Added room registration with bounds, adjacency, labels, and zones
+  - Added room APIs: `getRoomIds`, `getRoomConnections`, `getRoomMeta`, `getRoomAtPosition`, `setRoomVisibility`, `registerExternalRoomObject`
+  - Added BFS room culling system with configurable visibility depth and room-transition resolution support
+
+- **Expanded offshoot layout for culling validation** (`src/world/world.js`)
+  - Replaced single side-room path with a three-room chain: `sideRoomEast`, `sideRoomMid`, `sideRoomWest`
+  - Added interior partitions/openings, doorway trims, per-room lights, and room metadata wiring
+
+- **Multi-door transition model** (`src/world/world.js`, `src/main.js`)
+  - Added and integrated all active transition doors:
+    - `doorLobbyEast` (`lobby` <-> `sideRoomEast`)
+    - `doorEastMid` (`sideRoomEast` <-> `sideRoomMid`)
+    - `doorMidWest` (`sideRoomMid` <-> `sideRoomWest`)
+  - Added `world.doors` as primary source with `world.door` kept for compatibility
+  - Main loop now runs one door system per door and selects strongest interaction blend for viewmodel feedback
+
+- **Runtime observability for traversal/perf** (`src/ui/perfOverlay.js`, `src/main.js`, `src/systems/roomCulling.js`)
+  - Added perf overlay with FPS/ms, room visibility counts, draw calls, triangle count, and current room label/zone
+  - Added culling warmup controls (`setVisibilityDepth`, `getVisibilityDepth`) and startup prewarm flow
+
+### Changed
+- **Visibility ownership semantics hardened** (`src/world/world.js`)
+  - Moved to per-object multi-room membership tracking
+  - Shared objects now stay visible if any owning room is visible, fixing doorway/partition pop-in
+
+- **Room culling policy tuning** (`src/main.js`, `src/systems/roomCulling.js`)
+  - Increased gameplay depth preload and added startup warmup depth window to reduce first-transition hitching
+  - Added overlap-aware room resolution preference to reduce delayed room handoffs near thresholds
+
+- **World items made room-aware** (`src/systems/worldItems.js`, `src/main.js`)
+  - Pickups/drops now store room ownership, obey room visibility, and are excluded from hover raycasts when hidden
+
+- **Door dynamics adjusted for feel and consistency across all doors** (`src/systems/door.js`)
+  - Added room-hide reset policy support via `resetToClosed()` orchestration
+  - Tuned contact/cushion/friction/overshoot behavior to reduce hard frame magnetism and restore smoother sweep-through close behavior
+
+- **Pointer-lock fallback handoff stabilized** (`src/player/player.js`, `src/main.js`)
+  - Added lock lifecycle tracking + cursor-mode synchronization
+  - Tightened fallback activation timing to avoid accidental fallback during normal pointer-lock startup
+
+### Notes
+- This consolidation replaces individual entries for Sessions 12-18 while preserving their cumulative implementation history.
+- Room culling remains visibility-based (not full streaming/unload) and is currently tuned for seamless traversal with no loading screens.
+
+---
+
 ## [Session 11] — 2026-03-09
 ### Added
 - **Door entity + door physics system** (`src/entities/door.js`, `src/systems/door.js`)

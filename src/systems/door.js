@@ -22,6 +22,12 @@ export function createDoorSystem(door, player, camera) {
   const PLAYER_RADIUS = 0.3;
   const CONTACT_DIST = PLAYER_RADIUS + door.thickness / 2; // pushback threshold
   const PUSH_DETECT = CONTACT_DIST + 0.25; // wider zone so push registers before pushback resolves overlap
+  const CONTACT_FORCE_PENETRATION = 17;
+  const CONTACT_FORCE_VELOCITY = 4;
+  const AUTO_CLOSE_SPRING = 0.02;
+  const AUTO_CLOSE_DAMPING = 0.998;
+  const PRE_FRAME_CUSHION_ZONE = 0.035;
+  const CROSS_FRAME_FRICTION_ZONE = 0.07;
 
   function update(dt) {
     const doorPivot = door.pivot;
@@ -66,7 +72,7 @@ export function createDoorSystem(door, player, camera) {
       const velToward = Math.max(0, -localVel.x * side);
 
       // Contact force — moderate spring, door has real weight
-      const contactForce = penetration * 24 + velToward * 6;
+      const contactForce = penetration * CONTACT_FORCE_PENETRATION + velToward * CONTACT_FORCE_VELOCITY;
 
       // Torque about hinge = force × lever arm
       const torque = contactForce * leverArm;
@@ -74,8 +80,8 @@ export function createDoorSystem(door, player, camera) {
     }
 
     // --- Auto-close spring (barely perceptible creep back) ---
-    angularVelocity += -angle * 0.02 * dt;
-    angularVelocity *= 0.998;
+    angularVelocity += -angle * AUTO_CLOSE_SPRING * dt;
+    angularVelocity *= AUTO_CLOSE_DAMPING;
 
     // --- Air cushion near closed position ---
     // Only brakes BEFORE the door crosses zero (not after overshoot).
@@ -83,15 +89,28 @@ export function createDoorSystem(door, player, camera) {
     // AND the door hasn't yet crossed zero (we track the previous angle to detect this).
     const approachingFrame = (angle > 0.005 && angularVelocity < -0.0001)
                           || (angle < -0.005 && angularVelocity > 0.0001);
-    const cushionZone = 0.05; // ~2.9 degrees
-    if (approachingFrame && Math.abs(angle) < cushionZone) {
-      const closeness = 1 - Math.abs(angle) / cushionZone;
-      // Very gentle: barely slows it, just takes the edge off
-      const cushionDamp = Math.pow(0.75, closeness);
+    if (approachingFrame && Math.abs(angle) < PRE_FRAME_CUSHION_ZONE) {
+      const closeness = 1 - Math.abs(angle) / PRE_FRAME_CUSHION_ZONE;
+      // Keep a bit of cushion without pulling too hard into the frame.
+      const cushionDamp = Math.pow(0.88, closeness);
       angularVelocity *= cushionDamp;
     }
 
+    // Add frame friction around and just past the closed position.
+    if (Math.abs(angle) < CROSS_FRAME_FRICTION_ZONE) {
+      const closeness = 1 - Math.abs(angle) / CROSS_FRAME_FRICTION_ZONE;
+      const friction = 1 - (0.03 + 0.10 * closeness) * Math.min(1, dt * 60);
+      angularVelocity *= Math.max(0.82, friction);
+    }
+
+    const prevAngle = angle;
+
     angle += angularVelocity;
+
+    // Dampen overshoot immediately after crossing the frame.
+    if (prevAngle !== 0 && Math.sign(prevAngle) !== Math.sign(angle)) {
+      angularVelocity *= 0.78;
+    }
 
     // Snap to fully closed only when truly at rest
     if (Math.abs(angle) < 0.001 && Math.abs(angularVelocity) < 0.0001) {
@@ -139,5 +158,12 @@ export function createDoorSystem(door, player, camera) {
     };
   }
 
-  return { update, getInteraction, applyPlayerPushback };
+  function resetToClosed() {
+    angle = 0;
+    angularVelocity = 0;
+    interactionBlend = 0;
+    door.pivot.rotation.y = 0;
+  }
+
+  return { update, getInteraction, applyPlayerPushback, resetToClosed };
 }

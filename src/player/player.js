@@ -29,17 +29,79 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
   // ─── Fallback mode (for environments without Pointer Lock, e.g. preview) ─
   let fallbackMode = false;
   let fallbackActive = false;   // true once the player clicks to start in fallback
+  let hasEverPointerLock = false;
+  let windowFocused = document.hasFocus();
+  let tabVisible = document.visibilityState !== 'hidden';
+  const keys = {};
   let fallbackYaw   = 0;
   let fallbackPitch = 0;
 
-  function enableFallback() {
-    fallbackMode = true;
-    fallbackActive = true;
-    document.body.style.cursor = 'none';
+  function applyCursorMode() {
+    const inventoryOpen = !!(inventoryUI && inventoryUI.isOpen && inventoryUI.isOpen());
+    if (inventoryOpen || controls.isLocked || fallbackActive) {
+      document.body.style.cursor = 'none';
+      return;
+    }
+    document.body.style.cursor = '';
   }
 
+  function canCaptureGameplayMouse() {
+    const inventoryOpen = !!(inventoryUI && inventoryUI.isOpen && inventoryUI.isOpen());
+    const overlay = document.getElementById('overlay');
+    const overlayVisible = !!(overlay && window.getComputedStyle(overlay).display !== 'none');
+    return windowFocused && tabVisible && !inventoryOpen && !overlayVisible;
+  }
+
+  function tryLockFromUserGesture() {
+    if (controls.isLocked || fallbackActive) return false;
+    if (!canCaptureGameplayMouse()) return false;
+
+    try {
+      controls.lock();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function enableFallback() {
+    if (controls.isLocked) return;
+    fallbackMode = true;
+    fallbackActive = true;
+    applyCursorMode();
+  }
+
+  controls.addEventListener('lock', () => {
+    hasEverPointerLock = true;
+    fallbackMode = false;
+    fallbackActive = false;
+    applyCursorMode();
+  });
+
+  controls.addEventListener('unlock', () => {
+    applyCursorMode();
+  });
+
+  window.addEventListener('focus', () => {
+    windowFocused = true;
+    applyCursorMode();
+  });
+
+  window.addEventListener('blur', () => {
+    windowFocused = false;
+    for (const key in keys) keys[key] = false;
+    applyCursorMode();
+  });
+
+  document.addEventListener('visibilitychange', () => {
+    tabVisible = document.visibilityState !== 'hidden';
+    if (!tabVisible) {
+      for (const key in keys) keys[key] = false;
+    }
+    applyCursorMode();
+  });
+
   // ─── Input ───────────────────────────────────────────────────────────────
-  const keys = {};
   let flashlightOn = false;
   window.addEventListener('keydown', e => { 
     keys[e.code] = true; 
@@ -49,7 +111,12 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
 
   // Mouse button tracking (for gun fire, etc.)
   document.addEventListener('mousedown', e => {
+    const didStartLock = e.button === 0 ? tryLockFromUserGesture() : false;
+
     if (e.button === 0) keys['MouseLeft'] = true; // Left click
+
+    // Do not treat relock clicks as a fire input.
+    if (didStartLock) keys['MouseLeft'] = false;
   });
   document.addEventListener('mouseup', e => {
     if (e.button === 0) keys['MouseLeft'] = false;
@@ -150,6 +217,8 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
 
   // ─── Update ──────────────────────────────────────────────────────────────
   function update(dt, gunState = {}, doorInteraction = null) {
+    applyCursorMode();
+
     // Require pointer lock or fallback mode to be active
     if (!controls.isLocked && !fallbackActive) return;
 
@@ -262,6 +331,8 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
     lock:   () => controls.lock(),
     unlock: () => controls.unlock(),
     enableFallback,
+    hasEverPointerLock: () => hasEverPointerLock,
+    refreshCursorMode: applyCursorMode,
     update,
     keys,
     controls,

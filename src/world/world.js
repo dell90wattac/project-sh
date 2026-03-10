@@ -8,6 +8,89 @@ import { createDoor } from '../entities/door.js';
  */
 export function createWorld(scene, physicsWorld) {
   const colliders = [];
+  const hazards = [];
+  const doors = [];
+  const roomMap = new Map();
+  const roomVisibility = new Map();
+  const objectRoomMemberships = new Map();
+  let activeRoomId = 'lobby';
+
+  function assignObjectToRoom(roomId, object3D) {
+    const room = roomMap.get(roomId);
+    if (!room) return;
+    if (!room.objects.includes(object3D)) {
+      room.objects.push(object3D);
+    }
+
+    let memberships = objectRoomMemberships.get(object3D);
+    if (!memberships) {
+      memberships = new Set();
+      objectRoomMemberships.set(object3D, memberships);
+    }
+    memberships.add(roomId);
+  }
+
+  function recomputeObjectVisibility(object3D) {
+    const memberships = objectRoomMemberships.get(object3D);
+    if (!memberships || memberships.size === 0) return;
+
+    let shouldBeVisible = false;
+    for (const roomId of memberships) {
+      if (roomVisibility.get(roomId) !== false) {
+        shouldBeVisible = true;
+        break;
+      }
+    }
+
+    object3D.visible = shouldBeVisible;
+  }
+
+  function registerRoom(id, bounds, connections = [], meta = {}) {
+    roomMap.set(id, {
+      id,
+      bounds,
+      connections,
+      label: meta.label || id,
+      zone: meta.zone || 'default',
+      objects: [],
+      colliders: [],
+      hazards: [],
+    });
+    roomVisibility.set(id, true);
+  }
+
+  function withRoom(roomId, fn) {
+    const previous = activeRoomId;
+    activeRoomId = roomId;
+    try {
+      return fn();
+    } finally {
+      activeRoomId = previous;
+    }
+  }
+
+  function registerObject(object3D) {
+    scene.add(object3D);
+    assignObjectToRoom(activeRoomId, object3D);
+    recomputeObjectVisibility(object3D);
+    return object3D;
+  }
+
+  function registerLight(light) {
+    return registerObject(light);
+  }
+
+  function registerCollider(collider) {
+    colliders.push(collider);
+    const room = roomMap.get(activeRoomId);
+    if (room) room.colliders.push(collider);
+  }
+
+  function registerHazard(hazard) {
+    hazards.push(hazard);
+    const room = roomMap.get(activeRoomId);
+    if (room) room.hazards.push(hazard);
+  }
 
   // ─── Materials ──────────────────────────────────────────────────────────
   // Procedural marble texture for floor
@@ -64,22 +147,20 @@ export function createWorld(scene, physicsWorld) {
   };
 
   function box(w, h, d, x, y, z, mat) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    const mesh = registerObject(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat));
     mesh.position.set(x, y, z);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
-    scene.add(mesh);
-    colliders.push(new THREE.Box3().setFromObject(mesh));
+    registerCollider(new THREE.Box3().setFromObject(mesh));
     return mesh;
   }
 
   // Non-collider decoration (no Box3 push)
   function decor(w, h, d, x, y, z, mat) {
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+    const mesh = registerObject(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat));
     mesh.position.set(x, y, z);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
-    scene.add(mesh);
     return mesh;
   }
 
@@ -103,6 +184,58 @@ export function createWorld(scene, physicsWorld) {
   const DOOR_OPENING_MAX_Z = DOOR_HINGE_Z + DOOR_WIDTH;
   const DOOR_OPENING_CENTER_Z = (DOOR_OPENING_MIN_Z + DOOR_OPENING_MAX_Z) / 2;
   const DOOR_INNER_X = LEFT_WALL_X + WALL_THICK / 2;
+
+  // Offshoot chain dimensions (left of the lobby)
+  const OFFSHOOT_ROOM_W = 4.0;
+  const OFFSHOOT_ROOM_D = 4.0;
+  const OFFSHOOT_CENTER_Z = DOOR_OPENING_CENTER_Z;
+  const OFFSHOOT_MIN_Z = OFFSHOOT_CENTER_Z - OFFSHOOT_ROOM_D / 2;
+  const OFFSHOOT_MAX_Z = OFFSHOOT_CENTER_Z + OFFSHOOT_ROOM_D / 2;
+  const OFFSHOOT_STEP_X = OFFSHOOT_ROOM_W + WALL_THICK;
+
+  const SIDE_ROOM_EAST_CENTER_X = LEFT_WALL_X - OFFSHOOT_ROOM_W / 2 - 0.2;
+  const SIDE_ROOM_MID_CENTER_X = SIDE_ROOM_EAST_CENTER_X - OFFSHOOT_STEP_X;
+  const SIDE_ROOM_WEST_CENTER_X = SIDE_ROOM_MID_CENTER_X - OFFSHOOT_STEP_X;
+  const EAST_MID_PARTITION_X = SIDE_ROOM_EAST_CENTER_X - OFFSHOOT_ROOM_W / 2 - WALL_THICK / 2;
+  const MID_WEST_PARTITION_X = SIDE_ROOM_MID_CENTER_X - OFFSHOOT_ROOM_W / 2 - WALL_THICK / 2;
+
+  registerRoom(
+    'lobby',
+    new THREE.Box3(
+      new THREE.Vector3(LEFT_WALL_X - 0.2, -1.0, BACK_Z - 0.2),
+      new THREE.Vector3(RIGHT_WALL_X + 0.2, CEIL + 0.5, FRONT_Z + 0.2)
+    ),
+    ['sideRoomEast'],
+    { label: 'Main Lobby', zone: 'lobby' }
+  );
+
+  function offshootBounds(centerX) {
+    return new THREE.Box3(
+      new THREE.Vector3(centerX - OFFSHOOT_ROOM_W / 2 - WALL_THICK / 2, -1.0, OFFSHOOT_MIN_Z - WALL_THICK / 2),
+      new THREE.Vector3(centerX + OFFSHOOT_ROOM_W / 2 + WALL_THICK / 2, CEIL + 0.5, OFFSHOOT_MAX_Z + WALL_THICK / 2)
+    );
+  }
+
+  registerRoom(
+    'sideRoomEast',
+    offshootBounds(SIDE_ROOM_EAST_CENTER_X),
+    ['lobby', 'sideRoomMid'],
+    { label: 'Offshoot East', zone: 'offshootA' }
+  );
+
+  registerRoom(
+    'sideRoomMid',
+    offshootBounds(SIDE_ROOM_MID_CENTER_X),
+    ['sideRoomEast', 'sideRoomWest'],
+    { label: 'Offshoot Mid', zone: 'offshootB' }
+  );
+
+  registerRoom(
+    'sideRoomWest',
+    offshootBounds(SIDE_ROOM_WEST_CENTER_X),
+    ['sideRoomMid'],
+    { label: 'Offshoot West', zone: 'offshootC' }
+  );
 
   // ─── Floors ──────────────────────────────────────────────────────────────
   box(W, 0.2, 20, 0, -0.1, 0, M.floor);
@@ -224,7 +357,7 @@ export function createWorld(scene, physicsWorld) {
   decor(0.26, 0.18, 0.26, 1.0, 1.62, 0.15, M.lampShade); // shade
   const deskLampLight = new THREE.PointLight(0xFFE890, 1.8, 5);
   deskLampLight.position.set(1.0, 1.55, 0.15);
-  scene.add(deskLampLight);
+  registerLight(deskLampLight);
 
   // Inbox tray + paper
   decor(0.32, 0.04, 0.26, 0.4, 1.15, 0.15, M.metal);
@@ -368,14 +501,14 @@ export function createWorld(scene, physicsWorld) {
   decor(0.38, 0.28, 0.38, -4.5, 1.96, 4.2, M.lampShade);
   const lampLight1 = new THREE.PointLight(0xFFDF80, 2.0, 8);
   lampLight1.position.set(-4.5, 1.8, 4.2);
-  scene.add(lampLight1);
+  registerLight(lampLight1);
 
   // Right lamp (near bench, front hall)
   box(0.12, 1.8, 0.12, 4.5, 0.90, 4.2, M.lamp);
   decor(0.38, 0.28, 0.38, 4.5, 1.96, 4.2, M.lampShade);
   const lampLight2 = new THREE.PointLight(0xFFDF80, 2.0, 8);
   lampLight2.position.set(4.5, 1.8, 4.2);
-  scene.add(lampLight2);
+  registerLight(lampLight2);
 
   // ─── Wall Sconces (8 total — 4 per side wall) ─────────────────────────────
   const sconceZPositions = [8, 3, -2, -5];
@@ -385,19 +518,19 @@ export function createWorld(scene, physicsWorld) {
     decor(0.28, 0.22, 0.28, -6.68, 2.58, sz, M.lampShade);     // shade
     const sl = new THREE.PointLight(0xFFE0A0, 1.2, 6);
     sl.position.set(-6.1, 2.5, sz);
-    scene.add(sl);
+    registerLight(sl);
 
     // Right wall
     decor(0.22, 0.08, 0.32, 6.85, 2.5, sz, M.lamp);
     decor(0.28, 0.22, 0.28, 6.68, 2.58, sz, M.lampShade);
     const sr = new THREE.PointLight(0xFFE0A0, 1.2, 6);
     sr.position.set(6.1, 2.5, sz);
-    scene.add(sr);
+    registerLight(sr);
   }
 
   // ─── Lighting ─────────────────────────────────────────────────────────────
   // Very dim ambient — let point lights do the heavy lifting for mood
-  scene.add(new THREE.AmbientLight(0x30282C, 0.12));
+  registerLight(new THREE.AmbientLight(0x30282C, 0.12));
 
   // Ceiling point lights (tighter falloff for smaller room)
   [
@@ -409,7 +542,7 @@ export function createWorld(scene, physicsWorld) {
   ].forEach(([x, y, z]) => {
     const pl = new THREE.PointLight(0xFFF4E8, 2.2, 15, 1.8);
     pl.position.set(x, y, z);
-    scene.add(pl);
+    registerLight(pl);
   });
 
   // ─── Damage Pillar (deals 1 damage/sec on contact) ────────────────────────
@@ -418,43 +551,39 @@ export function createWorld(scene, physicsWorld) {
   const pillarRadius = 0.4;
   const pillarHeight = 2.5;
 
-  const pillarMesh = new THREE.Mesh(
+  const pillarMesh = registerObject(new THREE.Mesh(
     new THREE.CylinderGeometry(pillarRadius, pillarRadius, pillarHeight, 12),
     new THREE.MeshStandardMaterial({ color: 0x3a1a1a, roughness: 0.7, metalness: 0.3 })
-  );
+  ));
   pillarMesh.position.set(pillarX, pillarHeight / 2, pillarZ);
   pillarMesh.castShadow = true;
   pillarMesh.receiveShadow = true;
-  scene.add(pillarMesh);
 
-  const capMesh = new THREE.Mesh(
+  const capMesh = registerObject(new THREE.Mesh(
     new THREE.CylinderGeometry(pillarRadius * 1.2, pillarRadius * 1.2, 0.12, 12),
     new THREE.MeshStandardMaterial({ color: 0x2a0a0a, roughness: 0.5, metalness: 0.5 })
-  );
+  ));
   capMesh.position.set(pillarX, pillarHeight + 0.06, pillarZ);
-  scene.add(capMesh);
 
-  colliders.push(new THREE.Box3().setFromObject(pillarMesh));
+  registerCollider(new THREE.Box3().setFromObject(pillarMesh));
 
-  const hazards = [
-    {
-      type: 'damagePillar',
-      position: { x: pillarX, z: pillarZ },
-      radius: pillarRadius + 0.6,
-      damagePerSecond: 1,
-      damageType: 'generic',
-    },
-  ];
+  registerHazard({
+    type: 'damagePillar',
+    position: { x: pillarX, z: pillarZ },
+    radius: pillarRadius + 0.6,
+    damagePerSecond: 1,
+    damageType: 'generic',
+  });
 
-  // --- Door (left wall, swings both ways) ---
-  const door = createDoor({
-    width: DOOR_WIDTH,
-    height: DOOR_HEIGHT,
-    thickness: DOOR_THICK,
+  // --- Door: lobby <-> offshoot east ---
+  const primaryDoorRef = addLinkedDoor({
+    id: 'doorLobbyEast',
+    roomA: 'lobby',
+    roomB: 'sideRoomEast',
+    hingeX: DOOR_INNER_X,
+    hingeZ: DOOR_HINGE_Z,
     color: 0x6F4A2A,
   });
-  door.pivot.position.set(DOOR_INNER_X, 0, DOOR_HINGE_Z);
-  scene.add(door.pivot);
 
   // Door frame (decorative)
   decor(0.06, DOOR_HEIGHT + 0.1, 0.08, LEFT_WALL_X + 0.04, DOOR_HEIGHT / 2, DOOR_OPENING_MIN_Z - 0.02, M.wainscot);
@@ -463,30 +592,215 @@ export function createWorld(scene, physicsWorld) {
 
   // Door collision is handled dynamically by the door system (not a static collider)
 
-  // --- Small room beyond the door (simple square) ---
-  const ROOM_W = 4.0;
-  const ROOM_D = 4.0;
-  const ROOM_CENTER_X = LEFT_WALL_X - ROOM_W / 2 - 0.2;
-  const ROOM_CENTER_Z = DOOR_OPENING_CENTER_Z;
-  const ROOM_MIN_Z = ROOM_CENTER_Z - ROOM_D / 2;
-  const ROOM_MAX_Z = ROOM_CENTER_Z + ROOM_D / 2;
-  const ROOM_FAR_X = ROOM_CENTER_X - ROOM_W / 2;
+  // --- Offshoot chain: east (existing) -> mid -> west ---
+  function buildPartitionWithOpening(xCenter, openingMinZ, openingMaxZ, adjacentRoomId = null) {
+    const lowerDepth = openingMinZ - OFFSHOOT_MIN_Z;
+    const upperDepth = OFFSHOOT_MAX_Z - openingMaxZ;
+    const partitionObjects = [];
 
-  // Floor & ceiling
-  box(ROOM_W, 0.2, ROOM_D, ROOM_CENTER_X, -0.1, ROOM_CENTER_Z, M.floor);
-  box(ROOM_W, 0.2, ROOM_D, ROOM_CENTER_X, CEIL + 0.1, ROOM_CENTER_Z, M.ceiling);
+    function track(object3D) {
+      partitionObjects.push(object3D);
+      if (adjacentRoomId) registerExternalRoomObject(adjacentRoomId, object3D);
+    }
 
-  // Side walls (front/back)
-  box(ROOM_W, CEIL, WALL_THICK, ROOM_CENTER_X, CEIL / 2, ROOM_MIN_Z, M.wall);
-  box(ROOM_W, CEIL, WALL_THICK, ROOM_CENTER_X, CEIL / 2, ROOM_MAX_Z, M.wall);
+    if (lowerDepth > 0) {
+      const lowerCenterZ = (OFFSHOOT_MIN_Z + openingMinZ) / 2;
+      track(box(WALL_THICK, CEIL, lowerDepth, xCenter, CEIL / 2, lowerCenterZ, M.wall));
+      track(decor(0.12, 1.5, lowerDepth - 0.08, xCenter + 0.03, 0.75, lowerCenterZ, M.wainscot));
+    }
+    if (upperDepth > 0) {
+      const upperCenterZ = (openingMaxZ + OFFSHOOT_MAX_Z) / 2;
+      track(box(WALL_THICK, CEIL, upperDepth, xCenter, CEIL / 2, upperCenterZ, M.wall));
+      track(decor(0.12, 1.5, upperDepth - 0.08, xCenter + 0.03, 0.75, upperCenterZ, M.wainscot));
+    }
 
-  // Back wall (far side)
-  box(WALL_THICK, CEIL, ROOM_D, ROOM_FAR_X, CEIL / 2, ROOM_CENTER_Z, M.wall);
+    // Simple trim around each interior doorway opening
+    track(decor(0.06, DOOR_HEIGHT + 0.1, 0.08, xCenter + 0.05, DOOR_HEIGHT / 2, openingMinZ - 0.02, M.wainscot));
+    track(decor(0.06, DOOR_HEIGHT + 0.1, 0.08, xCenter + 0.05, DOOR_HEIGHT / 2, openingMaxZ + 0.02, M.wainscot));
+    track(decor(0.06, 0.08, DOOR_WIDTH + 0.2, xCenter + 0.05, DOOR_HEIGHT + 0.04, (openingMinZ + openingMaxZ) / 2, M.wainscot));
 
-  // Small point light inside room
-  const roomLight = new THREE.PointLight(0xFFEAC8, 1.4, 6);
-  roomLight.position.set(ROOM_CENTER_X, CEIL - 0.6, ROOM_CENTER_Z);
-  scene.add(roomLight);
+    return partitionObjects;
+  }
 
-  return { colliders, hazards, door, update: () => {} };
+  function buildOffshootRoom(roomId, centerX, lightColor, lightIntensity) {
+    withRoom(roomId, () => {
+      // Floor & ceiling
+      box(OFFSHOOT_ROOM_W, 0.2, OFFSHOOT_ROOM_D, centerX, -0.1, OFFSHOOT_CENTER_Z, M.floor);
+      box(OFFSHOOT_ROOM_W, 0.2, OFFSHOOT_ROOM_D, centerX, CEIL + 0.1, OFFSHOOT_CENTER_Z, M.ceiling);
+
+      // Front/back walls
+      box(OFFSHOOT_ROOM_W, CEIL, WALL_THICK, centerX, CEIL / 2, OFFSHOOT_MIN_Z, M.wall);
+      box(OFFSHOOT_ROOM_W, CEIL, WALL_THICK, centerX, CEIL / 2, OFFSHOOT_MAX_Z, M.wall);
+
+      // Per-room local light (kept room-owned for culling)
+      const roomLight = new THREE.PointLight(lightColor, lightIntensity, 6.5);
+      roomLight.position.set(centerX, CEIL - 0.65, OFFSHOOT_CENTER_Z);
+      registerLight(roomLight);
+    });
+  }
+
+  function addLinkedDoor({
+    id,
+    roomA,
+    roomB,
+    hingeX,
+    hingeZ = DOOR_HINGE_Z,
+    color = 0x6F4A2A,
+  }) {
+    const doorEntity = createDoor({
+      width: DOOR_WIDTH,
+      height: DOOR_HEIGHT,
+      thickness: DOOR_THICK,
+      color,
+    });
+
+    doorEntity.pivot.position.set(hingeX, 0, hingeZ);
+
+    withRoom(roomA, () => {
+      registerObject(doorEntity.pivot);
+    });
+    registerExternalRoomObject(roomB, doorEntity.pivot);
+
+    const doorRef = {
+      id,
+      roomIds: [roomA, roomB],
+      door: doorEntity,
+    };
+    doors.push(doorRef);
+    return doorRef;
+  }
+
+  buildOffshootRoom('sideRoomEast', SIDE_ROOM_EAST_CENTER_X, 0xFFEAC8, 1.45);
+  buildOffshootRoom('sideRoomMid', SIDE_ROOM_MID_CENTER_X, 0xFDE2BA, 1.35);
+  buildOffshootRoom('sideRoomWest', SIDE_ROOM_WEST_CENTER_X, 0xF7D9A8, 1.25);
+
+  // Exterior west wall of the farthest room
+  withRoom('sideRoomWest', () => {
+    box(
+      WALL_THICK,
+      CEIL,
+      OFFSHOOT_ROOM_D,
+      SIDE_ROOM_WEST_CENTER_X - OFFSHOOT_ROOM_W / 2,
+      CEIL / 2,
+      OFFSHOOT_CENTER_Z,
+      M.wall
+    );
+  });
+
+  // Interior partitions with door openings (east<->mid and mid<->west)
+  withRoom('sideRoomEast', () => {
+    buildPartitionWithOpening(EAST_MID_PARTITION_X, DOOR_OPENING_MIN_Z, DOOR_OPENING_MAX_Z, 'sideRoomMid');
+  });
+  withRoom('sideRoomMid', () => {
+    buildPartitionWithOpening(MID_WEST_PARTITION_X, DOOR_OPENING_MIN_Z, DOOR_OPENING_MAX_Z, 'sideRoomWest');
+  });
+
+  // Physical doors for offshoot room-to-room transitions
+  addLinkedDoor({
+    id: 'doorEastMid',
+    roomA: 'sideRoomEast',
+    roomB: 'sideRoomMid',
+    hingeX: EAST_MID_PARTITION_X + WALL_THICK / 2,
+    hingeZ: DOOR_HINGE_Z,
+    color: 0x6A4327,
+  });
+
+  addLinkedDoor({
+    id: 'doorMidWest',
+    roomA: 'sideRoomMid',
+    roomB: 'sideRoomWest',
+    hingeX: MID_WEST_PARTITION_X + WALL_THICK / 2,
+    hingeZ: DOOR_HINGE_Z,
+    color: 0x5D3A22,
+  });
+
+  function setRoomVisibility(roomId, visible) {
+    const room = roomMap.get(roomId);
+    if (!room) return;
+    if (roomVisibility.get(roomId) === visible) return;
+    roomVisibility.set(roomId, visible);
+    for (const object3D of room.objects) {
+      recomputeObjectVisibility(object3D);
+    }
+  }
+
+  function getRoomIds() {
+    return Array.from(roomMap.keys());
+  }
+
+  function getRoomConnections(roomId) {
+    const room = roomMap.get(roomId);
+    return room ? room.connections : [];
+  }
+
+  function getRoomMeta(roomId) {
+    const room = roomMap.get(roomId);
+    if (!room) return null;
+    return {
+      id: room.id,
+      label: room.label,
+      zone: room.zone,
+      connections: room.connections,
+    };
+  }
+
+  function getRoomAtPosition(position, padding = 0.0, preferredRoomId = null) {
+    const roomMatches = [];
+    for (const room of roomMap.values()) {
+      const min = room.bounds.min;
+      const max = room.bounds.max;
+      if (
+        position.x >= min.x - padding && position.x <= max.x + padding &&
+        position.y >= min.y - padding && position.y <= max.y + padding &&
+        position.z >= min.z - padding && position.z <= max.z + padding
+      ) {
+        roomMatches.push(room);
+      }
+    }
+
+    if (roomMatches.length === 0) return null;
+
+    if (preferredRoomId) {
+      const preferredRoom = roomMatches.find(room => room.id === preferredRoomId);
+      if (preferredRoom) return preferredRoom.id;
+    }
+
+    if (roomMatches.length === 1) return roomMatches[0].id;
+
+    let bestRoom = roomMatches[0];
+    let bestDistanceSq = Number.POSITIVE_INFINITY;
+    for (const room of roomMatches) {
+      const center = room.bounds.getCenter(new THREE.Vector3());
+      const dx = position.x - center.x;
+      const dy = position.y - center.y;
+      const dz = position.z - center.z;
+      const distanceSq = dx * dx + dy * dy + dz * dz;
+      if (distanceSq < bestDistanceSq) {
+        bestDistanceSq = distanceSq;
+        bestRoom = room;
+      }
+    }
+
+    return bestRoom.id;
+  }
+
+  function registerExternalRoomObject(roomId, object3D) {
+    if (!roomMap.has(roomId)) return;
+    assignObjectToRoom(roomId, object3D);
+    recomputeObjectVisibility(object3D);
+  }
+
+  return {
+    colliders,
+    hazards,
+    door: primaryDoorRef.door,
+    doors,
+    update: () => {},
+    getRoomIds,
+    getRoomConnections,
+    getRoomMeta,
+    getRoomAtPosition,
+    setRoomVisibility,
+    registerExternalRoomObject,
+  };
 }

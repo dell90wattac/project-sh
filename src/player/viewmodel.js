@@ -96,15 +96,26 @@ export function createViewModel(camera) {
   leftHandGroup.add(box(0.075, 0.075, 0.32, -0.08, -0.08, 0.18, skin, 0.4, 0.15));
 
   // Spotlight mounted on flashlight (child of left hand so it follows the hand automatically)
-  const flashlightLight = new THREE.SpotLight(0xffffff, 32, 85, Math.PI / 180 * 32, 0.45);
-  flashlightLight.decay = 1.4;
-  flashlightLight.position.set(0.01, 0.01, -0.24); // Lens local position
+  const flashlightLight = new THREE.SpotLight(0xFFF8EA, 24, 80, Math.PI / 180 * 40, 0.78);
+  flashlightLight.decay = 1.3;
+  flashlightLight.position.set(0.01, 0.01, -0.19); // Slightly behind lens so nearby geometry catches light correctly
   leftHandGroup.add(flashlightLight);
 
   const flashlightTarget = new THREE.Object3D();
   flashlightTarget.position.set(0.01, 0.01, -60); // Far out in -Z direction
   leftHandGroup.add(flashlightTarget);
   flashlightLight.target = flashlightTarget;
+
+  // Secondary spill cone keeps very close walls/doors from collapsing into a tiny hotspot.
+  const flashlightSpill = new THREE.SpotLight(0xFFEED2, 9, 22, Math.PI / 180 * 78, 0.98);
+  flashlightSpill.decay = 1.05;
+  flashlightSpill.position.set(0.01, 0.01, -0.17);
+  leftHandGroup.add(flashlightSpill);
+
+  const flashlightSpillTarget = new THREE.Object3D();
+  flashlightSpillTarget.position.set(0.01, 0.01, -18);
+  leftHandGroup.add(flashlightSpillTarget);
+  flashlightSpill.target = flashlightSpillTarget;
 
   // ─── RIGHT HAND & GUN (separate object) ────────────────────────────────────
   const rightHandGroup = new THREE.Group();
@@ -333,6 +344,7 @@ export function createViewModel(camera) {
     
     // ── Flashlight on/off ───────────────────────────────────────────────
     flashlightLight.visible = flashlightOn;
+    flashlightSpill.visible = flashlightOn;
   }
 
   return { group, update };
