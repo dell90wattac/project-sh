@@ -1,9 +1,15 @@
 import * as THREE from 'three';
 
-export function createDoorSystem(door, player, camera) {
+export function createDoorSystem(door, player, camera, options = {}) {
   let angle = 0;
   let angularVelocity = 0;
   let interactionBlend = 0;
+  let interactionEnabled = options.interactionEnabled !== false;
+
+  const lock = options.lock || null;
+  const getHeldItemType = typeof options.getHeldItemType === 'function'
+    ? options.getHeldItemType
+    : () => null;
 
   const doorNormalWorld = new THREE.Vector3(1, 0, 0);
   const tempQuat = new THREE.Quaternion();
@@ -29,6 +35,18 @@ export function createDoorSystem(door, player, camera) {
   const PRE_FRAME_CUSHION_ZONE = 0.035;
   const CROSS_FRAME_FRICTION_ZONE = 0.07;
 
+  function isLocked() {
+    return !!(lock && typeof lock.isLocked === 'function' && lock.isLocked());
+  }
+
+  function isInteractionEnabled() {
+    return interactionEnabled;
+  }
+
+  function setInteractionEnabled(enabled) {
+    interactionEnabled = enabled !== false;
+  }
+
   function update(dt) {
     const doorPivot = door.pivot;
     const playerPos = player.getPosition();
@@ -46,9 +64,19 @@ export function createDoorSystem(door, player, camera) {
     // World-space door normal
     doorNormalWorld.set(1, 0, 0).applyQuaternion(tempQuat);
 
+    if (lock && typeof lock.update === 'function') {
+      lock.update(playerPos, getHeldItemType());
+    }
+
+    const locked = isLocked();
+    if (!locked && !interactionEnabled && lock) {
+      interactionEnabled = true;
+    }
+    const swingEnabled = interactionEnabled && !locked;
+
     // --- Viewmodel interaction blend (hands-up pose) ---
     let targetBlend = 0;
-    if (inZ && inY && Math.abs(distFromPlane) < 0.9 && camera) {
+    if (swingEnabled && inZ && inY && Math.abs(distFromPlane) < 0.9 && camera) {
       camera.getWorldDirection(tempVec);
       const facing = Math.abs(tempVec.dot(doorNormalWorld));
       const proximity = Math.max(0, (0.9 - Math.abs(distFromPlane)) / 0.9);
@@ -57,6 +85,15 @@ export function createDoorSystem(door, player, camera) {
     const blendRate = targetBlend > interactionBlend ? 8.0 : 5.0;
     interactionBlend += (targetBlend - interactionBlend) * Math.min(1, blendRate * dt);
     if (targetBlend < 0.01 && interactionBlend < 0.015) interactionBlend = 0;
+
+    if (!swingEnabled) {
+      angle = 0;
+      angularVelocity = 0;
+      doorPivot.rotation.y = 0;
+      lastPlayerPos.copy(playerPos);
+      hasLastPos = true;
+      return;
+    }
 
     // --- Contact-based push (physical torque model) ---
     if (inZ && inY && Math.abs(distFromPlane) < PUSH_DETECT) {
@@ -155,6 +192,9 @@ export function createDoorSystem(door, player, camera) {
       doorNormal: doorNormalWorld.clone(),
       doorAngle: angle,
       doorAngularVel: angularVelocity,
+      locked: isLocked(),
+      interactionEnabled: isInteractionEnabled(),
+      swingEnabled: isInteractionEnabled() && !isLocked(),
     };
   }
 
@@ -165,5 +205,12 @@ export function createDoorSystem(door, player, camera) {
     door.pivot.rotation.y = 0;
   }
 
-  return { update, getInteraction, applyPlayerPushback, resetToClosed };
+  return {
+    update,
+    getInteraction,
+    applyPlayerPushback,
+    resetToClosed,
+    setInteractionEnabled,
+    isInteractionEnabled,
+  };
 }

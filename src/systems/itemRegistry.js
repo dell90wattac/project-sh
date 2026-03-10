@@ -75,6 +75,48 @@ const ITEMS = {
   },
 };
 
+const KEY_ITEM_PREFIX = 'key:';
+const KEY_MODEL_CONFIG = { color: 0xd4b24f, size: [0.28, 0.08, 0.1], shape: 'box' };
+
+function normalizeKeyId(keyId) {
+  return String(keyId ?? '').trim();
+}
+
+export function makeKeyItemId(keyId) {
+  const normalized = normalizeKeyId(keyId);
+  if (!normalized) return null;
+  return `${KEY_ITEM_PREFIX}${normalized}`;
+}
+
+export function isKeyItem(itemId) {
+  return typeof itemId === 'string' && itemId.startsWith(KEY_ITEM_PREFIX);
+}
+
+export function getKeyIdFromItemType(itemType) {
+  if (!isKeyItem(itemType)) return null;
+  return itemType.slice(KEY_ITEM_PREFIX.length);
+}
+
+function buildKeyItemDef(itemType) {
+  const keyId = getKeyIdFromItemType(itemType);
+  if (!keyId) return null;
+
+  return {
+    id: itemType,
+    name: `Key (${keyId})`,
+    description: `A tagged key for lock ${keyId}.`,
+    stackable: false,
+    maxStack: 1,
+    usable: false,
+    equippable: true,
+    droppable: true,
+    combinable: false,
+    initials: 'KY',
+    modelConfig: KEY_MODEL_CONFIG,
+    useEffect: null,
+  };
+}
+
 // Combination recipes — bidirectional (A+B and B+A both work)
 const RECIPES = [
   { ingredientA: 'healingA', ingredientB: 'healingB', result: 'healingC', resultQty: 1 },
@@ -83,7 +125,9 @@ const RECIPES = [
 // ─── Lookup Functions ───────────────────────────────────────────────────────
 
 export function getItemDef(itemId) {
-  return ITEMS[itemId] || null;
+  if (ITEMS[itemId]) return ITEMS[itemId];
+  if (isKeyItem(itemId)) return buildKeyItemDef(itemId);
+  return null;
 }
 
 export function getRecipe(idA, idB) {
@@ -97,11 +141,11 @@ export function getRecipe(idA, idB) {
 }
 
 export function canStack(itemId) {
-  const def = ITEMS[itemId];
+  const def = getItemDef(itemId);
   return def ? def.stackable : false;
 }
 
 export function getMaxStack(itemId) {
-  const def = ITEMS[itemId];
+  const def = getItemDef(itemId);
   return def ? def.maxStack : 1;
 }

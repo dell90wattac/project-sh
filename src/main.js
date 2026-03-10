@@ -9,6 +9,8 @@ import { createHUD } from './ui/hud.js';
 import { createHealth } from './systems/health.js';
 import { createDamageEffects } from './ui/damageEffects.js';
 import { createWorldItems } from './systems/worldItems.js';
+import { makeKeyItemId } from './systems/itemRegistry.js';
+import { createLock } from './systems/lock.js';
 import { createFog } from './systems/fog.js';
 import { createDoorSystem } from './systems/door.js';
 import { createRoomCulling } from './systems/roomCulling.js';
@@ -69,10 +71,43 @@ const worldItems = createWorldItems(scene, camera, inventory, {
   },
 });
 
+const actionLabel = document.createElement('div');
+actionLabel.style.cssText = `
+  position: fixed;
+  top: 44%;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #9be5ff;
+  font-family: monospace;
+  font-size: 14px;
+  font-weight: bold;
+  text-align: center;
+  pointer-events: none;
+  z-index: 120;
+  letter-spacing: 0.08em;
+  text-shadow: 0 0 8px rgba(0, 0, 0, 0.9), 0 0 2px rgba(0, 0, 0, 1);
+  display: none;
+`;
+const uiRoot = document.getElementById('ui-root') || document.body;
+uiRoot.appendChild(actionLabel);
+let actionLabelTimer = 0;
+
+function showActionLabel(text, duration = 1.4) {
+  actionLabel.textContent = text;
+  actionLabel.style.display = 'block';
+  actionLabelTimer = duration;
+}
+
 // Three full stacks of handgun ammo (27 each) in front of desk
 worldItems.spawnPickup('ammo', 27, new THREE.Vector3(-1.5, 0.3, 1.5));
 worldItems.spawnPickup('ammo', 27, new THREE.Vector3(0, 0.3, 1.5));
 worldItems.spawnPickup('ammo', 27, new THREE.Vector3(1.5, 0.3, 1.5));
+
+const lobbyEastDoorKeyId = 'doorLobbyEast';
+const lobbyEastDoorKeyItemType = makeKeyItemId(lobbyEastDoorKeyId);
+if (lobbyEastDoorKeyItemType) {
+  worldItems.spawnPickup(lobbyEastDoorKeyItemType, 1, new THREE.Vector3(2.25, 0.3, 1.5));
+}
 
 // Healing items behind the desk
 worldItems.spawnPickup('healingA', 1, new THREE.Vector3(-1, 0.3, -1.0));
@@ -94,10 +129,50 @@ const worldDoors = Array.isArray(world.doors) && world.doors.length > 0
   ? world.doors
   : (world.door ? [{ id: 'doorPrimary', roomIds: ['lobby'], door: world.door }] : []);
 
+const locksByDoorId = new Map();
+const doorSystemById = new Map();
+const lobbyEastDoorRef = worldDoors.find(doorRef => doorRef.id === 'doorLobbyEast');
+if (lobbyEastDoorRef) {
+  const lockPosition = new THREE.Vector3();
+  lobbyEastDoorRef.door.pivot.updateWorldMatrix(true, false);
+  lobbyEastDoorRef.door.pivot.getWorldPosition(lockPosition);
+  lockPosition.y = 1.0;
+  lockPosition.z += lobbyEastDoorRef.door.width * 0.75;
+
+  const lobbyEastLock = createLock({
+    id: 'lockDoorLobbyEast',
+    requiredKeyId: lobbyEastDoorKeyId,
+    position: lockPosition,
+    unlockRadius: 1.5,
+    verticalTolerance: 1.8,
+    onUnlock() {
+      const doorSystem = doorSystemById.get('doorLobbyEast');
+      if (doorSystem && doorSystem.setInteractionEnabled) {
+        doorSystem.setInteractionEnabled(true);
+      }
+      showActionLabel('UNLOCKED: LOBBY EAST DOOR');
+    },
+  });
+
+  locksByDoorId.set(lobbyEastDoorRef.id, lobbyEastLock);
+}
+
 const doorSystems = worldDoors.map(doorRef => ({
   ...doorRef,
-  system: createDoorSystem(doorRef.door, player, camera),
+  lock: locksByDoorId.get(doorRef.id) || null,
+  system: createDoorSystem(doorRef.door, player, camera, {
+    lock: locksByDoorId.get(doorRef.id) || null,
+    interactionEnabled: !locksByDoorId.has(doorRef.id),
+    getHeldItemType: () => {
+      const equipped = inventory.getEquipped();
+      return equipped ? equipped.itemType : null;
+    },
+  }),
 }));
+
+for (const doorEntry of doorSystems) {
+  doorSystemById.set(doorEntry.id, doorEntry.system);
+}
 
 function getBestDoorInteraction() {
   if (doorSystems.length === 0) return null;
@@ -110,6 +185,38 @@ function getBestDoorInteraction() {
     }
   }
   return best;
+}
+
+function autoEquipNearbyLockKey() {
+  const playerPos = player.getPosition ? player.getPosition() : null;
+  if (!playerPos) return;
+
+  const equipped = inventory.getEquipped ? inventory.getEquipped() : null;
+  const equippedType = equipped ? equipped.itemType : null;
+
+  for (const doorEntry of doorSystems) {
+    const lock = doorEntry.lock;
+    if (!lock || !lock.isLocked || !lock.isLocked()) continue;
+
+    const requiredItemType = lock.requiredItemType;
+    if (!requiredItemType) continue;
+    if (equippedType === requiredItemType) return;
+
+    if (inventory.getItemCount(requiredItemType) <= 0) continue;
+
+    if (typeof lock.isActorInRange === 'function' && !lock.isActorInRange(playerPos)) {
+      continue;
+    }
+
+    const keySlot = inventory.getItems().find(item => item.itemType === requiredItemType);
+    if (!keySlot) continue;
+
+    const equippedNow = inventory.equipItem(keySlot.slotIndex);
+    if (equippedNow) {
+      showActionLabel('KEY IN HAND');
+    }
+    return;
+  }
 }
 
 const NORMAL_VISIBILITY_DEPTH = 2;
@@ -451,6 +558,14 @@ function loop() {
   requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.05);
 
+  if (actionLabelTimer > 0) {
+    actionLabelTimer -= dt;
+    if (actionLabelTimer <= 0) {
+      actionLabel.style.display = 'none';
+      actionLabelTimer = 0;
+    }
+  }
+
   if (isStartupLoading) {
     updateStartupLoading(dt);
     fog.update(dt);
@@ -480,6 +595,7 @@ function loop() {
   stepPhysics(physicsWorld, dt);
 
   if (!dead) {
+    autoEquipNearbyLockKey();
     for (const doorEntry of doorSystems) {
       doorEntry.system.update(dt);
     }

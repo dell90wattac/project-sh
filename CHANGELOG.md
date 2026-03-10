@@ -5,11 +5,27 @@ All notable changes to Project SH are documented here.
 ---
 
 ## [Session 15] — 2026-03-10
+### Added
+- **Universal lock/key foundation for puzzle gating** (`src/systems/lock.js`, `src/systems/itemRegistry.js`, `src/systems/door.js`, `src/main.js`)
+  - Added reusable `createLock()` system with per-lock required key IDs, locked state, unlock callback hook, and runtime update method
+  - Added dynamic key item typing (`key:<id>`) so keys can be created per puzzle without hardcoding every key in registry data
+  - Keys are configured as non-stackable, non-combinable, droppable items and can be held via equipped slot
+  - Added test key spawn near lobby ammo and wired first lock to `doorLobbyEast`
+
 ### Changed
 - **Flashlight beam tuning for more natural coverage** (`src/player/viewmodel.js`)
   - Moved flashlight light origin closer to the held flashlight model so emission aligns better with the lens
   - Softened beam edges and widened circumference using cone/penumbra tuning
   - Shifted beam color to subtle warm-white and rebalanced intensity/falloff for cleaner readability
+
+- **Door state flow now explicitly gated for locked interactions** (`src/systems/door.js`, `src/main.js`)
+  - Added explicit `interactionEnabled` gate in door system so doors can cleanly transition from non-interactable to swing-enabled
+  - Locked doors start with interaction disabled; unlock callback enables interaction at runtime
+  - Added fallback auto-equip behavior for nearby required keys so unlock tests are not blocked by UI equip misses
+
+- **Lock proximity made multi-floor safe** (`src/systems/lock.js`)
+  - Lock range now uses horizontal radius + vertical tolerance (cylindrical range), rather than raw 3D sphere distance
+  - Prevents accidental unlock through upper/lower floors while remaining reliable at door height
 
 ### Fixed
 - **Close-range flashlight beam pinching on walls and doors** (`src/player/viewmodel.js`)
@@ -17,8 +33,14 @@ All notable changes to Project SH are documented here.
   - Kept both lights locked to flashlight state so toggle behavior remains consistent
   - Reduced tiny-hotspot behavior when player stands very close to nearby surfaces
 
+- **Locked door staying inert after intended unlock path** (`src/systems/lock.js`, `src/systems/door.js`, `src/main.js`)
+  - Fixed lock range checks to accept runtime vector-like position sources
+  - Removed ambiguous lock-to-door coupling by wiring explicit unlock -> interaction-enable transition
+  - Exposed lock range helper for runtime integration and debugging
+
 ### Notes
 - Flashlight now uses a dual-cone setup (focused main beam + wide soft spill) for better near-field lighting response.
+- Lock/key flow is now reusable for non-door puzzle entities: lock owns key-matching + proximity logic; entity/system owns what "unlock" enables.
 
 ---
 

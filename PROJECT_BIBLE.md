@@ -55,6 +55,7 @@ Project SH/
 |  |  |- health.js
 |  |  |- inventory.js
 |  |  |- itemRegistry.js
+|  |  |- lock.js
 |  |  |- physics.js
 |  |  |- roomCulling.js
 |  |  |- weapons.js
@@ -103,11 +104,18 @@ Project SH/
 - 3x3 grid plus separate equipped slot.
 - Drag/drop movement, stacking, recipe-based combining, and context-menu actions.
 - Virtual cursor interaction remains pointer-lock-safe.
+- Registry supports dynamic key item IDs (`key:<id>`) for reusable puzzle locks without per-key hardcoding.
 
 ### World Items (src/systems/worldItems.js)
 - World pickups are room-owned and visibility-aware.
 - Hover raycast excludes hidden-room pickups.
 - Dropped pickups auto-spread to avoid overlap.
+- Key pickups use the same world item path as other inventory items (including drops).
+
+### Locks (src/systems/lock.js, src/main.js)
+- Reusable lock factory (`createLock`) provides required-key matching, locked state, unlock callback hook, and per-frame update.
+- Lock proximity uses cylindrical range (horizontal radius + vertical tolerance) for floor-aware behavior in multi-level maps.
+- Lock module is entity-agnostic: doors or future puzzle actors decide what unlock enables.
 
 ### Room Culling (src/systems/roomCulling.js, src/world/world.js)
 - Room graph visibility culling uses BFS from current room.
@@ -125,6 +133,8 @@ Project SH/
 - Door physics uses torque + lever arm with tuned close behavior (spring/damping/cushion/friction).
 - Player pushback resolves door overlap after movement.
 - Doors connected to hidden rooms reset to closed.
+- Door interaction is explicitly state-gated (`interactionEnabled`) so locked doors can be hard-disabled until unlock transitions occur.
+- Locked-door flow is now explicit: locked + interaction-disabled -> unlock callback -> interaction-enabled swing behavior.
 
 ### Hazards (src/world/world.js, src/main.js)
 - World exports hazard descriptors.
@@ -187,6 +197,7 @@ Project SH/
 | Room-graph visibility culling | Performance headroom with seamless traversal |
 | Shared-object room membership | Prevents pop-in on boundaries and shared partitions |
 | Door reset on room hide | Simpler state policy under culling |
+| Explicit lock -> interaction gate | Keeps puzzle gating deterministic and reusable across doors/non-door actors |
 | Item behavior in registry | Keeps inventory logic generic and extensible |
 | Health factory reuse | Same architecture for player and enemies |
 
