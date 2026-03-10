@@ -12,7 +12,33 @@ export function createViewModel(camera) {
 
   // ─── Materials ───────────────────────────────────────────────────────────
   const skin      = new THREE.MeshStandardMaterial({ color: 0xD4A574, roughness: 0.8 });
-  const gunMat    = new THREE.MeshStandardMaterial({ color: 0x0D0D0D, roughness: 0.25, metalness: 0.9 });
+  
+  // Create procedural pixel-art gun texture
+  const gunTextureCanvas = document.createElement('canvas');
+  gunTextureCanvas.width = 64;
+  gunTextureCanvas.height = 64;
+  const gunCtx = gunTextureCanvas.getContext('2d');
+  // Base dark metal color
+  gunCtx.fillStyle = '#1a1a1a';
+  gunCtx.fillRect(0, 0, 64, 64);
+  // Add pixel streaks for metallic worn look
+  gunCtx.fillStyle = '#2d2d2d';
+  for (let i = 0; i < 30; i++) {
+    const x = Math.random() * 64;
+    const y = Math.random() * 64;
+    const w = Math.random() * 3 + 1;
+    const h = Math.random() * 6 + 2;
+    gunCtx.fillRect(x, y, w, h);
+  }
+  // Highlight edges
+  gunCtx.fillStyle = '#3a3a3a';
+  gunCtx.fillRect(0, 0, 64, 2);
+  gunCtx.fillRect(0, 0, 2, 64);
+  const gunTexture = new THREE.CanvasTexture(gunTextureCanvas);
+  gunTexture.magFilter = THREE.NearestFilter;
+  gunTexture.minFilter = THREE.NearestFilter;
+  
+  const gunMat    = new THREE.MeshStandardMaterial({ map: gunTexture, roughness: 0.25, metalness: 0.9 });
   const gripMat   = new THREE.MeshStandardMaterial({ color: 0x1A1410, roughness: 0.95 });
   const flashMat  = new THREE.MeshStandardMaterial({ color: 0x1A1A1A, roughness: 0.4, metalness: 0.7 });
   const flashGrip = new THREE.MeshStandardMaterial({ color: 0x2D2416, roughness: 0.9 });
@@ -90,20 +116,64 @@ export function createViewModel(camera) {
   // Right fingers
   rightHandGroup.add(box(0.075, 0.04, 0.08, 0.02, 0.03, 0.06, skin));
 
-  // Pistol (right hand grips)
-  // Slide (upper barrel)
+  // Pistol (right hand grips) — Enhanced with more detail
+  // Slide (upper barrel area) — Now with more segmentation
   rightHandGroup.add(box(0.038, 0.052, 0.25, -0.01, 0.04, -0.02, gunMat));
-  // Frame (lower part)
+  // Slide serrations (textured detail on top)
+  rightHandGroup.add(box(0.035, 0.008, 0.20, -0.01, 0.065, -0.01, gunMat));
+  
+  // Frame (lower part) — More detailed
   rightHandGroup.add(box(0.042, 0.035, 0.18, -0.01, -0.02, 0.01, gunMat));
+  // Frame rail detail
+  rightHandGroup.add(box(0.038, 0.008, 0.16, -0.01, -0.038, 0.03, gunMat));
+  
   // Barrel tip
-  rightHandGroup.add(box(0.025, 0.025, 0.08, -0.01, 0.045, -0.18, gunMat));
-  // Grip (brown handle)
-  rightHandGroup.add(box(0.038, 0.12, 0.055, -0.01, -0.08, 0.08, gripMat));
-  // Trigger guard detail
-  rightHandGroup.add(box(0.035, 0.028, 0.025, -0.01, -0.01, 0.05, gunMat));
+  rightHandGroup.add(box(0.025, 0.025, 0.10, -0.01, 0.045, -0.18, gunMat));
+  
+  // Grip (brown handle) — Larger and more substantial
+  rightHandGroup.add(box(0.042, 0.14, 0.062, -0.01, -0.08, 0.08, gripMat));
+  // Grip texture ridges
+  rightHandGroup.add(box(0.038, 0.002, 0.055, -0.01, -0.06, 0.06, new THREE.MeshStandardMaterial({ color: 0x0D0D0A, roughness: 0.9 })));
+  rightHandGroup.add(box(0.038, 0.002, 0.055, -0.01, -0.03, 0.08, new THREE.MeshStandardMaterial({ color: 0x0D0D0A, roughness: 0.9 })));
+  
+  // Trigger guard detail — More defined
+  rightHandGroup.add(box(0.038, 0.035, 0.032, -0.01, -0.01, 0.04, gunMat));
+  
+  // Hammer area (back of slide)
+  rightHandGroup.add(box(0.020, 0.032, 0.020, 0.01, 0.042, 0.14, gunMat));
+  
+  // Sights (front and rear)
+  rightHandGroup.add(box(0.006, 0.028, 0.008, -0.01, 0.075, -0.22, gunMat)); // Front sight
+  rightHandGroup.add(box(0.006, 0.024, 0.008, -0.01, 0.068, 0.10, gunMat)); // Rear sight
+  
+  // Magazine well indicator
+  rightHandGroup.add(box(0.038, 0.010, 0.035, -0.01, -0.045, 0.03, gunMat));
 
   // Right forearm (from hand back toward player)
   rightHandGroup.add(box(0.075, 0.075, 0.35, 0.08, -0.08, 0.22, skin, 0.45, -0.2));
+
+  // ─── Muzzle Flash Light System ─────────────────────────────────────────────
+  // Muzzle flash spawns at gun barrel tip, emits directionally forward
+  const MUZZLE_FLASH_DURATION = 0.15; // seconds — how long the flash lasts (faster fade)
+  const MUZZLE_FLASH_INTENSITY_PEAK = 40; // peak brightness (SpotLight value) - more intense
+  const MUZZLE_FLASH_RANGE = 50; // light radius in meters
+  const MUZZLE_FLASH_ANGLE = Math.PI / 180 * 90; // 90-degree cone spread (more diffuse)
+  
+  // Create muzzle flash spotlight at barrel tip (positioned in right hand group local space)
+  // Barrel tip is at approximately (-0.01, 0.045, -0.18) in right hand coordinates, pointing in -Z direction
+  const muzzleFlashLight = new THREE.SpotLight(0xFFE5B4, 0, MUZZLE_FLASH_RANGE, MUZZLE_FLASH_ANGLE, 0.7);
+  muzzleFlashLight.decay = 1.8;
+  muzzleFlashLight.position.set(-0.01, 0.045, -0.18);
+  rightHandGroup.add(muzzleFlashLight);
+
+  // Create target for the muzzle flash light (points forward from barrel)
+  const muzzleFlashTarget = new THREE.Object3D();
+  muzzleFlashTarget.position.set(-0.01, 0.045, -50); // Far out in -Z direction
+  rightHandGroup.add(muzzleFlashTarget);
+  muzzleFlashLight.target = muzzleFlashTarget;
+
+  let muzzleFlashTimer = 0; // Time since flash was triggered (0 = not active)
+  let prevFireState = false; // Track previous frame's firing state to detect shot
 
   // ─── Sway & Bob State ─────────────────────────────────────────────────────
   const swayTarget  = new THREE.Vector2(0, 0);
@@ -113,6 +183,31 @@ export function createViewModel(camera) {
   let bobPhase = 0;
 
   function update(dt, isMoving, isSprinting, mouseDX, mouseDY, flashlightOn, gunState = {}) {
+    // ── Muzzle Flash System ──────────────────────────────────────────────
+    // Detect shot: isFiring transitions from false to true
+    const currentFireState = gunState.isFiring || false;
+    if (currentFireState && !prevFireState) {
+      // Shot just fired! Trigger muzzle flash
+      muzzleFlashTimer = MUZZLE_FLASH_DURATION;
+    }
+    prevFireState = currentFireState;
+
+    // Update muzzle flash fade
+    if (muzzleFlashTimer > 0) {
+      muzzleFlashTimer -= dt;
+      
+      // Calculate fade: full brightness at start, fade to zero
+      const fadeProgress = 1 - (muzzleFlashTimer / MUZZLE_FLASH_DURATION);
+      
+      // Non-linear fade for natural gunflash effect: quick bright peak, then fast fade
+      // Use cubic easing to fade faster at the end (quadratic would be softer)
+      const easeOutFade = fadeProgress * fadeProgress;
+      
+      muzzleFlashLight.intensity = MUZZLE_FLASH_INTENSITY_PEAK * (1 - easeOutFade);
+    } else {
+      muzzleFlashLight.intensity = 0;
+    }
+
     // ── Mouse sway (builds up over time, weapons lag behind look) ────────
     swayTarget.x += -mouseDX * 0.0008;
     swayTarget.y +=  mouseDY * 0.0008;
@@ -174,6 +269,9 @@ export function createViewModel(camera) {
     rightHandGroup.position.y = -0.1 + (swayCurrent.y + rightSwayOffset.y) * 0.3 + bobY + reloadLift;
     rightHandGroup.rotation.y = (swayCurrent.x + rightSwayOffset.x) * 0.35 + recoilKick * 2;
     rightHandGroup.rotation.x = -(swayCurrent.y + rightSwayOffset.y) * 0.25 + recoilKick * 3 + reloadRotation;
+    
+    // Update rightHandGroup matrix for world transforms (ensures muzzle flash light direction is correct)
+    rightHandGroup.updateMatrixWorld(true);
     
     // ── Flashlight on/off ───────────────────────────────────────────────
     flashlightLight.visible = flashlightOn;

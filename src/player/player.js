@@ -17,7 +17,7 @@ const MOUSE_SENS    = 0.002;
 export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, playerHealth = null) {
   // ─── Body / camera hierarchy ─────────────────────────────────────────────
   const body = new THREE.Group();
-  body.position.set(0, 1.2 + PLAYER_HEIGHT, 7);
+  body.position.set(0, 1.2 + PLAYER_HEIGHT, 4);
   scene.add(body);
 
   camera.position.set(0, 0, 0);
@@ -247,7 +247,7 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
   }
 
   function resetPosition() {
-    body.position.set(0, 1.2 + PLAYER_HEIGHT, 7);
+    body.position.set(0, 1.2 + PLAYER_HEIGHT, 4);
     velY = 0;
     velocity.set(0, 0, 0);
     onGround = false;

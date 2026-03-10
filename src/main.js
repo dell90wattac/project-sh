@@ -9,6 +9,7 @@ import { createHUD } from './ui/hud.js';
 import { createHealth } from './systems/health.js';
 import { createDamageEffects } from './ui/damageEffects.js';
 import { createWorldItems } from './systems/worldItems.js';
+import { createFog } from './systems/fog.js';
 
 // ─── Renderer ──────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -22,8 +23,8 @@ document.body.insertBefore(renderer.domElement, document.getElementById('ui-root
 
 // ─── Scene ─────────────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x111014);
-scene.fog = new THREE.FogExp2(0x111014, 0.035);
+scene.background = new THREE.Color(0x1A1510);
+scene.fog = new THREE.FogExp2(0x1A1510, 0.12);
 
 // ─── Camera ────────────────────────────────────────────────────────────────
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 100);
@@ -33,6 +34,7 @@ const physicsWorld = createPhysicsWorld();
 
 // ─── World ──────────────────────────────────────────────────────────────────
 const world = createWorld(scene, physicsWorld);
+const fog = createFog(scene);
 
 // ─── Inventory & Gun ───────────────────────────────────────────────────────
 const inventory = createInventory();
@@ -60,14 +62,14 @@ damageEffects.onReset(() => {
 // ─── World Items / Pickups ─────────────────────────────────────────────────
 const worldItems = createWorldItems(scene, camera, inventory);
 
-// Three full stacks of handgun ammo (27 each) on the floor near spawn
-worldItems.spawnPickup('ammo', 27, new THREE.Vector3(-1.5, 0.3, -2));
-worldItems.spawnPickup('ammo', 27, new THREE.Vector3(0, 0.3, -2));
-worldItems.spawnPickup('ammo', 27, new THREE.Vector3(1.5, 0.3, -2));
+// Three full stacks of handgun ammo (27 each) in front of desk
+worldItems.spawnPickup('ammo', 27, new THREE.Vector3(-1.5, 0.3, 1.5));
+worldItems.spawnPickup('ammo', 27, new THREE.Vector3(0, 0.3, 1.5));
+worldItems.spawnPickup('ammo', 27, new THREE.Vector3(1.5, 0.3, 1.5));
 
-// Healing items on the floor for testing
-worldItems.spawnPickup('healingA', 1, new THREE.Vector3(-1, 0.3, -3.5));
-worldItems.spawnPickup('healingB', 1, new THREE.Vector3(1, 0.3, -3.5));
+// Healing items behind the desk
+worldItems.spawnPickup('healingA', 1, new THREE.Vector3(-1, 0.3, -1.0));
+worldItems.spawnPickup('healingB', 1, new THREE.Vector3(1, 0.3, -1.0));
 
 // ─── Inventory UI (needs health + drop callback) ──────────────────────────
 const inventoryUI = createInventoryUI(inventory, playerHealth, {
@@ -97,60 +99,59 @@ inventoryUI.setToggleCallback((isOpen) => {
 });
 
 // ─── Chandeliers ───────────────────────────────────────────────────────────
-// Chains shortened for 5.5 m ceiling — bottom bulb at ~3.2 m, clear of head.
+// Sized for 5.5 m ceiling — bottom bulb at ~3.6 m, clearly visible.
 function createChandelier(x, y, z) {
   const group = new THREE.Group();
   // Main crown disc
   const base = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.1, 0.9, 0.35),
+    new THREE.CylinderGeometry(0.6, 0.5, 0.20),
     new THREE.MeshStandardMaterial({ color: 0x6A6050, roughness: 0.5, metalness: 0.6 })
   );
   group.add(base);
-  // Outer ring of 12 long chains
-  for (let i = 0; i < 12; i++) {
+  // Outer ring of 8 short chains
+  for (let i = 0; i < 8; i++) {
     const chain = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.025, 0.025, 3.0),
+      new THREE.CylinderGeometry(0.018, 0.018, 1.0),
       new THREE.MeshStandardMaterial({ color: 0x2A2418, roughness: 0.4, metalness: 0.8 })
     );
-    chain.position.set(Math.cos(i * Math.PI / 6) * 0.85, -1.5, Math.sin(i * Math.PI / 6) * 0.85);
+    chain.position.set(Math.cos(i * Math.PI / 4) * 0.52, -0.5, Math.sin(i * Math.PI / 4) * 0.52);
     group.add(chain);
   }
-  // Inner ring of 6 shorter arms
+  // Inner ring of 6 arms
   for (let i = 0; i < 6; i++) {
     const arm = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.04, 0.04, 1.2),
+      new THREE.CylinderGeometry(0.03, 0.03, 0.55),
       new THREE.MeshStandardMaterial({ color: 0x5A4A30, roughness: 0.4, metalness: 0.7 })
     );
-    arm.position.set(Math.cos(i * Math.PI / 3) * 0.45, -2.5, Math.sin(i * Math.PI / 3) * 0.45);
+    arm.position.set(Math.cos(i * Math.PI / 3) * 0.30, -1.1, Math.sin(i * Math.PI / 3) * 0.30);
     group.add(arm);
     // Candle-bulb at each arm tip
     const bulb = new THREE.Mesh(
-      new THREE.SphereGeometry(0.12, 8, 8),
+      new THREE.SphereGeometry(0.08, 8, 8),
       new THREE.MeshBasicMaterial({ color: 0xFFF8E0 })
     );
-    bulb.position.set(Math.cos(i * Math.PI / 3) * 0.45, -3.2, Math.sin(i * Math.PI / 3) * 0.45);
+    bulb.position.set(Math.cos(i * Math.PI / 3) * 0.30, -1.45, Math.sin(i * Math.PI / 3) * 0.30);
     group.add(bulb);
   }
   // Central hanging bulb
   const mainBulb = new THREE.Mesh(
-    new THREE.SphereGeometry(0.22, 10, 10),
+    new THREE.SphereGeometry(0.14, 10, 10),
     new THREE.MeshBasicMaterial({ color: 0xFFFBF0 })
   );
-  mainBulb.position.set(0, -3.3, 0);
+  mainBulb.position.set(0, -1.5, 0);
   group.add(mainBulb);
   // Light source
-  const light = new THREE.PointLight(0xFFEFCC, 5.5, 28);
-  light.position.set(0, -3.3, 0);
+  const light = new THREE.PointLight(0xFFEFCC, 4.5, 16);
+  light.position.set(0, -1.5, 0);
   group.add(light);
   group.position.set(x, y, z);
   return group;
 }
 
-// Hang chandeliers at Y=9 — lower into the visual field for compression
-scene.add(createChandelier( 0,  9,   0));
-scene.add(createChandelier(-8,  9, -10));
-scene.add(createChandelier( 8,  9,  10));
-scene.add(createChandelier( 0,  9, -20));
+// Hang chandeliers along center axis — entry, desk, transition
+scene.add(createChandelier( 0, 5.1,  0));
+scene.add(createChandelier( 0, 5.1,  6));
+scene.add(createChandelier( 0, 5.1, -4));
 
 // ─── Hazard Tick Damage ────────────────────────────────────────────────────
 const hazardTimers = {};
@@ -269,6 +270,7 @@ function loop() {
   inventoryUI.update(dt);
   hud.update(dt);
   damageEffects.update(dt);
+  fog.update(dt);
 
   renderer.render(scene, camera);
 }
