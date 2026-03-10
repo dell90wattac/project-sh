@@ -4,6 +4,44 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 10] — 2026-03-09
+### Changed
+- **Layout reorganization for coherent spatial flow** (`src/world/world.js`)
+  - **Staircases flush against walls** — eliminated 1.9 m gaps
+    - Left staircase: center X=-4 → **X=-5.9** (spans X=-7.0 to -4.8)
+    - Right staircase: center X=+4 → **X=+5.9** (spans X=+4.8 to +7.0)
+  - **Staircase start pushed back** — Z=-2 → **Z=-5** (into transition zone, `STAIR_START_Z` constant added)
+  - **Balcony flipped orientation** — now extends **backward** (Z=-11.4 to -13.8) overlooking main floor, not forward
+    - Front railing at Z=-11.4 spans center only (X=-4.8 to +4.8); gaps where stairs connect
+    - Newel posts at X=±4.8 (staircase-to-balcony junction); side rails along walls; back rail near Z=-13.8
+  - **Front desk repositioned to center** — Z=-4.0 → **Z=0.0** (visible from entry, centered in room)
+  - **Benches moved to front hall** — Z=-7.0 → **Z=+3.0** (between columns and entry, flanking central walkway)
+  - **Standing lamps follow benches** — Z=-6.0 → **Z=+4.2** (illuminate seating area)
+  - **Column Z positions shifted** — [+5, -1, -7] → **[+5, +1, -3]** (avoid staircase zones)
+  - **Wall sconce Z positions** — [5, 1, -3, -7] → **[8, 3, -2, -5]** (entry to staircase start)
+  - **Ceiling lights repositioned** — now above entry (Z=9), seating (Z=3), desk (Z=0), and transition zones (Z=±3)
+  - **Damage pillar moved** — X=1.5, Z=0 → **X=0, Z=-4** (transition zone, clear of desk)
+  - **Back-area floor added** — Z=-10 to -14 (under balcony overhang, prevents void when player looks underneath)
+
+- **Chandelier repositioning** (`src/main.js`)
+  - Repositioned along center axis: Z=[0, -5, -5] → **Z=[0, 6, -4]**
+  - Illuminates entry hall, desk area, and transition zone in a visual line
+
+- **Item spawn repositioning** (`src/main.js`)
+  - Ammo pickups: Z=-2.0 → **Z=+1.5** (in front of desk, immediately visible from entry)
+  - Healing items: Z=-3.5 → **Z=-1.0** (behind desk, encourages exploration)
+
+### Result
+The room now reads as a **grand RCPD/museum lobby** with clear spatial narrative:
+1. **Entry zone** (Z=+7 to +14) — elevated platform, descent
+2. **Front hall** (Z=+2 to +7) — open reception area with seating
+3. **Central zone** (Z=-2 to +2) — check-in desk with mid-level columns
+4. **Transition** (Z=-3 to -5) — back columns, hazard, lighting transition
+5. **Staircase zone** (Z=-5 to -11.4) — dual ascending staircases, flush to walls
+6. **Balcony** (Z=-11.4 to -13.8) — upper gallery with front and side railings
+
+---
+
 ## [Session 9] — 2026-03-09
 ### Changed
 - **Room dimensions dramatically compressed** (`src/world/world.js`)

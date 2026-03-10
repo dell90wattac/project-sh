@@ -141,13 +141,15 @@ Project SH/
 
 ## Current Environment
 - Compressed lobby — **14 m wide × 28 m deep × 5.5 m ceiling** (≈50×100 player-block units); dimensions in `src/world/world.js`
-- Entrance platform (Z +9..+14, Y=1.0) with 3-step descent to main floor
-- Two side staircases (X=±5.5, 8 steps) rising to full-width balcony at Y=2.5 (Z≈-7.9 to -14)
-- 3 column pairs (X=±3.0) creating nave + side aisles
-- Front desk (4.5 m, Z=-4), benches under balcony, water cooler in right aisle
-- 3 ceiling chandeliers with shortened chains (bottom at ≈3.3 m); 3 sconce pairs on side walls
-- One damage pillar hazard (placeholder enemy/hazard stand-in)
-- Starting loadout: handgun equipped, no ammo or items; pickups on the floor near spawn
+- **Entry zone** (Z +9..+14): Elevated platform with 3-step descent to main floor
+- **Front hall** (Z +2..+7): Open reception area; 2 benches with side tables flanking the walkway; standing lamps illuminate seating
+- **Central zone** (Z -2..+2): Front desk (4.5 m wide) positioned at Z=0, centered in room. Mid-level column pair (X=±3, Z=+1)
+- **Transition zone** (Z -3..-5): Back column pair (X=±3, Z=-3); one damage pillar hazard at center; wall sconces light the approach to stairs
+- **Staircase zone** (Z -5..-11.4): Dual side staircases flush against walls (left X=-7 to -4.8, right X=+4.8 to +7), ascending 8 steps with inner railings. Wall-side baseboard at X=±7, inner railing at X=±4.8
+- **Balcony** (Z -11.4..-13.8, Y=2.4): Upper gallery overlooking main floor; front railing spans center only (X=-4.8 to +4.8) with gaps where stairs connect; newel posts at X=±4.8; side rails along walls; back rail near back wall
+- **Lighting**: 3 chandeliers along center axis (Z=[0, 6, -4]); 3 ceiling point lights above entry, seating, and desk; 4 sconce pairs on side walls (Z=[8, 3, -2, -5])
+- **Pickups**: Ammo (3 stacks, 27 rounds each) in front of desk (Z=+1.5); healing items behind desk (Z=-1.0)
+- **Starting loadout**: Handgun equipped with no ammo; items available for pickup on floor
 
 ---
 
