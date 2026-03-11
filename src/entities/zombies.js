@@ -39,6 +39,68 @@ export function createEnemyContainer({ type = 'enemy', hp = 1, name = 'Enemy' } 
 }
 
 /**
+ * Attaches standard AI-ready components to a bare enemy object
+ * returned by archetype creators (shambler, guard, etc.).
+ * homeZone and aggroDepth should be set after calling this, or at spawn time.
+ */
+export function attachEnemyComponents(entity, options = {}) {
+  const moveSpeed = options.moveSpeed ?? 0.75;
+  const turnSpeed = options.turnSpeed ?? 2.2;
+  const homeZone = options.homeZone ?? 'lobby';
+  const aggroDepth = options.aggroDepth ?? 2;
+
+  if (!entity.state) entity.state = {};
+  if (!entity.components) entity.components = {};
+
+  entity.components.visual = entity.components.visual || {
+    style: 'ps1-pixel',
+    rigProfile: {
+      skeletonType: 'humanoid-zombie',
+      rootBone: 'hips',
+      facingAxis: '-z',
+    },
+  };
+
+  entity.components.animation = entity.components.animation || {
+    state: 'idle',
+    states: ['idle', 'walk', 'attack', 'hit', 'death'],
+    clips: {},
+    mixer: null,
+  };
+
+  entity.components.pathing = {
+    mode: 'none',
+    moveSpeed,
+    turnSpeed,
+    homeZone,
+    aggroDepth,
+    targetPosition: null,
+    desiredVelocity: new THREE.Vector3(),
+  };
+
+  entity.components.controller = entity.components.controller || {
+    time: 0,
+    update(dt) {
+      this.time += dt;
+      entity.mesh.position.y += Math.sin(this.time * 1.25) * 0.0001; // micro idle bob
+    },
+  };
+
+  entity.components.health = {
+    current: entity.hp,
+    max: entity.hp,
+    dead: false,
+  };
+
+  entity.components.knockback = entity.components.knockback || {
+    velocity: new THREE.Vector3(),
+    active: false,
+  };
+
+  return entity;
+}
+
+/**
  * Pixel art texture generator for zombie faces.
  * Creates a 32x32 canvas texture with a base color and optional detail painting.
  */
@@ -666,7 +728,7 @@ export function createLobbyZombieSentry(
 ) {
   const entity = createEnemyContainer({
     type: 'zombieSentry',
-    hp: 4,
+    hp: 15,
     name: 'ZombieSentry',
   });
 
@@ -741,6 +803,8 @@ export function createLobbyZombieSentry(
     mode: 'none',
     moveSpeed: 0.75,
     turnSpeed: 2.2,
+    homeZone: 'lobby',   // overridden at spawn time
+    aggroDepth: 2,        // chase through N connected rooms
     targetPosition: null,
     desiredVelocity: new THREE.Vector3(),
   };

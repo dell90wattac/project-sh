@@ -25,6 +25,7 @@ Goal: preserve one coherent system architecture as content scales.
 - Ammo tuning source of truth: `src/systems/ammoTypes.js`
 - Health model: `src/systems/health.js`
 - Enemy archetype contract: `src/entities/zombies.js`
+- Enemy AI decision-making (state machine, pathing): `src/systems/enemyAI.js`
 - Enemy runtime orchestration and collider sync: `src/systems/enemyRuntime.js`
 - Fog presentation: `src/systems/fog.js`
 - UI is presentation-only: `src/ui/*`
@@ -42,6 +43,11 @@ Rule: extend the existing owner system first; do not create parallel authority f
 - Enemy component keys remain stable: `visual`, `animation`, `pathing`, `controller`, `collision`, `health`, `knockback`.
 - Reserved enemy runtime states: `idle`, `walk`, `attack`, `hit`, `death`.
 - Enemy collision uses `components.collision.syncFromEntity` after controller/knockback updates.
+- Enemy AI decision-making lives in `src/systems/enemyAI.js`; runtime orchestration (movement application, knockback, collision) stays in `src/systems/enemyRuntime.js`.
+- AI states: `idle` → `wander` → `chase` → `return`. Transitions are zone-driven (room-graph BFS).
+- Each enemy's `pathing.homeZone` (room ID) and `pathing.aggroDepth` (hop count) define territorial behavior.
+- Post-knockback recovery: `enemyRuntime` notifies `enemyAI.notifyKnockbackEnd()` so enemies re-evaluate immediately after shockwave displacement.
+- `attachEnemyComponents()` in `entities/zombies.js` is the canonical way to equip bare archetype meshes with AI-ready component sets.
 - Each room must have a unique zone identifier (fog + overlay usage).
 - Camera is parented to player body; use `camera.getWorldPosition()` / `camera.getWorldDirection()` for world-space weapon math.
 - Dynamic shadows are budgeted runtime behavior, not default-everywhere visuals.
@@ -66,7 +72,9 @@ Rule: extend the existing owner system first; do not create parallel authority f
   4. Shockwave shake is automatic via `box()`/`decor()` pipeline — no manual registration.
 - Add/modify enemy archetypes:
   1. Archetype data in `entities/zombies.js`.
-  2. Runtime/state/collision integration in `systems/enemyRuntime.js`.
+  2. Call `attachEnemyComponents(entity, { homeZone, aggroDepth, moveSpeed })` for AI-ready setup.
+  3. Runtime/state/collision integration in `systems/enemyRuntime.js`.
+  4. Register with `enemyAI.register(entity)` in `main.js`.
 
 ## Static Prop Shake Contract (Keep Consistent)
 - Static props built through `box`/`decor` in `world.js` are auto-classified for canned shake.

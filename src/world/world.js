@@ -1869,6 +1869,11 @@ export function createWorld(scene, physicsWorld) {
     };
   }
 
+  function getRoomBounds(roomId) {
+    const room = roomMap.get(roomId);
+    return room ? room.bounds : null;
+  }
+
   function getRoomAtPosition(position, padding = 0.0, preferredRoomId = null) {
     const roomMatches = [];
     for (const room of roomMap.values()) {
@@ -1987,6 +1992,7 @@ export function createWorld(scene, physicsWorld) {
     getRoomIds,
     getRoomConnections,
     getRoomMeta,
+    getRoomBounds,
     getRoomAtPosition,
     setRoomVisibility,
     setRoomVisibilityProgressive,

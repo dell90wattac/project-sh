@@ -17,6 +17,8 @@ import { createRoomCulling } from './systems/roomCulling.js';
 import { createPerfOverlay } from './ui/perfOverlay.js';
 import { createChandelierMotionSystem } from './systems/chandelierMotion.js';
 import { createEnemyRuntime } from './systems/enemyRuntime.js';
+import { createEnemyAI } from './systems/enemyAI.js';
+import { attachEnemyComponents } from './entities/zombies.js';
 import { createShockwaveSystem } from './systems/shockwave.js';
 import { createShockwaveFx } from './systems/shockwaveFx.js';
 import { getAmmoConfigForItem } from './systems/ammoTypes.js';
@@ -252,6 +254,20 @@ const roomCulling = createRoomCulling(world, player, worldItems, {
   boundaryPadding: 0.2,
 });
 
+// ─── Enemy AI ─────────────────────────────────────────────────────────────
+const enemyAI = createEnemyAI(world, roomCulling);
+enemyRuntime.setEnemyAI(enemyAI);
+
+// Attach full AI components to all enemies and register with AI system
+const worldEnemiesForAI = world.getEnemies();
+for (const enemy of worldEnemiesForAI) {
+  // Attach standard components if missing (bare archetype entities)
+  if (!enemy.components.pathing) {
+    attachEnemyComponents(enemy, { homeZone: 'lobby', aggroDepth: 2 });
+  }
+  enemyAI.register(enemy);
+}
+
 function getWorldRoomCount() {
   if (!world.getRoomIds) return 0;
   const roomIds = world.getRoomIds();
@@ -424,15 +440,17 @@ for (const enemy of worldEnemies) {
   shockwave.registerTarget('enemy', {
     getPosition() { return enemy.mesh.position; },
     applyForce(forceDir, magnitude) {
+      // Dead enemies don't react to shockwaves
+      if (enemy.components.health?.dead) return;
       const kb = enemy.components.knockback;
       kb.velocity.addScaledVector(forceDir, magnitude * 0.5);
       kb.active = true;
     },
-    takeDamage(amount) {
-      if (enemy.components.health) {
-        enemy.components.health.current = Math.max(0, enemy.components.health.current - amount);
-        if (enemy.components.health.current <= 0) enemy.components.health.dead = true;
-      }
+    takeDamage(/* amount */) {
+      // TODO: enemy damage system — disabled for AI testing
+      // if (!enemy.components.health || enemy.components.health.dead) return;
+      // enemy.components.health.current = Math.max(0, enemy.components.health.current - amount);
+      // if (enemy.components.health.current <= 0) enemy.components.health.dead = true;
     },
   });
 }
