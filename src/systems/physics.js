@@ -68,19 +68,22 @@ export function syncMeshToBody(mesh, body) {
 }
 
 // ─── Raycast Helper ────────────────────────────────────────────────────────
-// Simple raycast for weapons/detection
+// Simple raycast for weapons/detection using Cannon-ES raycastClosest
 export function raycast(world, from, to) {
   const result = new CANNON.RaycastResult();
-  const ray = new CANNON.Ray(from, to);
-  ray.result = result;
-  
-  world.getShapeAtWorldPoint(to, result);
-  
-  if (result.body) {
+
+  const hit = world.raycastClosest(
+    new CANNON.Vec3(from.x, from.y, from.z),
+    new CANNON.Vec3(to.x, to.y, to.z),
+    {},
+    result,
+  );
+
+  if (hit) {
     return {
       body: result.body,
       point: result.hitPointWorld,
-      distance: result.hitPointWorld.distanceTo(from)
+      distance: result.distance,
     };
   }
   return null;

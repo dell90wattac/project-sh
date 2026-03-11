@@ -12,6 +12,7 @@ export function createWorld(scene, physicsWorld) {
   const hazards = [];
   const doors = [];
   const enemies = [];
+  const shakeables = [];
   const roomMap = new Map();
   const roomVisibility = new Map();
   const roomTransitionCursors = new Map();
@@ -475,9 +476,9 @@ export function createWorld(scene, physicsWorld) {
 
   // ─── Front Desk (centered at Z=0) ────────────────────────────────────────
   // Main counter body
-  box(4.5, 1.1, 0.7, 0, 0.55, 0.0, M.desk);
+  shakeables.push(box(4.5, 1.1, 0.7, 0, 0.55, 0.0, M.desk));
   // Marble counter top
-  box(4.7, 0.08, 0.9, 0, 1.12, 0.05, M.deskTop);
+  shakeables.push(box(4.7, 0.08, 0.9, 0, 1.12, 0.05, M.deskTop));
   // Back panel (tall dark wood)
   box(4.5, 2.0, 0.2, 0, 1.0, -0.75, M.desk);
   // Raised center check-in tower
@@ -518,7 +519,7 @@ export function createWorld(scene, physicsWorld) {
   }
 
   // Chair (left of center)
-  box(0.60, 0.08, 0.60, -1.0, 0.52, 0.1, M.bench);       // seat
+  shakeables.push(box(0.60, 0.08, 0.60, -1.0, 0.52, 0.1, M.bench));       // seat
   decor(0.06, 0.42, 0.60, -1.0, 0.75, -0.16, M.bench);   // back
   decor(0.05, 0.50, 0.05, -1.30, 0.25, 0.38, M.lamp);    // leg FL
   decor(0.05, 0.50, 0.05, -0.70, 0.25, 0.38, M.lamp);    // leg FR
@@ -526,7 +527,7 @@ export function createWorld(scene, physicsWorld) {
   decor(0.05, 0.50, 0.05, -0.70, 0.25, -0.18, M.lamp);   // leg BR
 
   // Filing cabinet behind desk (left side)
-  box(0.46, 1.0, 0.58, -1.7, 0.50, -0.55, M.desk);
+  shakeables.push(box(0.46, 1.0, 0.58, -1.7, 0.50, -0.55, M.desk));
   decor(0.40, 0.05, 0.02, -1.7, 0.65, -0.28, M.metal);  // drawer 1 handle
   decor(0.40, 0.05, 0.02, -1.7, 0.95, -0.28, M.metal);  // drawer 2 handle
 
@@ -613,7 +614,7 @@ export function createWorld(scene, physicsWorld) {
 
   // ─── Benches (front hall, between columns and walls) ─────────────────────
   // Left bench
-  box(2.0, 0.10, 0.70, -4.5, 0.52, 4.5, M.bench);           // seat
+  shakeables.push(box(2.0, 0.10, 0.70, -4.5, 0.52, 4.5, M.bench));           // seat
   box(0.10, 0.50, 0.70, -5.5, 0.25, 4.5, M.bench);          // left leg
   box(0.10, 0.50, 0.70, -3.5, 0.25, 4.5, M.bench);          // right leg
   box(0.10, 0.50, 0.70, -4.5, 0.75, 4.12, M.bench);         // back
@@ -623,12 +624,12 @@ export function createWorld(scene, physicsWorld) {
   decor(0.20, 0.03, 0.56, -4.2, 0.54, 4.65, M.paper);       // magazine 2
 
   // Left side table
-  box(0.50, 0.45, 0.48, -5.9, 0.22, 4.5, M.bench);
-  box(0.56, 0.05, 0.54, -5.9, 0.47, 4.5, M.bench);
+  shakeables.push(box(0.50, 0.45, 0.48, -5.9, 0.22, 4.5, M.bench));
+  shakeables.push(box(0.56, 0.05, 0.54, -5.9, 0.47, 4.5, M.bench));
   decor(0.20, 0.03, 0.56, -5.9, 0.51, 4.5, M.magazine);
 
   // Right bench
-  box(2.0, 0.10, 0.70, 4.5, 0.52, 3.0, M.bench);
+  shakeables.push(box(2.0, 0.10, 0.70, 4.5, 0.52, 3.0, M.bench));
   box(0.10, 0.50, 0.70, 3.5, 0.25, 3.0, M.bench);
   box(0.10, 0.50, 0.70, 5.5, 0.25, 3.0, M.bench);
   box(0.10, 0.50, 0.70, 4.5, 0.75, 2.62, M.bench);
@@ -638,8 +639,8 @@ export function createWorld(scene, physicsWorld) {
   decor(0.20, 0.03, 0.56, 4.8, 0.54, 3.15, M.paper);
 
   // Right side table
-  box(0.50, 0.45, 0.48, 5.9, 0.22, 3.0, M.bench);
-  box(0.56, 0.05, 0.54, 5.9, 0.47, 3.0, M.bench);
+  shakeables.push(box(0.50, 0.45, 0.48, 5.9, 0.22, 3.0, M.bench));
+  shakeables.push(box(0.56, 0.05, 0.54, 5.9, 0.47, 3.0, M.bench));
   decor(0.20, 0.03, 0.56, 5.9, 0.51, 3.0, M.magazine);
 
   // ─── Standing Lamps ──────────────────────────────────────────────────────
@@ -1446,10 +1447,12 @@ export function createWorld(scene, physicsWorld) {
     colliders,
     hazards,
     enemies,
+    shakeables,
     door: primaryDoorRef.door,
     doors,
     update: () => {},
     getEnemies: () => enemies,
+    getShakeables: () => shakeables,
     getRoomIds,
     getRoomConnections,
     getRoomMeta,

@@ -35,14 +35,21 @@ export function createGun(inventory, physicsWorld, camera) {
       currentMag -= 1;
       fireRateCooldown = FIRE_RATE;
 
-      // Perform hitscan raycast from camera
-      const rayFrom = camera.position.clone();
-      const rayDir = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+      // Perform hitscan raycast from camera (world space, camera is parented to player body)
+      const rayFrom = new THREE.Vector3();
+      camera.getWorldPosition(rayFrom);
+      const rayDir = new THREE.Vector3(0, 0, -1);
+      camera.getWorldDirection(rayDir);
       const rayTo = rayFrom.clone().addScaledVector(rayDir, 100); // 100m range
 
       const hitInfo = raycast(physicsWorld, rayFrom, rayTo);
 
-      return { success: true, hitInfo };
+      return {
+        success: true,
+        hitInfo,
+        shockwaveOrigin: rayFrom,
+        shockwaveDirection: rayDir,
+      };
     },
 
     // Initiate reload. Discards remaining magazine ammo.

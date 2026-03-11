@@ -51,7 +51,7 @@ export function createPerfOverlay() {
       `room ${stats.currentRoomLabel ?? stats.currentRoomId ?? '-'}`,
       `zone ${stats.currentZone ?? '-'}`,
       `calls ${stats.drawCalls ?? '-'}  tris ${stats.triangles ?? '-'}`,
-      'F3 hide/show',
+      'session 20.3 | F3 hide/show',
     ];
 
     panel.textContent = lines.join('\n');

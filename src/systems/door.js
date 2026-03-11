@@ -205,6 +205,13 @@ export function createDoorSystem(door, player, camera, options = {}) {
     door.pivot.rotation.y = 0;
   }
 
+  /** Apply an external torque (e.g. from a shockwave). Units: N·m */
+  function applyExternalTorque(torque) {
+    const swingEnabled = interactionEnabled && !isLocked();
+    if (!swingEnabled) return;
+    angularVelocity += torque / DOOR_I;
+  }
+
   return {
     update,
     getInteraction,
@@ -212,5 +219,6 @@ export function createDoorSystem(door, player, camera, options = {}) {
     resetToClosed,
     setInteractionEnabled,
     isInteractionEnabled,
+    applyExternalTorque,
   };
 }

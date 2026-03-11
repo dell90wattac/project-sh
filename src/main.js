@@ -17,6 +17,8 @@ import { createRoomCulling } from './systems/roomCulling.js';
 import { createPerfOverlay } from './ui/perfOverlay.js';
 import { createChandelierMotionSystem } from './systems/chandelierMotion.js';
 import { createEnemyRuntime } from './systems/enemyRuntime.js';
+import { createShockwaveSystem } from './systems/shockwave.js';
+import { AMMO_TYPES } from './systems/ammoTypes.js';
 
 // ─── Renderer ──────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -328,6 +330,81 @@ addLobbyChandelier(0, 5.1, -4, 3);
 
 const chandelierMotion = createChandelierMotionSystem(lobbyChandeliers);
 
+// ─── Shockwave System ──────────────────────────────────────────────────────
+const shockwave = createShockwaveSystem();
+
+// Register doors as shockwave targets
+const _doorPivotPos = new THREE.Vector3();
+const _doorNormalW = new THREE.Vector3();
+const _doorForceDir = new THREE.Vector3();
+
+for (const doorEntry of doorSystems) {
+  const door = doorEntry.door;
+  shockwave.registerTarget('door', {
+    getPosition() {
+      // Use center of door panel as target position
+      door.pivot.getWorldPosition(_doorPivotPos);
+      _doorPivotPos.y += door.height * 0.5;
+      return _doorPivotPos;
+    },
+    applyForce(forceDir, magnitude) {
+      // Compute torque: cross(doorNormal, forceDir).y gives torque sign
+      const interaction = doorEntry.system.getInteraction();
+      _doorNormalW.copy(interaction.doorNormal);
+      _doorForceDir.copy(forceDir);
+      const cross = _doorNormalW.x * _doorForceDir.z - _doorNormalW.z * _doorForceDir.x;
+      const torqueSign = Math.sign(cross);
+      const leverArm = door.width * 0.5;
+      doorEntry.system.applyExternalTorque(torqueSign * magnitude * leverArm);
+    },
+  });
+}
+
+// Register chandeliers as shockwave targets
+for (let i = 0; i < lobbyChandeliers.length; i++) {
+  const chandelierGroup = lobbyChandeliers[i].group;
+  const idx = i;
+  shockwave.registerTarget('chandelier', {
+    getPosition() { return chandelierGroup.position; },
+    applyForce(forceDir, magnitude) {
+      chandelierMotion.applyImpulse(idx, forceDir.x * magnitude * 0.15, forceDir.z * magnitude * 0.15);
+    },
+  });
+}
+
+// Register enemies as shockwave targets
+const worldEnemies = world.getEnemies();
+for (const enemy of worldEnemies) {
+  if (!enemy.components.knockback) {
+    enemy.components.knockback = { velocity: new THREE.Vector3(), active: false };
+  }
+  shockwave.registerTarget('enemy', {
+    getPosition() { return enemy.mesh.position; },
+    applyForce(forceDir, magnitude) {
+      const kb = enemy.components.knockback;
+      kb.velocity.addScaledVector(forceDir, magnitude * 0.5);
+      kb.active = true;
+    },
+    takeDamage(amount) {
+      if (enemy.components.health) {
+        enemy.components.health.current = Math.max(0, enemy.components.health.current - amount);
+        if (enemy.components.health.current <= 0) enemy.components.health.dead = true;
+      }
+    },
+  });
+}
+
+// Register shakeable furniture
+const worldShakeables = world.getShakeables();
+for (const mesh of worldShakeables) {
+  shockwave.registerTarget('shakeable', {
+    getPosition() { return mesh.position; },
+    applyForce(_forceDir, magnitude) {
+      shockwave.shakeObject(mesh, magnitude * 0.3);
+    },
+  });
+}
+
 // ─── Hazard Tick Damage ────────────────────────────────────────────────────
 const hazardTimers = {};
 
@@ -575,14 +652,18 @@ function loop() {
       gun.reload();
     }
 
-    // Gun fire (left-click)
+    // Gun fire (left-click) — triggers shockwave
     if (player.keys['MouseLeft'] && !inventoryUI.isOpen()) {
-      gun.fire();
+      const fireResult = gun.fire();
+      if (fireResult.success) {
+        shockwave.fire(fireResult.shockwaveOrigin, fireResult.shockwaveDirection, AMMO_TYPES.standard);
+      }
     }
   }
 
   // ─── Hazard tick damage ─────────────────────────────────────────────────
   updateHazards(dt);
+  shockwave.update(dt);
   chandelierMotion.update(dt);
 
   inventoryUI.update(dt);

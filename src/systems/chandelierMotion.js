@@ -86,6 +86,9 @@ export function createChandelierMotionSystem(chandeliers, options = {}) {
         armData,
         bulbData,
         mainBulbData,
+        maxSwingOverride: maxSwing,
+        overrideDecayTimer: 0,
+        overrideDecayDuration: 2.0,
       });
     }
   }
@@ -114,8 +117,16 @@ export function createChandelierMotionSystem(chandeliers, options = {}) {
       inst.angleX += inst.velX * frameDt;
       inst.angleZ += inst.velZ * frameDt;
 
-      inst.angleX = Math.max(-maxSwing, Math.min(maxSwing, inst.angleX));
-      inst.angleZ = Math.max(-maxSwing, Math.min(maxSwing, inst.angleZ));
+      // Dynamic max swing: use override if active, otherwise default
+      let effectiveMaxSwing = maxSwing;
+      if (inst.overrideDecayTimer > 0) {
+        inst.overrideDecayTimer -= frameDt;
+        const blend = Math.max(0, inst.overrideDecayTimer / inst.overrideDecayDuration);
+        effectiveMaxSwing = maxSwing + (inst.maxSwingOverride - maxSwing) * blend;
+      }
+
+      inst.angleX = Math.max(-effectiveMaxSwing, Math.min(effectiveMaxSwing, inst.angleX));
+      inst.angleZ = Math.max(-effectiveMaxSwing, Math.min(effectiveMaxSwing, inst.angleZ));
 
       // Secondary parts softly follow swing with their own damping.
       const targetLagX = inst.angleX * partFollow;
@@ -170,7 +181,19 @@ export function createChandelierMotionSystem(chandeliers, options = {}) {
     }
   }
 
+  /** Apply an external impulse to a chandelier (e.g. from a shockwave). */
+  function applyImpulse(index, impulseX, impulseZ) {
+    if (index < 0 || index >= instances.length) return;
+    const inst = instances[index];
+    inst.velX += impulseX;
+    inst.velZ += impulseZ;
+    inst.maxSwingOverride = 0.4;
+    inst.overrideDecayDuration = 2.0;
+    inst.overrideDecayTimer = 2.0;
+  }
+
   return {
     update,
+    applyImpulse,
   };
 }

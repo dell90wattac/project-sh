@@ -39,6 +39,14 @@ export function createEnemyRuntime(world, player) {
         });
       }
 
+      // Process shockwave knockback
+      const kb = enemy.components.knockback;
+      if (kb && kb.active) {
+        enemy.mesh.position.addScaledVector(kb.velocity, dt);
+        kb.velocity.multiplyScalar(Math.pow(0.1, dt)); // exponential friction decay
+        if (kb.velocity.lengthSq() < 0.01) kb.active = false;
+      }
+
       if (collision && typeof collision.syncFromEntity === 'function') {
         collision.syncFromEntity(enemy);
       }

@@ -23,6 +23,8 @@ Primary goal for code changes: preserve one coherent architecture as systems sca
 - Inventory state and item definitions: `src/systems/inventory.js`, `src/systems/itemRegistry.js`
 - World pickup lifecycle: `src/systems/worldItems.js`
 - Combat/weapon state: `src/systems/weapons.js`
+- Shockwave force distribution and furniture shake: `src/systems/shockwave.js`
+- Ammo type definitions (shockwave profiles): `src/systems/ammoTypes.js`
 - Health state model: `src/systems/health.js`
 - Enemy runtime orchestration (controller + animation state plumbing + collider sync): `src/systems/enemyRuntime.js`
 - Enemy archetype authoring contracts (visual profile, animation states, pathing config, health defaults): `src/entities/zombies.js`
@@ -37,13 +39,18 @@ If adding a feature, extend the existing owner system first. Do not create paral
 - Room tracking resolves the player's current room each frame; visibility culling is currently disabled (all rooms always visible).
 - Doors support explicit interaction gating; lock flow controls when interaction is enabled.
 - Doors support rotated placement via `hingeRotY` parameter in `addLinkedDoor`; non-zero rotation wraps the pivot in a parent group so door physics inherits world orientation transparently.
+- Doors expose `applyExternalTorque(torque)` for shockwave and future force-based interactions without requiring player proximity.
 - Locking is entity-agnostic and key-driven (`key:<id>` pattern via registry/inventory path).
 - Pointer lock + fallback input mode must continue to work with inventory and interaction UI.
 - Dynamic shadows are budgeted as an orchestrated runtime concern: prefer one primary gameplay shadow caster, keep secondary effects non-shadowed by default, and gate extra casters behind explicit profiling/toggle paths.
-- Enemy entities are component-driven and must keep stable keys for future upgrades: `visual`, `animation`, `pathing`, `controller`, `collision`, `health`.
+- Enemy entities are component-driven and must keep stable keys for future upgrades: `visual`, `animation`, `pathing`, `controller`, `collision`, `health`, `knockback`.
 - Current enemy runtime state machine names are reserved now and must remain compatible: `idle`, `walk`, `attack`, `hit`, `death`.
 - Enemy collision uses explicit component sync (`components.collision.syncFromEntity`) so static and future moving/pathing enemies share one update path.
+- Enemy knockback is processed between controller update and collision sync; the `knockback` component is initialized lazily by the shockwave system.
 - Each room has a unique zone identifier used by fog and perf overlay; new rooms must define their own zone rather than sharing a generic one.
+- Shockwave system uses a decoupled target registry — systems register themselves as shockwave targets; shockwave.js does not import door/chandelier/enemy modules.
+- Ammo types are data-driven. Adding a new ammo type requires only a new entry in `AMMO_TYPES` — no code changes in the shockwave system or weapons system.
+- Camera is parented to player body group; weapon systems must use `camera.getWorldPosition()` / `camera.getWorldDirection()` for world-space coordinates, never `camera.position` directly.
 
 ## Enemy Runtime Guidance
 - Register enemies in world ownership (`world.enemies` / `world.getEnemies`) so non-render systems can consume them without scene traversal.
@@ -87,11 +94,21 @@ Current depth target by system type:
 - All rooms are always visible (no culling). Performance is sustained at 144 FPS with current mesh count (~162 meshes / 11 rooms).
 - Existing systems are already wired for multi-room expansion; scale by extending world descriptors and graph links.
 
+## Shockwave System Guidance
+- The shockwave is the core weapon mechanic. Guns fire shockwaves, not bullets. Different ammo types produce different shockwave profiles.
+- The shockwave system (`src/systems/shockwave.js`) owns force distribution and furniture shake. It does not own target-specific behavior — each target system handles its own response to force.
+- To make any world object react to shockwaves: (1) push it to `world.shakeables` for canned rattle, or (2) register it as a shockwave target via `shockwave.registerTarget(type, { getPosition, applyForce, takeDamage? })` for custom behavior.
+- Doors respond via `applyExternalTorque`; chandeliers via `applyImpulse`; enemies via knockback velocity + health damage; furniture via position shake. Each uses its own existing simulation — no new physics bodies were added.
+- Ammo types (`src/systems/ammoTypes.js`) are the sole source of shockwave tuning. Do not hardcode force/damage/radius values elsewhere.
+- Phase 2 (debris: small flyable objects with lightweight custom physics) and Phase 3 (visual ring effect, camera shake, per-ammo recoil) are designed but not yet implemented.
+
 ## Path Forward (Code-Altering Priorities)
-1. Expand room graph content using existing room registration and graph link contracts, not custom per-room logic.
-2. Add offscreen enemy simulation using room graph distance from player (lightweight when far, full behavior when near).
-3. Introduce audio as a system-layer concern that subscribes to gameplay events (doors, weapons, footsteps, hazards), not ad-hoc calls spread across files.
-4. If performance becomes a concern at larger scale (~44+ rooms), investigate `THREE.Layers`-based culling or per-room static geometry merging before reverting to `visible` flag toggling.
+1. **Shockwave Phase 2**: Debris system — small world objects (pencils, papers, magazines) fly off surfaces with lightweight custom physics (no Cannon-ES). Cap at ~30 active debris objects.
+2. **Shockwave Phase 3**: Visual polish — expanding ring mesh effect, camera shake, per-ammo-type recoil scaling in viewmodel.
+3. Expand room graph content using existing room registration and graph link contracts, not custom per-room logic.
+4. Add offscreen enemy simulation using room graph distance from player (lightweight when far, full behavior when near).
+5. Introduce audio as a system-layer concern that subscribes to gameplay events (doors, weapons, footsteps, hazards), not ad-hoc calls spread across files.
+6. If performance becomes a concern at larger scale (~44+ rooms), investigate `THREE.Layers`-based culling or per-room static geometry merging before reverting to `visible` flag toggling.
 
 ## Change Discipline For Agents
 - Update `CHANGELOG.md` every working session.

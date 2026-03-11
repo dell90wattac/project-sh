@@ -4,6 +4,76 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 20] — 2026-03-11
+### Added
+- **Shockwave weapon system — core mechanic** (`src/systems/shockwave.js`, `src/systems/ammoTypes.js`)
+  - Guns now fire shockwaves instead of bullets; this is the central gameplay gimmick
+  - Created `createShockwaveSystem()` with a decoupled target registry pattern — doors, chandeliers, enemies, and furniture register as shockwave targets without the shockwave system importing their modules
+  - Shockwave shape supports three modes per ammo type: `cone` (directional), `sphere` (omnidirectional), and `hybrid` (cone + weaker spherical splash)
+  - Force calculation uses configurable distance falloff: `baseForce × (1 - dist/radius)^exponent`
+  - Cone check via dot product against fire direction with configurable half-angle
+  - Built-in furniture shake manager: decaying sinusoidal position rattle with per-mesh intensity, duration, and automatic position restoration
+
+- **Data-driven ammo type definitions** (`src/systems/ammoTypes.js`)
+  - Each ammo type defines a complete shockwave profile: shape, radius, cone angle, force, damage, falloff exponent, splash multiplier, and visual config
+  - `standard` ammo configured as a 45° directional cone, 5m radius, inverse-square falloff
+  - System designed for single weapon (handgun) with multiple ammo types swappable at runtime
+  - Adding a new ammo type requires only a new entry in `AMMO_TYPES` — no code changes
+
+- **Door shockwave response** (`src/systems/door.js`)
+  - Added `applyExternalTorque(torque)` method that injects force directly into the existing angular velocity model
+  - Shockwave computes torque from force direction vs door normal (cross product for torque sign) × lever arm
+  - Locked doors are immune; unlocked doors swing proportional to shockwave strength and proximity
+  - Uses identical physics path as player contact push — no new simulation infrastructure
+
+- **Chandelier shockwave response** (`src/systems/chandelierMotion.js`)
+  - Added `applyImpulse(index, impulseX, impulseZ)` method that injects velocity into the existing pendulum simulation
+  - Added dynamic max swing override system: shockwave temporarily raises swing clamp from 0.075 to 0.4 radians, decaying back over 2 seconds
+  - Prevents the ambient swing clamp from eating dramatic shockwave-driven swings
+
+- **Enemy knockback and damage** (`src/systems/enemyRuntime.js`, `src/main.js`)
+  - Added knockback velocity processing in enemy runtime update loop (between controller update and collision sync)
+  - Knockback uses exponential friction decay (`Math.pow(0.1, dt)`) for natural deceleration
+  - Auto-deactivates when velocity falls below threshold
+  - Shockwave applies damage via enemy health component with distance-based falloff; triggers death state when HP reaches 0
+
+- **Shakeable furniture system** (`src/world/world.js`, `src/main.js`)
+  - Tagged 10 heavy furniture meshes as shakeable: desk counter, counter top, chair, filing cabinet, left bench, right bench, left side table (2 parts), right side table (2 parts)
+  - Exposed `shakeables` array and `getShakeables()` from world
+  - Shockwave triggers canned rattle animation on hit — decaying sinusoidal X/Z displacement
+
+### Fixed
+- **Physics raycast was completely broken** (`src/systems/physics.js`)
+  - `world.getShapeAtWorldPoint()` does not exist in Cannon-ES; replaced with correct `world.raycastClosest()` API
+  - Gun firing was silently throwing every shot since Session 3 — ammo was consumed and muzzle flash played, but the return value was lost to the exception
+  - Raycast now returns correct `{ body, point, distance }` using `CANNON.RaycastResult`
+
+- **Weapon raycast origin was always (0,0,0)** (`src/systems/weapons.js`)
+  - Camera is parented to player body group (`body.add(camera)`), so `camera.position` returned local space coordinates (~0,0,0 with head bob)
+  - Changed to `camera.getWorldPosition()` and `camera.getWorldDirection()` for correct world-space ray origin and direction
+  - This fix also corrects any future systems that depend on accurate weapon hit detection
+
+### Changed
+- **Weapon fire return value expanded** (`src/systems/weapons.js`)
+  - `fire()` now returns `{ success, hitInfo, shockwaveOrigin, shockwaveDirection }` instead of just `{ success, hitInfo }`
+  - Shockwave origin and direction are world-space vectors used by the shockwave system
+
+- **Main loop shockwave integration** (`src/main.js`)
+  - Gun fire result now triggers `shockwave.fire()` with the equipped ammo type config
+  - `shockwave.update(dt)` added to game loop between `stepPhysics` and `chandelierMotion.update` for shake animation processing
+  - All shockwave targets registered after system creation: doors, chandeliers, enemies, and shakeable furniture
+
+### Notes
+- **Zero new Cannon-ES bodies** — the shockwave system achieves all environmental interaction through existing simulation models (door angular velocity, chandelier pendulum velocity, enemy position offset, mesh position shake). Physics world step cost is unchanged.
+- **Performance impact is negligible**: ~60 vector operations per shot (target iteration), ~10 sin/cos per frame (active shakes). No per-frame allocations.
+- Shockwave system is designed for three-phase rollout:
+  - Phase 1 (this session): Core system + doors + chandeliers + enemies + furniture shake
+  - Phase 2 (future): Debris system — small objects (pencils, papers, magazines) fly off surfaces with lightweight custom physics
+  - Phase 3 (future): Visual effects — expanding ring mesh, camera shake, per-ammo-type recoil scaling
+- The two long-standing weapon bugs (broken raycast, wrong origin) were pre-existing since Session 3/4 but never surfaced because `hitInfo` was returned but never consumed by any system.
+
+---
+
 ## [Session 19] — 2026-03-11
 ### Changed
 - **Room culling disabled — all rooms always visible** (`src/systems/roomCulling.js`)
@@ -669,6 +739,7 @@ The room now reads as a **grand RCPD/museum lobby** with clear spatial narrative
 ## Release Timeline
 | Version | Session | Date | Status |
 |---------|---------|------|--------|
+| v0.20 | Session 20 | 2026-03-11 | Shockwave Weapon System (Phase 1) |
 | v0.9 | Session 9 | 2026-03-09 | Room Scale Compression & Cache Fix |
 | v0.8 | Session 8 | 2026-03-09 | Drag-and-Drop Inventory & Item Use |
 | v0.7 | Session 7 | 2026-03-09 | Inventory Debugging & Item Rebalance |
