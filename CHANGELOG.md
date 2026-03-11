@@ -21,6 +21,29 @@ All notable changes to Project SH are documented here.
   - **Director's Office**: large desk, computer, 2 guest chairs + side table, 2 bookshelves, filing cabinets, standing lamp, large rug, wall clock
   - **East Hallway**: side table, water cooler, runner rug, wall clock
 
+- **Zombie AI and pathfinding system** (`src/systems/enemyAI.js`)
+  - Zone-aware territorial behavior: each enemy has a `homeZone` (room ID) and `aggroDepth` (max distance in rooms from home to chase player)
+  - BFS room-graph pathfinding: enemies navigate through multi-room layouts using world connectivity graph, steering toward doorways to funnel through connected spaces
+  - State machine with 4 modes: `idle` (standing/micro-bob), `wander` (random point in home zone), `chase` (pursuit with dynamic path updates), `return` (walking back to home after losing aggro)
+  - Shockwave recovery: knockback ends trigger immediate AI re-evaluation so enemies snap back to pursuit behavior rather than resuming stale state
+
+- **Zombie movement and collision** (`src/systems/enemyRuntime.js`)
+  - AI-driven movement: enemy desired velocity from AI system applied each frame with full collision detection
+  - World collision handling: AABB pushback against environment colliders (furniture, walls) to prevent wall-walking
+  - Knockback physics with subcision: shockwave impulse applies physics-only velocity with sub-stepping (`MAX_STEP = 0.1m`) to prevent tunneling through thin colliders
+  - Knockback friction: exponential velocity decay during impact recovery
+  - Death state visual: collapsed/face-planted animation with slow tilt and sink into ground over 0.6 seconds
+
+### Changed
+- **Zombie Sentry survivability pass** (`src/entities/zombies.js`)
+  - Increased `createLobbyZombieSentry` HP from `4` to `15` to support longer chase sequences before destruction
+  - Added `homeZone` and `aggroDepth` fields to pathing component for AI zone awareness
+
+- **Enemy component standardization** (`src/entities/zombies.js`)
+  - New `attachEnemyComponents()` helper pre-configures AI-ready component stubs (visual, animation, pathing, health, knockback) for any enemy entity
+  - Simplifies future enemy archetype (shambler, guard, etc.) setup with single call
+  - Configurable `moveSpeed` and `turnSpeed` per archetype
+
 ---
 
 ## [Session 22] — 2026-03-11
