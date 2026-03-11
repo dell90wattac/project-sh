@@ -4,6 +4,71 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 22] — 2026-03-11
+### Added
+- **Bullet-scoped ammo profile resolver and mapping** (`src/systems/ammoTypes.js`, `src/main.js`, `src/systems/weapons.js`)
+  - Added `AMMO_ITEM_PROFILE_MAP` with resolver helpers (`getAmmoProfileKeyForItem`, `getAmmoConfigForItem`) so shockwave tuning is selected from fired bullet item type, not gun identity
+  - Main fire path now resolves ammo config per-shot using `fireResult.ammoItemType` instead of hardcoded `AMMO_TYPES.standard`
+  - Weapon fire result payload now carries `ammoItemType` for downstream systems
+
+- **Muzzle-origin shockwave visual wavefront system** (`src/systems/shockwaveFx.js`, `src/main.js`)
+  - Added pooled visual-only shockwave FX system with `spawnMuzzleWave`, `update`, and `clear`
+  - New effect renders an expanding cone shell plus layered traveling rings for readable depth/motion from gun origin to full shockwave range
+  - FX is explicitly non-interactive: no physics, no collisions, no shockwave target registration
+  - Integrated into fire/update/reset flow in `main.js`
+
+### Changed
+- **Gun firing cadence and feel pass** (`src/systems/weapons.js`, `src/player/viewmodel.js`)
+  - Increased fire cooldown from `0.1` to `0.75`, then tuned to `0.82` seconds between shots
+  - Added per-shot upward kick pulse in the viewmodel (triggered on shot edge) so firing visibly lifts the weapon while preserving reload dip behavior
+
+- **Magazine ammo typing contract** (`src/systems/weapons.js`)
+  - Added selected ammo item state and loaded-mag ammo state to establish no-mixed-round behavior (single ammo type per magazine load)
+  - Reload now pulls from selected ammo item type and stamps the loaded magazine type on completion
+
+- **Shockwave geometry tuning and visual sync** (`src/systems/ammoTypes.js`, `src/systems/shockwaveFx.js`)
+  - Standard ammo shockwave tuned from `radius 5` to `5.75` and `cone half-angle 45°` to `52°`
+  - Shockwave FX math now matches gameplay cone geometry (`radius` + `coneHalfAngle`) 1:1 for spatial alignment
+  - Visual timing tuned slightly slower/longer for clarity (`0.24`–`0.34s`) with gentler ring swirl
+
+- **Shockwave origin alignment to weapon viewmodel** (`src/systems/weapons.js`)
+  - Shockwave origin shifted to a muzzle-like world-space offset from camera (`SHOCKWAVE_MUZZLE_OFFSET`) so visuals and force emission read as coming from the gun
+
+- **Room-agnostic static prop shockwave shake coverage** (`src/world/world.js`, `PROJECT_BIBLE.md`)
+  - Replaced lobby-only shakeable derivation with room-agnostic static classification so east wing non-plane static props participate automatically
+  - Added explicit external static override `shockwaveShake` (`true`/`false`) with precedence over legacy `excludeShockwaveShake`
+  - Updated architecture bible static-prop contract to reflect room-agnostic derivation and explicit external override policy
+
+- **Heavy handgun ammo item + handgun combine transaction flow** (`src/systems/itemRegistry.js`, `src/systems/ammoTypes.js`, `src/systems/weapons.js`, `src/systems/inventory.js`, `src/ui/inventory.js`, `src/main.js`)
+  - Added new `ammoHeavy` item with handgun-ammo-equivalent stack behavior and dedicated profile mapping to `heavyHandgun`
+  - Wired heavy ammo to shockwave through ammo profile resolution, currently mirroring standard profile values for safe parity
+  - Added gun combine transaction API to support ammo stack + handgun combine for both `ammo` and `ammoHeavy`
+  - Implemented opposite-ammo swap behavior: loaded rounds are ejected back to inventory with stack-first placement, transaction canceled if no capacity
+  - Added inventory capacity precheck (`canFitItem`) and multi-stack `removeItem` so swap/eject flows are deterministic
+  - Added three heavy ammo world pickups for test coverage and hooked inventory UI drag-combine to invoke handgun ammo combine path
+
+- **Heavy ammo visual + shockwave escalation pass** (`src/ui/hud.js`, `src/systems/ammoTypes.js`, `src/main.js`)
+  - HUD ammo counter now renders red when heavy ammo is currently loaded in the handgun magazine
+  - Heavy handgun profile now uses 2x force and 2x depth/range relative to standard
+  - Heavy cone width at max range is preserved by narrowing cone half-angle to keep end-cap circumference equivalent to standard
+
+- **Heavy ammo circumference expansion** (`src/systems/ammoTypes.js`, `src/main.js`)
+  - Increased heavy handgun cone half-angle to 60° so edge-of-camera targets are captured while preserving the existing doubled depth and force
+
+- **Heavy ammo depth expansion (+50%)** (`src/systems/ammoTypes.js`, `src/main.js`)
+  - Increased heavy handgun radius from 11.5 to 17.25 while preserving heavy force and widened cone coverage
+
+- **Main lobby mid-height wall trim band** (`src/world/world.js`)
+  - Added a new picture-rail style trim pass around the lobby walls at `y=2.72` (slightly above sconce height) to mirror east-wing trim rhythm
+  - Side-wall trim is segmented around existing doorway spans to keep the wall-opening logic and shadow breakup consistent
+
+### Notes
+- This session delivers the first shipped implementation of Shockwave Phase 3 visual direction (muzzle-origin expanding wavefront) while preserving gameplay authority in `shockwave.js`.
+- Ammo profile ownership is now bullet-item scoped and future ammo variants should be introduced by extending `AMMO_TYPES` plus `AMMO_ITEM_PROFILE_MAP`.
+- Session 22 closes at build `22.7` with heavy handgun profile baseline: `force 20`, `radius 17.25`, `coneHalfAngle 60°`, plus red HUD ammo counter when heavy rounds are loaded.
+
+---
+
 ## [Session 21] — 2026-03-11
 ### Added
 - **Chandelier shockwave-driven motion upgrade** (`src/main.js`, `src/systems/chandelierMotion.js`)

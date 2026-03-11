@@ -2,21 +2,31 @@
 // Factory function for gun state and mechanics.
 // Features:
 //  - 9-round magazine (real bullets)
-//  - Fire-rate cooldown (0.1s between shots)
+//  - Fire-rate cooldown (0.75s between shots)
 //  - Reload discards remaining magazine contents (real bullet loss)
+//  - Single ammo type per magazine (no mixed rounds)
 //  - Hitscan raycast from camera
 
 import * as THREE from 'three';
 import { raycast } from './physics.js';
+import { HANDGUN_AMMO_ITEM_IDS } from './itemRegistry.js';
 
 const MAG_CAPACITY = 9;
-const FIRE_RATE = 0.1; // seconds between shots
+const FIRE_RATE = 0.82; // seconds between shots
 const RELOAD_DURATION = 1.2; // seconds
+const SHOCKWAVE_MUZZLE_OFFSET = new THREE.Vector3(0.07, -0.055, -0.33);
+const SUPPORTED_AMMO_TYPES = new Set(HANDGUN_AMMO_ITEM_IDS);
 
 export function createGun(inventory, physicsWorld, camera) {
   let currentMag = MAG_CAPACITY; // Start with full magazine
   let fireRateCooldown = 0; // Current cooldown timer
   let reloadTimer = 0; // Current reload timer (0 = not reloading)
+  let selectedAmmoItemType = 'ammo'; // Ammo item selected for the next reload
+  let loadedMagAmmoItemType = selectedAmmoItemType; // Ammo type currently in magazine
+
+  function isSupportedAmmoItemType(ammoItemType) {
+    return SUPPORTED_AMMO_TYPES.has(ammoItemType);
+  }
 
   return {
     // Attempt to fire. Returns { success, hitInfo }.
@@ -41,14 +51,16 @@ export function createGun(inventory, physicsWorld, camera) {
       const rayDir = new THREE.Vector3(0, 0, -1);
       camera.getWorldDirection(rayDir);
       const rayTo = rayFrom.clone().addScaledVector(rayDir, 100); // 100m range
+      const shockwaveOrigin = SHOCKWAVE_MUZZLE_OFFSET.clone().applyMatrix4(camera.matrixWorld);
 
       const hitInfo = raycast(physicsWorld, rayFrom, rayTo);
 
       return {
         success: true,
         hitInfo,
-        shockwaveOrigin: rayFrom,
+        shockwaveOrigin,
         shockwaveDirection: rayDir,
+        ammoItemType: loadedMagAmmoItemType,
       };
     },
 
@@ -60,7 +72,7 @@ export function createGun(inventory, physicsWorld, camera) {
       }
 
       // Check if we have ammo in reserve
-      const reserveAmmo = inventory.getItemCount('ammo');
+      const reserveAmmo = inventory.getItemCount(selectedAmmoItemType);
       if (reserveAmmo <= 0) {
         return false;
       }
@@ -68,11 +80,12 @@ export function createGun(inventory, physicsWorld, camera) {
       // Discard current magazine contents
       const discarded = currentMag;
       currentMag = 0;
+      loadedMagAmmoItemType = null;
 
       // Start reload timer
       reloadTimer = RELOAD_DURATION;
 
-      console.log(`[Gun] Reloading... (discarded ${discarded} bullets)`);
+      console.log(`[Gun] Reloading ${selectedAmmoItemType}... (discarded ${discarded} bullets)`);
       return true;
     },
 
@@ -89,14 +102,15 @@ export function createGun(inventory, physicsWorld, camera) {
 
         if (reloadTimer <= 0) {
           // Reload finished: refill magazine from reserve
-          const reserveAmmo = inventory.getItemCount('ammo');
+          const reserveAmmo = inventory.getItemCount(selectedAmmoItemType);
           const ammoNeeded = MAG_CAPACITY - currentMag;
           const ammoToPull = Math.min(ammoNeeded, reserveAmmo);
 
-          inventory.removeItem('ammo', ammoToPull);
+          inventory.removeItem(selectedAmmoItemType, ammoToPull);
           currentMag += ammoToPull;
+          loadedMagAmmoItemType = ammoToPull > 0 ? selectedAmmoItemType : loadedMagAmmoItemType;
 
-          console.log(`[Gun] Reload complete. Magazine: ${currentMag}/${MAG_CAPACITY}, Reserve: ${inventory.getItemCount('ammo')}`);
+          console.log(`[Gun] Reload complete (${loadedMagAmmoItemType || 'unknown'}). Magazine: ${currentMag}/${MAG_CAPACITY}, Reserve: ${inventory.getItemCount(selectedAmmoItemType)}`);
           reloadTimer = 0;
         }
       }
@@ -112,20 +126,101 @@ export function createGun(inventory, physicsWorld, camera) {
       return reloadTimer > 0;
     },
 
+    // Select which ammo item type should be used on the next reload.
+    setSelectedAmmoType(ammoItemType) {
+      if (reloadTimer > 0) return false;
+      if (!isSupportedAmmoItemType(ammoItemType)) return false;
+      selectedAmmoItemType = ammoItemType;
+      return true;
+    },
+
+    // Combine ammo stack with handgun. Handles opposite-ammo ejection atomically.
+    combineAmmoType(ammoItemType) {
+      if (!isSupportedAmmoItemType(ammoItemType)) {
+        return { success: false, reason: 'invalid-ammo' };
+      }
+      if (reloadTimer > 0) {
+        return { success: false, reason: 'reloading' };
+      }
+
+      const needsEject =
+        currentMag > 0 &&
+        loadedMagAmmoItemType &&
+        loadedMagAmmoItemType !== ammoItemType;
+
+      if (needsEject) {
+        if (typeof inventory.canFitItem !== 'function') {
+          return { success: false, reason: 'inventory-capacity-unsupported' };
+        }
+        if (!inventory.canFitItem(loadedMagAmmoItemType, currentMag)) {
+          return { success: false, reason: 'no-space-for-ejected-rounds' };
+        }
+      }
+
+      let ejected = 0;
+      if (needsEject) {
+        const ejectedType = loadedMagAmmoItemType;
+        const ejectedQty = currentMag;
+        const added = inventory.addItem(ejectedType, ejectedQty);
+        if (!added) {
+          return { success: false, reason: 'no-space-for-ejected-rounds' };
+        }
+        currentMag = 0;
+        loadedMagAmmoItemType = null;
+        ejected = ejectedQty;
+      }
+
+      selectedAmmoItemType = ammoItemType;
+
+      const ammoNeeded = Math.max(0, MAG_CAPACITY - currentMag);
+      let loaded = 0;
+
+      if (ammoNeeded > 0) {
+        const reserveAmmo = inventory.getItemCount(selectedAmmoItemType);
+        const ammoToPull = Math.min(ammoNeeded, reserveAmmo);
+        if (ammoToPull > 0) {
+          loaded = inventory.removeItem(selectedAmmoItemType, ammoToPull);
+          currentMag += loaded;
+          if (loaded > 0) {
+            loadedMagAmmoItemType = selectedAmmoItemType;
+          }
+        }
+      }
+
+      if (currentMag === 0) {
+        loadedMagAmmoItemType = null;
+      }
+
+      return {
+        success: true,
+        ejected,
+        loaded,
+        selectedAmmoItemType,
+        loadedMagAmmoItemType,
+        currentMag,
+      };
+    },
+
+    getSelectedAmmoType() {
+      return selectedAmmoItemType;
+    },
+
     // Query: Get current ammo state
     getAmmoState() {
       return {
         currentMag,
-        reserve: inventory.getItemCount('ammo'),
+        reserve: inventory.getItemCount(selectedAmmoItemType),
         isReloading: reloadTimer > 0,
         reloadProgress: reloadTimer > 0 ? (RELOAD_DURATION - reloadTimer) / RELOAD_DURATION : 0,
         isFiring: fireRateCooldown > 0,
+        selectedAmmoItemType,
+        loadedMagAmmoItemType,
       };
     },
 
     // Debug
     debug() {
-      console.log(`Magazine: ${currentMag}/${MAG_CAPACITY}, Reserve: ${inventory.getItemCount('ammo')}, Reloading: ${reloadTimer > 0}`);
+      console.log(`Magazine: ${currentMag}/${MAG_CAPACITY} (${loadedMagAmmoItemType || 'empty'}), Reserve(${selectedAmmoItemType}): ${inventory.getItemCount(selectedAmmoItemType)}, Reloading: ${reloadTimer > 0}`);
     },
   };
 }

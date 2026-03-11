@@ -17,6 +17,20 @@ const ITEMS = {
     modelConfig: { color: 0xccaa33, size: [0.2, 0.15, 0.3], shape: 'box' },
     useEffect: null,
   },
+  ammoHeavy: {
+    id: 'ammoHeavy',
+    name: 'Heavy Handgun Ammo',
+    description: 'Heavy handgun rounds.',
+    stackable: true,
+    maxStack: 27,
+    usable: false,
+    equippable: false,
+    droppable: true,
+    combinable: true,
+    initials: 'HA',
+    modelConfig: { color: 0xb86a2d, size: [0.2, 0.15, 0.3], shape: 'box' },
+    useEffect: null,
+  },
   healingA: {
     id: 'healingA',
     name: 'Healing Item 1',
@@ -77,6 +91,14 @@ const ITEMS = {
 
 const KEY_ITEM_PREFIX = 'key:';
 const KEY_MODEL_CONFIG = { color: 0xd4b24f, size: [0.28, 0.08, 0.1], shape: 'box' };
+
+export const HANDGUN_ITEM_ID = 'handgun';
+export const STANDARD_AMMO_ITEM_ID = 'ammo';
+export const HEAVY_HANDGUN_AMMO_ITEM_ID = 'ammoHeavy';
+export const HANDGUN_AMMO_ITEM_IDS = Object.freeze([
+  STANDARD_AMMO_ITEM_ID,
+  HEAVY_HANDGUN_AMMO_ITEM_ID,
+]);
 
 function normalizeKeyId(keyId) {
   return String(keyId ?? '').trim();
@@ -148,4 +170,8 @@ export function canStack(itemId) {
 export function getMaxStack(itemId) {
   const def = getItemDef(itemId);
   return def ? def.maxStack : 1;
+}
+
+export function isHandgunAmmoItem(itemType) {
+  return HANDGUN_AMMO_ITEM_IDS.includes(itemType);
 }

@@ -9,6 +9,47 @@
 import { getItemDef, getMaxStack, getRecipe, canStack } from '../systems/itemRegistry.js';
 
 export function createInventoryUI(inventory, playerHealth, callbacks) {
+  const GUN_ITEM_TYPE = 'handgun';
+  const AMMO_ITEM_TYPES = new Set(['ammo', 'ammoHeavy']);
+
+  function isAmmoItemType(itemType) {
+    return AMMO_ITEM_TYPES.has(itemType);
+  }
+
+  function isGunAmmoPair(typeA, typeB) {
+    if (!typeA || !typeB) return false;
+    return (
+      (typeA === GUN_ITEM_TYPE && isAmmoItemType(typeB)) ||
+      (typeB === GUN_ITEM_TYPE && isAmmoItemType(typeA))
+    );
+  }
+
+  function getAmmoTypeFromPair(typeA, typeB) {
+    if (isAmmoItemType(typeA)) return typeA;
+    if (isAmmoItemType(typeB)) return typeB;
+    return null;
+  }
+
+  function tryCombineWithGun(typeA, typeB) {
+    if (!isGunAmmoPair(typeA, typeB)) return { success: false, message: 'CANNOT COMBINE' };
+    if (!callbacks || typeof callbacks.onCombineWithGun !== 'function') {
+      return { success: false, message: 'CANNOT COMBINE' };
+    }
+
+    const ammoType = getAmmoTypeFromPair(typeA, typeB);
+    if (!ammoType) return { success: false, message: 'CANNOT COMBINE' };
+
+    const result = callbacks.onCombineWithGun(ammoType);
+    if (!result || result.success !== true) {
+      return {
+        success: false,
+        message: (result && result.message) ? result.message : 'CANNOT COMBINE',
+      };
+    }
+
+    return { success: true };
+  }
+
   let isOpen = false;
   let onToggle = null;
 
@@ -481,6 +522,9 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
     }
 
     // Different types: valid only if a combine recipe exists
+    if (isGunAmmoPair(sourceData.itemType, targetData.itemType)) {
+      return !!(callbacks && typeof callbacks.onCombineWithGun === 'function');
+    }
     return getRecipe(sourceData.itemType, targetData.itemType) !== null;
   }
 
@@ -489,6 +533,10 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
     if (dragSourceIsEquipped) return false;
     const sourceData = inventory.getSlot(dragSourceSlot);
     if (!sourceData.itemType) return false;
+    const equippedData = inventory.getEquipped();
+    if (isGunAmmoPair(sourceData.itemType, equippedData.itemType)) {
+      return !!(callbacks && typeof callbacks.onCombineWithGun === 'function');
+    }
     const def = getItemDef(sourceData.itemType);
     return !!(def && def.equippable);
   }
@@ -523,7 +571,13 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
         // Back on itself – no-op
       } else if (targetSlot !== -1) {
         const targetData = inventory.getSlot(targetSlot);
-        if (!targetData.itemType) {
+        const sourceData = inventory.getEquipped();
+        if (sourceData.itemType && targetData.itemType && isGunAmmoPair(sourceData.itemType, targetData.itemType)) {
+          const combined = tryCombineWithGun(sourceData.itemType, targetData.itemType);
+          if (!combined.success) {
+            showCannotFeedback(combined.message);
+          }
+        } else if (!targetData.itemType) {
           inventory.unequipToSlot(targetSlot);
         } else {
           const targetDef = getItemDef(targetData.itemType);
@@ -571,6 +625,9 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
             } else {
               inventory.moveItem(dragSourceSlot, targetSlot);
             }
+          } else if (isGunAmmoPair(sourceData.itemType, targetData.itemType)) {
+            const combined = tryCombineWithGun(sourceData.itemType, targetData.itemType);
+            if (!combined.success) showCannotFeedback(combined.message);
           } else {
             // Combine via recipe
             const combined = inventory.combineItems(dragSourceSlot, targetSlot);
@@ -581,7 +638,14 @@ export function createInventoryUI(inventory, playerHealth, callbacks) {
         if (!isValidEquippedDropTarget()) {
           showCannotFeedback('CANNOT EQUIP');
         } else {
-          inventory.equipItem(dragSourceSlot);
+          const sourceData = inventory.getSlot(dragSourceSlot);
+          const equippedData = inventory.getEquipped();
+          if (isGunAmmoPair(sourceData.itemType, equippedData.itemType)) {
+            const combined = tryCombineWithGun(sourceData.itemType, equippedData.itemType);
+            if (!combined.success) showCannotFeedback(combined.message);
+          } else {
+            inventory.equipItem(dragSourceSlot);
+          }
         }
       } else if (!insidePanel) {
         // Dropped outside inventory → drop on ground

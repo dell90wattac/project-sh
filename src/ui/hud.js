@@ -120,10 +120,14 @@ export function createHUD(gun, playerHealth) {
       // ── Update ammo ────────────────────────────────────────────────────
       const ammoState = gun.getAmmoState();
       ammoDisplay.textContent = `${ammoState.currentMag} / ${ammoState.reserve}`;
+      const heavyLoaded = ammoState.loadedMagAmmoItemType === 'ammoHeavy';
 
       if (ammoState.currentMag === 0) {
         ammoDisplay.style.color = '#ff0000';
         ammoDisplay.style.textShadow = '0 0 8px rgba(255, 0, 0, 0.4)';
+      } else if (heavyLoaded) {
+        ammoDisplay.style.color = '#ff2a2a';
+        ammoDisplay.style.textShadow = '0 0 8px rgba(255, 42, 42, 0.45)';
       } else if (ammoState.currentMag < 3) {
         ammoDisplay.style.color = '#ffaa00';
         ammoDisplay.style.textShadow = '0 0 8px rgba(255, 170, 0, 0.4)';

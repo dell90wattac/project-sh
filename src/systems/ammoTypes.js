@@ -11,8 +11,8 @@ export const AMMO_TYPES = {
   standard: {
     label: 'Standard',
     shape: 'cone',
-    radius: 5,                  // max reach (meters)
-    coneHalfAngle: Math.PI / 4, // 45° half-angle
+    radius: 5.75,                     // max reach (meters)
+    coneHalfAngle: (52 * Math.PI) / 180, // 52° half-angle
     force: 10,                  // base knockback force at origin
     damage: 2,                  // base damage at origin
     falloffExponent: 2,         // inverse-square falloff
@@ -23,4 +23,44 @@ export const AMMO_TYPES = {
     cameraShake: 0.08,
     recoilMagnitude: 0.03,
   },
+  heavyHandgun: {
+    label: 'Heavy Handgun',
+    shape: 'cone',
+    // 3x depth and widened cone so heavy rounds cover camera-edge targets.
+    radius: 17.25,
+    coneHalfAngle: (60 * Math.PI) / 180,
+    force: 20,
+    damage: 2,
+    falloffExponent: 2,
+    splashForceMult: 0,
+    visualColor: 0x88CCFF,
+    visualScale: 1.0,
+    cameraShake: 0.08,
+    recoilMagnitude: 0.03,
+  },
 };
+
+export const AMMO_ITEM_PROFILE_MAP = Object.freeze({
+  ammo: 'standard',
+  ammoHeavy: 'heavyHandgun',
+});
+
+const DEFAULT_AMMO_PROFILE_KEY = 'standard';
+
+export function getAmmoProfileKeyForItem(ammoItemType) {
+  if (typeof ammoItemType !== 'string') {
+    return DEFAULT_AMMO_PROFILE_KEY;
+  }
+
+  const mappedProfile = AMMO_ITEM_PROFILE_MAP[ammoItemType];
+  if (mappedProfile && AMMO_TYPES[mappedProfile]) {
+    return mappedProfile;
+  }
+
+  return DEFAULT_AMMO_PROFILE_KEY;
+}
+
+export function getAmmoConfigForItem(ammoItemType) {
+  const profileKey = getAmmoProfileKeyForItem(ammoItemType);
+  return AMMO_TYPES[profileKey] || AMMO_TYPES[DEFAULT_AMMO_PROFILE_KEY];
+}

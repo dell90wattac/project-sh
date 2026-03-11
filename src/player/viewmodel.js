@@ -49,6 +49,10 @@ export function createViewModel(camera) {
   const RECOIL_MAGNITUDE = 0.02;
   const RECOIL_DECAY_TIME = 0.15;
   const RECOIL_ROTATION = 0.05;
+  let shotKickTimer = 0;
+  const SHOT_KICK_DURATION = 0.12;
+  const SHOT_KICK_LIFT = 0.02;
+  const SHOT_KICK_ROTATION = 0.04;
 
   function box(w, h, d, x, y, z, mat, rx = 0, ry = 0, rz = 0) {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -216,6 +220,9 @@ export function createViewModel(camera) {
     if (currentFireState && !prevFireState) {
       // Shot just fired! Trigger muzzle flash
       muzzleFlashTimer = MUZZLE_FLASH_DURATION;
+      recoilKick = -RECOIL_MAGNITUDE;
+      recoilDecay = 0;
+      shotKickTimer = SHOT_KICK_DURATION;
     }
     prevFireState = currentFireState;
 
@@ -254,15 +261,22 @@ export function createViewModel(camera) {
     }
 
     // ── Gun Recoil Animation ────────────────────────────────────────────
-    if (gunState.isFiring) {
-      // Player just fired - apply recoil kick
-      recoilKick = -RECOIL_MAGNITUDE;
-      recoilDecay = 0;
-    } else if (recoilKick < 0) {
+    if (recoilKick < 0) {
       // Decay recoil back to zero
       recoilDecay += dt;
       const progress = Math.min(recoilDecay / RECOIL_DECAY_TIME, 1);
       recoilKick = -RECOIL_MAGNITUDE * (1 - progress);
+    }
+
+    // ── Per-shot upward kick animation ─────────────────────────────────
+    let shotKickLift = 0;
+    let shotKickPitch = 0;
+    if (shotKickTimer > 0) {
+      shotKickTimer = Math.max(0, shotKickTimer - dt);
+      const kickProgress = 1 - (shotKickTimer / SHOT_KICK_DURATION);
+      const kickPulse = Math.sin(kickProgress * Math.PI);
+      shotKickLift = kickPulse * SHOT_KICK_LIFT;
+      shotKickPitch = kickPulse * SHOT_KICK_ROTATION;
     }
 
     // ── Gun Reload Animation ────────────────────────────────────────────
@@ -344,9 +358,9 @@ export function createViewModel(camera) {
 
     // ── Apply to RIGHT HAND ─────────────────────────────────────────────
     rightHandGroup.position.x = 0.08 + (swayCurrent.x + rightSwayOffset.x) * 0.4 * (1 - db * 0.7) + bobX * 0.5 * (1 - db) + recoilKick * (1 - db);
-    rightHandGroup.position.y = -0.1 + (swayCurrent.y + rightSwayOffset.y) * 0.3 * (1 - db) + bobY * (1 - db) + reloadLift * (1 - db);
+    rightHandGroup.position.y = -0.1 + (swayCurrent.y + rightSwayOffset.y) * 0.3 * (1 - db) + bobY * (1 - db) + reloadLift * (1 - db) + shotKickLift * (1 - db);
     rightHandGroup.rotation.y = (swayCurrent.x + rightSwayOffset.x) * 0.35 * (1 - db) + recoilKick * 2 * (1 - db);
-    rightHandGroup.rotation.x = -(swayCurrent.y + rightSwayOffset.y) * 0.25 * (1 - db) + recoilKick * 3 * (1 - db) + reloadRotation * (1 - db);
+    rightHandGroup.rotation.x = -(swayCurrent.y + rightSwayOffset.y) * 0.25 * (1 - db) + recoilKick * 3 * (1 - db) + reloadRotation * (1 - db) - shotKickPitch * (1 - db);
 
     rightHandGroup.position.y += doorLift;
     rightHandGroup.position.z = -0.15 + doorForward + microPush;

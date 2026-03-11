@@ -18,8 +18,9 @@ export function createInventory() {
     addItem(itemType, quantity) {
       const def = getItemDef(itemType);
       let remaining = quantity;
+      if (!def || remaining <= 0) return false;
 
-      if (def && def.stackable) {
+      if (def.stackable) {
         // Try existing stacks first
         for (let i = 0; i < slots.length && remaining > 0; i++) {
           if (slots[i].itemType === itemType) {
@@ -39,28 +40,69 @@ export function createInventory() {
           remaining -= add;
         }
       } else {
-        // Non-stackable or unknown: one per slot
-        const emptyIdx = slots.findIndex(s => s.itemType === null);
-        if (emptyIdx === -1) return false;
-        slots[emptyIdx].itemType = itemType;
-        slots[emptyIdx].quantity = 1;
+        // Non-stackable: one per slot
+        while (remaining > 0) {
+          const emptyIdx = slots.findIndex(s => s.itemType === null);
+          if (emptyIdx === -1) return false;
+          slots[emptyIdx].itemType = itemType;
+          slots[emptyIdx].quantity = 1;
+          remaining -= 1;
+        }
       }
       return true;
     },
 
+    // Query: can this quantity fit without mutating inventory?
+    canFitItem(itemType, quantity) {
+      const def = getItemDef(itemType);
+      if (!def) return false;
+      if (quantity <= 0) return true;
+
+      if (def.stackable) {
+        let remaining = quantity;
+        for (let i = 0; i < slots.length && remaining > 0; i++) {
+          if (slots[i].itemType === itemType) {
+            const space = def.maxStack - slots[i].quantity;
+            if (space > 0) {
+              remaining -= space;
+            }
+          }
+        }
+        if (remaining <= 0) return true;
+
+        let emptySlots = 0;
+        for (let i = 0; i < slots.length; i++) {
+          if (slots[i].itemType === null) emptySlots += 1;
+        }
+        return emptySlots * def.maxStack >= remaining;
+      }
+
+      let emptySlots = 0;
+      for (let i = 0; i < slots.length; i++) {
+        if (slots[i].itemType === null) emptySlots += 1;
+      }
+      return emptySlots >= quantity;
+    },
+
     // Remove items from inventory. Returns actual amount removed.
     removeItem(itemType, quantity) {
-      for (let i = 0; i < slots.length; i++) {
-        if (slots[i].itemType === itemType) {
-          const actualRemoved = Math.min(slots[i].quantity, quantity);
-          slots[i].quantity -= actualRemoved;
-          if (slots[i].quantity === 0) {
-            slots[i].itemType = null;
-          }
-          return actualRemoved;
+      let remaining = quantity;
+      let removed = 0;
+
+      for (let i = 0; i < slots.length && remaining > 0; i++) {
+        if (slots[i].itemType !== itemType) continue;
+
+        const actualRemoved = Math.min(slots[i].quantity, remaining);
+        slots[i].quantity -= actualRemoved;
+        remaining -= actualRemoved;
+        removed += actualRemoved;
+
+        if (slots[i].quantity === 0) {
+          slots[i].itemType = null;
         }
       }
-      return 0;
+
+      return removed;
     },
 
     // Query total quantity of an item type across all slots

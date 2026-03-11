@@ -100,7 +100,14 @@ export function createWorld(scene, physicsWorld) {
   function markStaticWorldObject(object3D, options = {}) {
     if (!object3D) return object3D;
     object3D.userData.isStaticWorldObject = true;
-    if (options.excludeShockwaveShake === true) {
+    // Explicit per-object override wins over legacy exclusion flag.
+    if (typeof options.shockwaveShake === 'boolean') {
+      if (options.shockwaveShake) {
+        delete object3D.userData.excludeShockwaveShake;
+      } else {
+        object3D.userData.excludeShockwaveShake = true;
+      }
+    } else if (options.excludeShockwaveShake === true) {
       object3D.userData.excludeShockwaveShake = true;
     }
     if (options.shockwavePhysicsControlled === true) {
@@ -450,6 +457,23 @@ export function createWorld(scene, physicsWorld) {
   }
   decor(14,   0.20, 0.18,  0, CEIL - 0.10, BACK_Z  + 0.09, M.wainscot); // back
   decor(14,   0.20, 0.18,  0, CEIL - 0.10, FRONT_Z - 0.09, M.wainscot); // front
+
+  // ─── Picture Rail Trim (mid-wall band above sconces) ─────────────────────
+  const PICTURE_RAIL_Y = 2.72;
+  if (leftWallFrontDepth > 0) {
+    decor(0.14, 0.10, leftWallFrontDepth, -6.93, PICTURE_RAIL_Y, (BACK_Z + DOOR_OPENING_MIN_Z) / 2, M.wainscot);
+  }
+  if (leftWallBackDepth > 0) {
+    decor(0.14, 0.10, leftWallBackDepth, -6.93, PICTURE_RAIL_Y, (DOOR_OPENING_MAX_Z + FRONT_Z) / 2, M.wainscot);
+  }
+  if (rightWallFrontDepth > 0) {
+    decor(0.14, 0.10, rightWallFrontDepth, 6.93, PICTURE_RAIL_Y, (BACK_Z + DOOR_OPENING_MIN_Z) / 2, M.wainscot);
+  }
+  if (rightWallBackDepth > 0) {
+    decor(0.14, 0.10, rightWallBackDepth, 6.93, PICTURE_RAIL_Y, (DOOR_OPENING_MAX_Z + FRONT_Z) / 2, M.wainscot);
+  }
+  decor(14, 0.10, 0.14, 0, PICTURE_RAIL_Y, BACK_Z + 0.07, M.wainscot);
+  decor(14, 0.10, 0.14, 0, PICTURE_RAIL_Y, FRONT_Z - 0.07, M.wainscot);
 
   // ─── Down Staircase (entry platform → main floor) ────────────────────────
   for (let i = 0; i < 3; i++) {
@@ -1475,9 +1499,7 @@ export function createWorld(scene, physicsWorld) {
         markStaticWorldObject(object3D, options);
       }
 
-      if (roomId === 'lobby') {
-        rebuildLobbyShakeables();
-      }
+      rebuildStaticShakeables();
     }
   }
 
@@ -1508,14 +1530,11 @@ export function createWorld(scene, physicsWorld) {
     return thin && broad && tallOrWide;
   }
 
-  function rebuildLobbyShakeables() {
+  function rebuildStaticShakeables() {
     shakeables.length = 0;
 
     for (const object3D of staticWorldObjects) {
       if (!object3D || !object3D.isMesh) continue;
-
-      const memberships = objectRoomMemberships.get(object3D);
-      if (!memberships || !memberships.has('lobby')) continue;
 
       if (object3D.userData.excludeShockwaveShake === true) continue;
       if (object3D.userData.shockwavePhysicsControlled === true) continue;
@@ -1525,9 +1544,9 @@ export function createWorld(scene, physicsWorld) {
     }
   }
 
-  // Canonical rule: lobby shockwave shake applies to static world props only,
+  // Canonical rule: shockwave shake applies to static world props across rooms,
   // excluding flat structural planes and objects with dedicated shockwave physics.
-  rebuildLobbyShakeables();
+  rebuildStaticShakeables();
 
   return {
     colliders,

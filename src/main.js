@@ -18,9 +18,10 @@ import { createPerfOverlay } from './ui/perfOverlay.js';
 import { createChandelierMotionSystem } from './systems/chandelierMotion.js';
 import { createEnemyRuntime } from './systems/enemyRuntime.js';
 import { createShockwaveSystem } from './systems/shockwave.js';
-import { AMMO_TYPES } from './systems/ammoTypes.js';
+import { createShockwaveFx } from './systems/shockwaveFx.js';
+import { getAmmoConfigForItem } from './systems/ammoTypes.js';
 
-const BUILD_VERSION = '21.7';
+const BUILD_VERSION = '22.7';
 
 // ─── Renderer ──────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -110,6 +111,11 @@ worldItems.spawnPickup('ammo', 27, new THREE.Vector3(-1.5, 0.3, 1.5));
 worldItems.spawnPickup('ammo', 27, new THREE.Vector3(0, 0.3, 1.5));
 worldItems.spawnPickup('ammo', 27, new THREE.Vector3(1.5, 0.3, 1.5));
 
+// Heavy handgun ammo test stacks
+worldItems.spawnPickup('ammoHeavy', 18, new THREE.Vector3(-1.2, 0.3, 2.7));
+worldItems.spawnPickup('ammoHeavy', 18, new THREE.Vector3(0.3, 0.3, 2.7));
+worldItems.spawnPickup('ammoHeavy', 18, new THREE.Vector3(1.8, 0.3, 2.7));
+
 const lobbyEastDoorKeyId = 'doorLobbyEast';
 const lobbyEastDoorKeyItemType = makeKeyItemId(lobbyEastDoorKeyId);
 if (lobbyEastDoorKeyItemType) {
@@ -127,6 +133,21 @@ const inventoryUI = createInventoryUI(inventory, playerHealth, {
     dir.y = 0;
     dir.normalize();
     worldItems.spawnDrop(itemType, quantity, player.getPosition(), dir);
+  },
+  onCombineWithGun(ammoItemType) {
+    const result = gun.combineAmmoType(ammoItemType);
+    if (result && result.success) {
+      return { success: true };
+    }
+
+    if (result && result.reason === 'no-space-for-ejected-rounds') {
+      return { success: false, message: 'NO INVENTORY SPACE' };
+    }
+    if (result && result.reason === 'reloading') {
+      return { success: false, message: 'BUSY RELOADING' };
+    }
+
+    return { success: false, message: 'CANNOT COMBINE' };
   },
 });
 
@@ -342,6 +363,7 @@ const chandelierMotion = createChandelierMotionSystem(lobbyChandeliers, {
 
 // ─── Shockwave System ──────────────────────────────────────────────────────
 const shockwave = createShockwaveSystem();
+const shockwaveFx = createShockwaveFx(scene);
 
 // Register doors as shockwave targets
 const _doorPivotPos = new THREE.Vector3();
@@ -459,6 +481,7 @@ function updateHazards(dt) {
 function resetGame() {
   playerHealth.reset();
   damageEffects.reset();
+  shockwaveFx.clear();
   player.resetPosition();
   for (const key in hazardTimers) hazardTimers[key] = 0;
 }
@@ -677,7 +700,14 @@ function loop() {
     if (player.keys['MouseLeft'] && !inventoryUI.isOpen()) {
       const fireResult = gun.fire();
       if (fireResult.success) {
-        shockwave.fire(fireResult.shockwaveOrigin, fireResult.shockwaveDirection, AMMO_TYPES.standard);
+        const ammoConfig = getAmmoConfigForItem(fireResult.ammoItemType);
+        shockwave.fire(fireResult.shockwaveOrigin, fireResult.shockwaveDirection, ammoConfig);
+        shockwaveFx.spawnMuzzleWave(
+          fireResult.shockwaveOrigin,
+          fireResult.shockwaveDirection,
+          ammoConfig,
+          fireResult.hitInfo,
+        );
       }
     }
   }
@@ -685,6 +715,7 @@ function loop() {
   // ─── Hazard tick damage ─────────────────────────────────────────────────
   updateHazards(dt);
   shockwave.update(dt);
+  shockwaveFx.update(dt);
   chandelierMotion.update(dt);
 
   inventoryUI.update(dt);
