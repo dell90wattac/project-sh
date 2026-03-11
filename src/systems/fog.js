@@ -26,50 +26,62 @@ export function createFog(scene) {
     color: 0x3A3028,
   });
 
-  // ─── Room bounds ───────────────────────────────────────────────────────────
-  const ROOM_W = 14;
-  const ROOM_D = 28;
-  const ROOM_MIN_Z = -14;
-  const ROOM_MAX_Z = 14;
-  const CEIL = 5.5;
-  const WISP_COUNT = 20;
+  // ─── Fog zones ─────────────────────────────────────────────────────────────
+  // Each zone defines bounds, ceiling height, wisp count, and ground fog extent
+  const fogZones = [
+    { // Main Lobby
+      minX: -7, maxX: 7, minZ: -14, maxZ: 14,
+      ceil: 5.5, wispCount: 20, groundW: 13, groundD: 26,
+      groundX: 0, groundZ: 0,
+    },
+    { // East Hallway + offices combined envelope
+      minX: 7.2, maxX: 24.5, minZ: -3.0, maxZ: 8.5,
+      ceil: 3.0, wispCount: 12, groundW: 16, groundD: 10,
+      groundX: 15.85, groundZ: 2.75,
+    },
+  ];
 
-  // ─── Create fog wisps ──────────────────────────────────────────────────────
+  // ─── Create fog wisps per zone ─────────────────────────────────────────────
   const wisps = [];
 
-  for (let i = 0; i < WISP_COUNT; i++) {
-    const size = 4 + Math.random() * 5;
-    const geom = new THREE.PlaneGeometry(size, size);
-    const mat = wispMaterial.clone();
-    mat.opacity = 0.12 + Math.random() * 0.14;
+  for (const zone of fogZones) {
+    const zoneW = zone.maxX - zone.minX;
+    const zoneD = zone.maxZ - zone.minZ;
+    for (let i = 0; i < zone.wispCount; i++) {
+      const size = 4 + Math.random() * 5;
+      const geom = new THREE.PlaneGeometry(size, size);
+      const mat = wispMaterial.clone();
+      mat.opacity = 0.12 + Math.random() * 0.14;
 
-    const mesh = new THREE.Mesh(geom, mat);
+      const mesh = new THREE.Mesh(geom, mat);
 
-    mesh.position.set(
-      (Math.random() - 0.5) * (ROOM_W - 2),
-      0.8 + Math.random() * (CEIL - 2),
-      ROOM_MIN_Z + Math.random() * ROOM_D,
-    );
+      mesh.position.set(
+        zone.minX + Math.random() * zoneW,
+        0.8 + Math.random() * (zone.ceil - 2),
+        zone.minZ + Math.random() * zoneD,
+      );
 
-    mesh.rotation.x = Math.random() * Math.PI;
-    mesh.rotation.y = Math.random() * Math.PI;
-    mesh.rotation.z = Math.random() * Math.PI;
+      mesh.rotation.x = Math.random() * Math.PI;
+      mesh.rotation.y = Math.random() * Math.PI;
+      mesh.rotation.z = Math.random() * Math.PI;
 
-    mesh.renderOrder = 1;
-    scene.add(mesh);
+      mesh.renderOrder = 1;
+      scene.add(mesh);
 
-    wisps.push({
-      mesh,
-      velocity: new THREE.Vector3(
-        (Math.random() - 0.5) * 0.15,
-        (Math.random() - 0.5) * 0.03,
-        (Math.random() - 0.5) * 0.10,
-      ),
-      rotSpeed: (Math.random() - 0.5) * 0.1,
-    });
+      wisps.push({
+        mesh,
+        zone,
+        velocity: new THREE.Vector3(
+          (Math.random() - 0.5) * 0.15,
+          (Math.random() - 0.5) * 0.03,
+          (Math.random() - 0.5) * 0.10,
+        ),
+        rotSpeed: (Math.random() - 0.5) * 0.1,
+      });
+    }
   }
 
-  // ─── Ground fog plane ──────────────────────────────────────────────────────
+  // ─── Ground fog planes (one per zone) ──────────────────────────────────────
   const groundCanvas = document.createElement('canvas');
   groundCanvas.width = 256;
   groundCanvas.height = 256;
@@ -80,24 +92,29 @@ export function createFog(scene) {
   gGrad.addColorStop(1, 'rgba(60, 50, 40, 0)');
   gCtx.fillStyle = gGrad;
   gCtx.fillRect(0, 0, 256, 256);
+  const groundFogTexture = new THREE.CanvasTexture(groundCanvas);
 
-  const groundFog = new THREE.Mesh(
-    new THREE.PlaneGeometry(ROOM_W - 1, ROOM_D - 2),
-    new THREE.MeshStandardMaterial({
-      map: new THREE.CanvasTexture(groundCanvas),
-      transparent: true,
-      opacity: 0.2,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-      roughness: 1.0,
-      metalness: 0.0,
-      color: 0x4A3E30,
-    }),
-  );
-  groundFog.rotation.x = -Math.PI / 2;
-  groundFog.position.set(0, 0.05, 0);
-  groundFog.renderOrder = 0;
-  scene.add(groundFog);
+  const groundFogs = [];
+  for (const zone of fogZones) {
+    const gfMesh = new THREE.Mesh(
+      new THREE.PlaneGeometry(zone.groundW, zone.groundD),
+      new THREE.MeshStandardMaterial({
+        map: groundFogTexture,
+        transparent: true,
+        opacity: 0.2,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+        roughness: 1.0,
+        metalness: 0.0,
+        color: 0x4A3E30,
+      }),
+    );
+    gfMesh.rotation.x = -Math.PI / 2;
+    gfMesh.position.set(zone.groundX, 0.05, zone.groundZ);
+    gfMesh.renderOrder = 0;
+    scene.add(gfMesh);
+    groundFogs.push(gfMesh);
+  }
 
   let groundBreathPhase = 0;
 
@@ -105,25 +122,29 @@ export function createFog(scene) {
   function update(dt) {
     for (const wisp of wisps) {
       const m = wisp.mesh;
+      const z = wisp.zone;
       m.position.addScaledVector(wisp.velocity, dt);
       m.rotation.y += wisp.rotSpeed * dt;
 
-      // Wrap around room bounds
-      if (m.position.x > ROOM_W / 2)  m.position.x = -ROOM_W / 2;
-      if (m.position.x < -ROOM_W / 2) m.position.x = ROOM_W / 2;
-      if (m.position.z > ROOM_MAX_Z)   m.position.z = ROOM_MIN_Z;
-      if (m.position.z < ROOM_MIN_Z)   m.position.z = ROOM_MAX_Z;
+      // Wrap around zone bounds
+      if (m.position.x > z.maxX) m.position.x = z.minX;
+      if (m.position.x < z.minX) m.position.x = z.maxX;
+      if (m.position.z > z.maxZ) m.position.z = z.minZ;
+      if (m.position.z < z.minZ) m.position.z = z.maxZ;
 
       // Clamp and bounce height
-      m.position.y = THREE.MathUtils.clamp(m.position.y, 0.5, CEIL - 0.5);
-      if (m.position.y <= 0.5 || m.position.y >= CEIL - 0.5) {
+      m.position.y = THREE.MathUtils.clamp(m.position.y, 0.5, z.ceil - 0.5);
+      if (m.position.y <= 0.5 || m.position.y >= z.ceil - 0.5) {
         wisp.velocity.y *= -1;
       }
     }
 
     // Ground fog breathing
     groundBreathPhase += dt * 0.5;
-    groundFog.material.opacity = 0.25 + Math.sin(groundBreathPhase) * 0.08;
+    const opacity = 0.25 + Math.sin(groundBreathPhase) * 0.08;
+    for (const gf of groundFogs) {
+      gf.material.opacity = opacity;
+    }
   }
 
   return { update };

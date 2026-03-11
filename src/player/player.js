@@ -338,6 +338,7 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
     controls,
     getPosition,
     getVelocity,
+    getFlashlightOn: () => flashlightOn,
     resetPosition,
   };
 }

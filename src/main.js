@@ -15,6 +15,8 @@ import { createFog } from './systems/fog.js';
 import { createDoorSystem } from './systems/door.js';
 import { createRoomCulling } from './systems/roomCulling.js';
 import { createPerfOverlay } from './ui/perfOverlay.js';
+import { createChandelierMotionSystem } from './systems/chandelierMotion.js';
+import { createEnemyRuntime } from './systems/enemyRuntime.js';
 
 // ─── Renderer ──────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: false });
@@ -22,6 +24,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.shadowMap.autoUpdate = false;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 document.body.insertBefore(renderer.domElement, document.getElementById('ui-root'));
@@ -125,6 +128,7 @@ const inventoryUI = createInventoryUI(inventory, playerHealth, {
 
 // ─── Player ────────────────────────────────────────────────────────────────
 const player = createPlayer(camera, scene, world, physicsWorld, inventoryUI, playerHealth);
+const enemyRuntime = createEnemyRuntime(world, player);
 const worldDoors = Array.isArray(world.doors) && world.doors.length > 0
   ? world.doors
   : (world.door ? [{ id: 'doorPrimary', roomIds: ['lobby'], door: world.door }] : []);
@@ -338,8 +342,13 @@ inventoryUI.setToggleCallback((isOpen) => {
 
 // ─── Chandeliers ───────────────────────────────────────────────────────────
 // Sized for 5.5 m ceiling — bottom bulb at ~3.6 m, clearly visible.
-function createChandelier(x, y, z) {
+const lobbyChandeliers = [];
+
+function createChandelier(x, y, z, seed) {
   const group = new THREE.Group();
+  const chains = [];
+  const arms = [];
+  const bulbs = [];
   // Main crown disc
   const base = new THREE.Mesh(
     new THREE.CylinderGeometry(0.6, 0.5, 0.20),
@@ -353,6 +362,7 @@ function createChandelier(x, y, z) {
       new THREE.MeshStandardMaterial({ color: 0x2A2418, roughness: 0.4, metalness: 0.8 })
     );
     chain.position.set(Math.cos(i * Math.PI / 4) * 0.52, -0.5, Math.sin(i * Math.PI / 4) * 0.52);
+    chains.push(chain);
     group.add(chain);
   }
   // Inner ring of 6 arms
@@ -362,6 +372,7 @@ function createChandelier(x, y, z) {
       new THREE.MeshStandardMaterial({ color: 0x5A4A30, roughness: 0.4, metalness: 0.7 })
     );
     arm.position.set(Math.cos(i * Math.PI / 3) * 0.30, -1.1, Math.sin(i * Math.PI / 3) * 0.30);
+    arms.push(arm);
     group.add(arm);
     // Candle-bulb at each arm tip
     const bulb = new THREE.Mesh(
@@ -369,6 +380,7 @@ function createChandelier(x, y, z) {
       new THREE.MeshBasicMaterial({ color: 0xFFF8E0 })
     );
     bulb.position.set(Math.cos(i * Math.PI / 3) * 0.30, -1.45, Math.sin(i * Math.PI / 3) * 0.30);
+    bulbs.push(bulb);
     group.add(bulb);
   }
   // Central hanging bulb
@@ -383,21 +395,24 @@ function createChandelier(x, y, z) {
   light.position.set(0, -1.5, 0);
   group.add(light);
   group.position.set(x, y, z);
-  return group;
+  return { group, chains, arms, bulbs, mainBulb, light, seed };
 }
 
 // Hang chandeliers along center axis — entry, desk, transition
-function addLobbyChandelier(x, y, z) {
-  const chandelier = createChandelier(x, y, z);
-  scene.add(chandelier);
+function addLobbyChandelier(x, y, z, seed) {
+  const chandelier = createChandelier(x, y, z, seed);
+  scene.add(chandelier.group);
+  lobbyChandeliers.push(chandelier);
   if (world.registerExternalRoomObject) {
-    world.registerExternalRoomObject('lobby', chandelier);
+    world.registerExternalRoomObject('lobby', chandelier.group);
   }
 }
 
-addLobbyChandelier(0, 5.1, 0);
-addLobbyChandelier(0, 5.1, 6);
-addLobbyChandelier(0, 5.1, -4);
+addLobbyChandelier(0, 5.1, 0, 1);
+addLobbyChandelier(0, 5.1, 6, 2);
+addLobbyChandelier(0, 5.1, -4, 3);
+
+const chandelierMotion = createChandelierMotionSystem(lobbyChandeliers);
 
 // ─── Hazard Tick Damage ────────────────────────────────────────────────────
 const hazardTimers = {};
@@ -536,6 +551,45 @@ function updateStartupLoading(dt) {
 // ─── Clock & Loop ──────────────────────────────────────────────────────────
 const clock = new THREE.Clock();
 
+const shadowCameraPosRef = new THREE.Vector3();
+const shadowCameraQuatRef = new THREE.Quaternion();
+let shadowRefInitialized = false;
+let shadowUpdateCooldown = 0;
+let lastFlashlightShadowEnabled = false;
+let muzzleShadowBurstTimer = 0;
+
+function updateFlashlightShadowRefresh(dt, flashlightEnabled) {
+  const shadowEnabled = !!flashlightEnabled;
+  const toggled = shadowEnabled !== lastFlashlightShadowEnabled;
+  const interval = shadowEnabled ? (1 / 24) : 0;
+
+  if (!shadowRefInitialized) {
+    shadowCameraPosRef.copy(camera.position);
+    shadowCameraQuatRef.copy(camera.quaternion);
+    shadowRefInitialized = true;
+  }
+
+  const moved = camera.position.distanceToSquared(shadowCameraPosRef) > 0.0004;
+  const rotationDelta = 1 - Math.abs(camera.quaternion.dot(shadowCameraQuatRef));
+  const rotated = rotationDelta > 0.00002;
+
+  shadowUpdateCooldown -= dt;
+  const refreshByMotion = shadowEnabled && (moved || rotated) && shadowUpdateCooldown <= 0;
+  const refreshByToggle = toggled;
+
+  if (refreshByMotion || refreshByToggle) {
+    renderer.shadowMap.needsUpdate = true;
+    shadowUpdateCooldown = interval;
+  }
+
+  if (moved || rotated) {
+    shadowCameraPosRef.copy(camera.position);
+    shadowCameraQuatRef.copy(camera.quaternion);
+  }
+
+  lastFlashlightShadowEnabled = shadowEnabled;
+}
+
 let lastEKeyState = false;
 
 window.addEventListener('keydown', e => {
@@ -567,7 +621,9 @@ function loop() {
   }
 
   if (isStartupLoading) {
+    updateFlashlightShadowRefresh(dt, false);
     updateStartupLoading(dt);
+    chandelierMotion.update(dt);
     fog.update(dt);
     renderer.render(scene, camera);
 
@@ -591,6 +647,11 @@ function loop() {
   if (!dead) gun.update(dt);
 
   const gunState = gun.getAmmoState();
+  if (gunState.isFiring) {
+    muzzleShadowBurstTimer = 0.18;
+  } else if (muzzleShadowBurstTimer > 0) {
+    muzzleShadowBurstTimer = Math.max(0, muzzleShadowBurstTimer - dt);
+  }
 
   stepPhysics(physicsWorld, dt);
 
@@ -604,6 +665,7 @@ function loop() {
     for (const doorEntry of doorSystems) {
       doorEntry.system.applyPlayerPushback(player);
     }
+    enemyRuntime.update(dt);
     worldItems.update(dt);
   }
 
@@ -643,11 +705,19 @@ function loop() {
 
   // ─── Hazard tick damage ─────────────────────────────────────────────────
   updateHazards(dt);
+  chandelierMotion.update(dt);
 
   inventoryUI.update(dt);
   hud.update(dt);
   damageEffects.update(dt);
   fog.update(dt);
+
+  const flashlightShadowsActive = !dead
+    && player.getFlashlightOn
+    && player.getFlashlightOn()
+    && !inventoryUI.isOpen();
+  const muzzleShadowsActive = !dead && muzzleShadowBurstTimer > 0 && !inventoryUI.isOpen();
+  updateFlashlightShadowRefresh(dt, flashlightShadowsActive || muzzleShadowsActive);
 
   renderer.render(scene, camera);
 

@@ -99,6 +99,13 @@ export function createViewModel(camera) {
   const flashlightLight = new THREE.SpotLight(0xFFF8EA, 24, 80, Math.PI / 180 * 40, 0.78);
   flashlightLight.decay = 1.3;
   flashlightLight.position.set(0.01, 0.01, -0.19); // Slightly behind lens so nearby geometry catches light correctly
+  flashlightLight.castShadow = true;
+  flashlightLight.shadow.mapSize.set(512, 512);
+  flashlightLight.shadow.bias = -0.0002;
+  flashlightLight.shadow.normalBias = 0.02;
+  flashlightLight.shadow.camera.near = 0.15;
+  flashlightLight.shadow.camera.far = 26;
+  flashlightLight.shadow.camera.fov = 46;
   leftHandGroup.add(flashlightLight);
 
   const flashlightTarget = new THREE.Object3D();
@@ -110,6 +117,7 @@ export function createViewModel(camera) {
   const flashlightSpill = new THREE.SpotLight(0xFFEED2, 9, 22, Math.PI / 180 * 78, 0.98);
   flashlightSpill.decay = 1.05;
   flashlightSpill.position.set(0.01, 0.01, -0.17);
+  flashlightSpill.castShadow = false;
   leftHandGroup.add(flashlightSpill);
 
   const flashlightSpillTarget = new THREE.Object3D();
@@ -175,6 +183,14 @@ export function createViewModel(camera) {
   const muzzleFlashLight = new THREE.SpotLight(0xFFE5B4, 0, MUZZLE_FLASH_RANGE, MUZZLE_FLASH_ANGLE, 0.7);
   muzzleFlashLight.decay = 1.8;
   muzzleFlashLight.position.set(-0.01, 0.045, -0.18);
+  // Profiling mode: enable muzzle flash shadows to measure cost during shots.
+  muzzleFlashLight.castShadow = true;
+  muzzleFlashLight.shadow.mapSize.set(512, 512);
+  muzzleFlashLight.shadow.bias = -0.0002;
+  muzzleFlashLight.shadow.normalBias = 0.02;
+  muzzleFlashLight.shadow.camera.near = 0.08;
+  muzzleFlashLight.shadow.camera.far = 18;
+  muzzleFlashLight.shadow.camera.fov = 95;
   rightHandGroup.add(muzzleFlashLight);
 
   // Create target for the muzzle flash light (points forward from barrel)

@@ -1,209 +1,101 @@
-# PROJECT SH - Design Bible
-High-level reference for AI agents. Keep entries structural and durable. Session-by-session detail belongs in CHANGELOG.md.
+# PROJECT SH - Architecture Bible
+Top-level guidance for AI agents. Keep this file focused on structural truth, ownership boundaries, and future direction.
 
----
+## Project Intent
+Browser-based first-person survival horror built with Three.js and vanilla ES modules.
+Primary goal for code changes: preserve one coherent architecture as systems scale.
 
-## Concept
-First-person survival horror in the browser. No game engine, pure Three.js + vanilla JS.
-Built collaboratively: AI agents implement code while the user drives design direction.
+## Core Runtime Model
+- `src/main.js` is the orchestrator. Systems are composed there and updated per frame.
+- Systems should be factory-style modules (`createX`) with explicit state and `update` entry points.
+- World data originates from `src/world/world.js`; systems consume world descriptors instead of hardcoded per-room/per-door logic.
+- Player movement/collision remains AABB-based. Do not replace with full rigid-body character physics unless explicitly requested.
 
----
+## ES Module Import Rule (Startup-Critical)
+- Import paths must match `index.html` import-map aliases exactly.
+- For Three.js example utilities, use `three/addons/...` paths (not `three/examples/jsm/...`).
+- A bad ESM import path can halt module bootstrap before input/click handlers bind, which appears as "click to begin" doing nothing.
 
-## Git / Source Control
-Repository: https://github.com/dell90wattac/project-sh
+## Ownership Boundaries (Do Not Blur)
+- Room visibility and graph traversal: `src/systems/roomCulling.js`
+- Door entity behavior and door runtime coordination: `src/entities/door.js`, `src/systems/door.js`
+- Lock rules and unlock contracts: `src/systems/lock.js`
+- Inventory state and item definitions: `src/systems/inventory.js`, `src/systems/itemRegistry.js`
+- World pickup lifecycle: `src/systems/worldItems.js`
+- Combat/weapon state: `src/systems/weapons.js`
+- Health state model: `src/systems/health.js`
+- Enemy runtime orchestration (controller + animation state plumbing + collider sync): `src/systems/enemyRuntime.js`
+- Enemy archetype authoring contracts (visual profile, animation states, pathing config, health defaults): `src/entities/zombies.js`
+- World layout, room geometry, room registration, and door placement: `src/world/world.js`
+- Fog as zone-driven presentation: `src/systems/fog.js`
+- UI presentation only: `src/ui/*` (HUD/effects should not become gameplay source-of-truth)
 
-Start-of-session rule: always pull latest main before editing.
+If adding a feature, extend the existing owner system first. Do not create parallel subsystems for the same responsibility.
 
-| Action | Command |
-|--------|---------|
-| Pull latest | `git pull origin main` |
-| Push changes | `git add . && git commit -m "message" && git push origin main` |
-| First-time setup | `git clone https://github.com/dell90wattac/project-sh.git` then `npm install` |
+## Active Architectural Contracts
+- Room-ID agnostic design: avoid hardcoded room lists inside systems.
+- Visibility culling is authoritative for hidden/active room behavior and drives dependent systems.
+- Doors support explicit interaction gating; lock flow controls when interaction is enabled.
+- Doors support rotated placement via `hingeRotY` parameter in `addLinkedDoor`; non-zero rotation wraps the pivot in a parent group so door physics inherits world orientation transparently.
+- Locking is entity-agnostic and key-driven (`key:<id>` pattern via registry/inventory path).
+- Pointer lock + fallback input mode must continue to work with inventory and interaction UI.
+- Dynamic shadows are budgeted as an orchestrated runtime concern: prefer one primary gameplay shadow caster, keep secondary effects non-shadowed by default, and gate extra casters behind explicit profiling/toggle paths.
+- Enemy entities are component-driven and must keep stable keys for future upgrades: `visual`, `animation`, `pathing`, `controller`, `collision`, `health`.
+- Current enemy runtime state machine names are reserved now and must remain compatible: `idle`, `walk`, `attack`, `hit`, `death`.
+- Enemy collision uses explicit component sync (`components.collision.syncFromEntity`) so static and future moving/pathing enemies share one update path.
+- Each room has a unique zone identifier used by fog and perf overlay; new rooms must define their own zone rather than sharing a generic one.
 
----
+## Enemy Runtime Guidance
+- Register enemies in world ownership (`world.enemies` / `world.getEnemies`) so non-render systems can consume them without scene traversal.
+- Keep enemy pathing authority out of `world.js`; world owns placement and initial collider registration only.
+- Keep controller update hooks deterministic (`controller.update(dt, context)`) and avoid direct UI side effects.
+- If a future enemy swaps to a skinned mesh/rig, preserve the same component contract and runtime state names so AI/pathing code remains unchanged.
 
-## Tech Stack
-| Layer | Tech |
-|-------|------|
-| Renderer | Three.js 0.169.0 (CDN importmap) |
-| Physics | cannon-es 0.20.0 (CDN) |
-| Audio | Web Audio API (not yet implemented) |
-| Language | Vanilla JS (ES modules), no bundler |
-| Entry | index.html -> src/main.js |
-| Dev server | node server.js (no-cache headers) |
+## Technical Depth Policy
+- Increase technical detail only for cross-cutting or high-risk systems.
+- Keep detail at contract level (inputs, outputs, authority, constraints), not algorithm lock-in.
+- Do not prescribe one permanent implementation unless required by a proven bottleneck.
+- Keep tunable values in code constants; keep architectural rules in this file.
 
----
+Current depth target by system type:
+- High depth: room culling, state authority, system integration points, performance budgeting.
+- Medium depth: locks, doors, inventory/world-item interactions, offscreen simulation contracts.
+- Lower depth: visual polish systems such as fog and post effects, unless they become gameplay-critical or a performance hotspot.
 
-## Project Structure
-```
-Project SH/
-|- index.html
-|- server.js
-|- src/
-|  |- main.js
-|  |- world/
-|  |  |- world.js
-|  |- entities/
-|  |  |- door.js
-|  |  |- zombies.js
-|  |- player/
-|  |  |- player.js
-|  |  |- viewmodel.js
-|  |- systems/
-|  |  |- door.js
-|  |  |- fog.js
-|  |  |- health.js
-|  |  |- inventory.js
-|  |  |- itemRegistry.js
-|  |  |- lock.js
-|  |  |- physics.js
-|  |  |- roomCulling.js
-|  |  |- weapons.js
-|  |  |- worldItems.js
-|  |- ui/
-|  |  |- damageEffects.js
-|  |  |- hud.js
-|  |  |- inventory.js
-|  |  |- perfOverlay.js
-|- CHANGELOG.md
-|- PROJECT_BIBLE.md
-```
+## Culling And Fog Guidance
+- Culling (`src/systems/roomCulling.js`) should expose stable visibility state that other systems consume directly.
+- Dependent systems must subscribe to culling outcomes instead of re-implementing room-visibility checks.
+- Culling changes should preserve deterministic behavior at room boundaries before adding complexity.
+- Fog (`src/systems/fog.js`) should remain a presentation system driven by world/room state.
+- Fog is zone-based: each fog zone defines its own bounds, ceiling height, wisp count, and ground fog plane. New world areas require a corresponding fog zone entry.
+- Do not move gameplay authority into fog logic; fog reacts to game state, it does not define it.
+- If fog quality increases, validate cost against culling/update budgets first.
 
----
+## Lighting And Shadow Guidance
+- Keep lighting ownership split by role: world/environment lights in `src/world/world.js`, first-person effect lights in `src/player/viewmodel.js`, and frame-budget/shadow update policy in `src/main.js`.
+- If dynamic shadowing expands, scale via explicit runtime budgeting (throttled updates, limited caster count) before raising map resolution or caster scope.
+- Treat muzzle flash, spill, and similar short-lived aesthetic lights as non-shadowed by default unless a profiling session explicitly validates headroom.
 
-## Gameplay Pillars
-1. Tension over action: scarcity, darkness, and atmosphere drive fear.
-2. Exploration: spaces reward deliberate movement and observation.
-3. Survival: health, ammo, and item decisions matter.
+## Current World Shape (High Level)
+- Play space is a multi-wing museum built from connected room graphs.
+- **Main Lobby**: Grand 14×28m hall with 5.5m ceilings, columns, balcony, staircases, front desk. Player spawns at center (0, 0, 0).
+- **West Offshoots** (left from spawn): Three 4×4m rooms chained off the lobby left wall (`sideRoomEast` → `sideRoomMid` → `sideRoomWest`). Full lobby ceiling height (5.5m).
+- **East Wing — Administration** (right from spawn): Hallway (11.8×3.0m) connecting lobby to five rooms through the right wall:
+  - North side: Reception Office, Admin Office
+  - South side: Manager's Office, Kitchenette
+  - End of hallway: Director's Office (5.3×7.0m)
+  - All east wing rooms use 3.0m ceilings for realistic office scale.
+  - 7 doors total (1 lobby→hallway, 4 hallway→offices rotated ±π/2, 1 hallway→director, plus existing lobby→offshoot).
+- Runtime assumes culling-based visibility (not asset streaming/unloading).
+- Existing systems are already wired for multi-room expansion; scale by extending world descriptors and graph links.
 
----
+## Path Forward (Code-Altering Priorities)
+1. Expand room graph content using existing room/culling contracts, not custom per-room logic.
+2. Add offscreen enemy simulation compatible with room visibility states (lightweight when hidden, full behavior when visible).
+3. Introduce audio as a system-layer concern that subscribes to gameplay events (doors, weapons, footsteps, hazards), not ad-hoc calls spread across files.
+4. Keep performance work aligned to current model: culling throughput, update budgeting, and static/baked lighting where feasible.
 
-## Systems Overview
-
-### Player (src/player/player.js)
-- WASD movement, sprint, jump, and mouse-look.
-- Player collision stays fast AABB-based against world colliders.
-- Pointer-lock lifecycle is managed with a fallback mode for environments where lock cannot engage.
-- Cursor state is synchronized with gameplay/inventory state.
-
-### Viewmodel (src/player/viewmodel.js)
-- Dual-hand first-person rig: flashlight hand + weapon hand.
-- Bob, sway, recoil, and reload blend by state.
-- Door interaction blend drives the push pose.
-- Flashlight uses dual-cone lighting (main beam + short-range spill) to keep close-surface illumination natural.
-
-### Health (src/systems/health.js)
-- Shared health factory for player and future enemies.
-- Damage, heal, death callbacks; reset flow for respawn.
-
-### Weapons (src/systems/weapons.js)
-- Semi-auto hitscan, magazine and reserve tracking.
-- Reload uses real bullet-economy behavior.
-
-### Inventory + Registry (src/systems/inventory.js, src/systems/itemRegistry.js, src/ui/inventory.js)
-- 3x3 grid plus separate equipped slot.
-- Drag/drop movement, stacking, recipe-based combining, and context-menu actions.
-- Virtual cursor interaction remains pointer-lock-safe.
-- Registry supports dynamic key item IDs (`key:<id>`) for reusable puzzle locks without per-key hardcoding.
-
-### World Items (src/systems/worldItems.js)
-- World pickups are room-owned and visibility-aware.
-- Hover raycast excludes hidden-room pickups.
-- Dropped pickups auto-spread to avoid overlap.
-- Key pickups use the same world item path as other inventory items (including drops).
-
-### Locks (src/systems/lock.js, src/main.js)
-- Reusable lock factory (`createLock`) provides required-key matching, locked state, unlock callback hook, and per-frame update.
-- Lock proximity uses cylindrical range (horizontal radius + vertical tolerance) for floor-aware behavior in multi-level maps.
-- Lock module is entity-agnostic: doors or future puzzle actors decide what unlock enables.
-
-### Room Culling (src/systems/roomCulling.js, src/world/world.js)
-- Room graph visibility culling uses BFS from current room.
-- Current-room resolution is overlap-aware and can prefer prior room at boundaries.
-- Visibility depth is runtime-adjustable.
-- Visibility updates are frame-budgeted (room-ops per frame) to avoid transition spikes.
-- Culling syncs room topology from world room IDs at runtime, so added/removed rooms are handled without per-room culling code edits.
-- Startup loading/warmup is room-count agnostic and normalizes to gameplay depth before click-to-begin.
-- Culling throughput is adaptively tuned by frame time and queue pressure, then clamped by room-count-scaled caps.
-- Player current-room visibility is prioritized to prevent entered-room hidden-state starvation.
-- Desired visibility targets are refreshed each update so stale culling state self-corrects after topology or transition changes.
-
-### Doors (src/entities/door.js, src/systems/door.js, src/main.js)
-- Multi-door runtime: one door system per world door reference.
-- Door physics uses torque + lever arm with tuned close behavior (spring/damping/cushion/friction).
-- Player pushback resolves door overlap after movement.
-- Doors connected to hidden rooms reset to closed.
-- Door interaction is explicitly state-gated (`interactionEnabled`) so locked doors can be hard-disabled until unlock transitions occur.
-- Locked-door flow is now explicit: locked + interaction-disabled -> unlock callback -> interaction-enabled swing behavior.
-
-### Hazards (src/world/world.js, src/main.js)
-- World exports hazard descriptors.
-- Main loop applies tick damage while in hazard range.
-
-### HUD + Perf Overlay (src/ui/hud.js, src/ui/perfOverlay.js)
-- HUD shows health and ammo.
-- Perf overlay (F3) shows fps/ms, room/zone, room counts, culling queue/budget (`vis queue`, `vis ops`), draw calls, and triangles.
-
-### Damage Effects (src/ui/damageEffects.js)
-- Damage flash, low-health pulse, and death/reset presentation.
-
----
-
-## Architecture Patterns
-- createX factory modules with explicit update loops.
-- src/main.js is the runtime orchestrator.
-- Room-first ownership model: world objects can belong to one or multiple rooms.
-- Visibility culling drives dependent systems (doors, world items, overlay telemetry).
-- Room graph integrations should remain room-ID agnostic (no hardcoded room lists in systems); rely on world room APIs.
-- Player remains AABB-based; cannon-es is available for dynamic entities.
-
----
-
-## Current Environment
-- Core lobby remains the primary play space with connected offshoot chain rooms.
-- Active room IDs:
-  - lobby (label: Main Lobby, zone: lobby)
-  - sideRoomEast (label: Offshoot East, zone: offshootA)
-  - sideRoomMid (label: Offshoot Mid, zone: offshootB)
-  - sideRoomWest (label: Offshoot West, zone: offshootC)
-- Active room graph:
-  - lobby <-> sideRoomEast <-> sideRoomMid <-> sideRoomWest
-- Active doors:
-  - doorLobbyEast (lobby <-> sideRoomEast)
-  - doorEastMid (sideRoomEast <-> sideRoomMid)
-  - doorMidWest (sideRoomMid <-> sideRoomWest)
-- Runtime culling defaults:
-  - visibility-based culling (no stream unload)
-  - normal gameplay depth: 2
-  - startup warmup raises depth briefly, then restores normal depth
-
----
-
-## Roadmap
-- Expand room graph from current chain toward 10-20 rooms.
-- Implement hybrid offscreen enemy behavior for non-visible rooms.
-- Add traversal polish like room-hide hysteresis if needed.
-- Add sound design (ambient, footsteps, gunfire, door creaks).
-- Move toward baked/static lighting where possible for scale.
-
----
-
-## Architectural Decisions
-| Decision | Rationale |
-|----------|-----------|
-| Three.js without full engine | Maximum control and low abstraction overhead |
-| Player uses AABB collisions | Stable and fast first-person movement |
-| Pointer lock preferred, fallback supported | Reliable input across browser/runtime contexts |
-| Room-graph visibility culling | Performance headroom with seamless traversal |
-| Shared-object room membership | Prevents pop-in on boundaries and shared partitions |
-| Door reset on room hide | Simpler state policy under culling |
-| Explicit lock -> interaction gate | Keeps puzzle gating deterministic and reusable across doors/non-door actors |
-| Item behavior in registry | Keeps inventory logic generic and extensible |
-| Health factory reuse | Same architecture for player and enemies |
-
----
-
-## Agent Maintenance Rules
-- Update CHANGELOG.md after every session.
-- Update PROJECT_BIBLE.md only for architectural/system shifts.
-- Keep tunable numeric balance values in code constants, not this bible.
+## Change Discipline For Agents
+- Update `CHANGELOG.md` every working session.
+- Update this file only when architecture, ownership, or system contracts change.
+- Keep tuning values and moment-to-moment balance in code constants, not here.

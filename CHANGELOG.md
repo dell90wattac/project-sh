@@ -4,6 +4,102 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 18] — 2026-03-10
+### Added
+- **East Wing administration area — 6-room layout** (`src/world/world.js`)
+  - Added east hallway (11.8×3.0m) connecting to lobby through a new door opening in the right wall
+  - Added 4 offices branching off the hallway: Reception Office (north-left), Admin Office (north-right), Manager's Office (south-left), Kitchenette (south-right)
+  - Added Director's Office (5.3×7.0m) at the end of the hallway
+  - All rooms built with floors, walls, ceilings, wainscoting, crown molding, door frames, ceiling lights, and wall sconces using existing materials and patterns
+  - East wing uses 3.0m ceilings (realistic office height) vs lobby's 5.5m grand scale
+
+- **Per-room zone identifiers for east wing** (`src/world/world.js`)
+  - Each east wing room registered with a unique zone: `eastHallway`, `eastReception`, `eastAdmin`, `eastManager`, `eastKitchen`, `eastDirector`
+  - Zones propagate through room culling metadata and perf overlay automatically
+
+- **Rotated door support via `hingeRotY` parameter** (`src/world/world.js`)
+  - Enhanced `addLinkedDoor` to accept `hingeRotY` for doors on non-X-axis walls
+  - Non-zero rotation wraps the door pivot in a parent `THREE.Group` so door physics (`getWorldQuaternion`) inherits orientation transparently
+  - Zero-rotation behavior unchanged; fully backwards-compatible
+
+- **7 new doors for east wing traversal** (`src/world/world.js`)
+  - `doorLobbyEastWing`: lobby → hallway (standard orientation)
+  - `doorHallReception`, `doorHallAdmin`: hallway north wall → offices (rotated +π/2)
+  - `doorHallManager`, `doorHallKitchen`: hallway south wall → offices (rotated −π/2)
+  - `doorHallDirector`: hallway end wall → director's office (standard orientation)
+
+- **Zone-aware fog system** (`src/systems/fog.js`)
+  - Refactored from single hardcoded lobby bounds to a `fogZones` array
+  - Lobby zone retains 20 wisps at 5.5m ceiling; east wing zone gets 12 wisps at 3.0m ceiling
+  - Each zone has its own ground fog plane with independent bounds
+  - Wisp wrap and height clamping now per-zone
+
+### Changed
+- **Lobby right wall split for east wing entrance** (`src/world/world.js`)
+  - Replaced single continuous right wall with two segments leaving a 1.0m door opening at Z=2.0→3.0
+  - Split right wainscoting and crown molding to match
+  - Added door frame trim on the right wall opening
+  - Relocated right wall sconce from Z=3 (door conflict) to Z=5.5
+
+- **Lobby room connections updated** (`src/world/world.js`)
+  - Lobby now connects to both `sideRoomEast` and `eastHallway` for proper culling graph traversal
+
+### Fixed
+- **Rotated hallway doors misaligned with wall openings** (`src/world/world.js`)
+  - Corrected hinge positions for rotated doors: +π/2 doors hinge at left edge of opening, −π/2 doors hinge at right edge, so door panels center in their openings
+
+### Notes
+- East wing rooms are structural shells only (walls, floors, ceilings, doors, lights). Furniture, items, and enemies to be added in future sessions.
+- Door physics system (`src/systems/door.js`) required zero changes — world-space quaternion inheritance handles rotated pivots.
+- Room culling system (`src/systems/roomCulling.js`) required zero changes — fully connection-graph driven.
+
+---
+
+## [Session 17] — 2026-03-10
+### Added
+- **Rig-ready enemy runtime scaffold** (`src/systems/enemyRuntime.js`, `src/main.js`, `src/world/world.js`, `src/entities/zombies.js`)
+  - Added `createEnemyRuntime(world, player)` system that updates enemies through a stable per-frame contract
+  - Added world enemy registry (`world.enemies`, `world.getEnemies()`) so enemy systems avoid scene graph traversal
+  - Added per-enemy component contracts for future animation/pathing integration: `visual`, `animation`, `pathing`, `controller`, `collision`, `health`
+  - Reserved animation state names now for forward compatibility: `idle`, `walk`, `attack`, `hit`, `death`
+
+### Changed
+- **Zombie sentry now exposes controller + pathing-ready metadata** (`src/entities/zombies.js`)
+  - Added rig profile metadata for future skinned/rigged replacement without API churn
+  - Added deterministic controller hook (`controller.update`) and lightweight idle bob runtime behavior
+
+- **Zombie collision upgraded for future movement support** (`src/world/world.js`)
+  - Added `components.collision.syncFromEntity(enemy)` callback and linked world collider reference
+  - Collider update path now supports eventual enemy pathing/locomotion without rewriting player collision logic
+
+### Notes
+- Current sentry remains non-pathing and non-combat AI by design; this session establishes upgrade-safe contracts so animation + navigation can be layered in incrementally.
+
+---
+
+## [Session 16] — 2026-03-10
+### Changed
+- **Flashlight now supports performance-safe dynamic shadows** (`src/player/viewmodel.js`, `src/player/player.js`, `src/main.js`)
+  - Enabled shadow casting on the primary flashlight spotlight only
+  - Tuned flashlight shadow camera and map settings for stable quality/cost (`512` map size, short near/far, bias and normal-bias tuning)
+  - Exposed flashlight runtime state through player API for render orchestration
+  - Disabled continuous shadow-map auto-updates and added throttled shadow refresh based on camera motion/toggle state
+
+- **Muzzle flash moved into measurable shadow profiling mode** (`src/player/viewmodel.js`, `src/main.js`)
+  - Enabled muzzle flash spotlight shadows to verify real-world frame impact during combat
+  - Added short burst shadow-refresh window tied to firing state so cost can be observed even with throttled global shadow updates
+
+### Fixed
+- **Secondary local lights causing avoidable shadow overhead risk** (`src/player/viewmodel.js`)
+  - Kept flashlight spill light explicitly non-shadowed
+  - Kept muzzle flash shadow behavior explicitly controlled per profiling mode instead of inheriting implicit defaults
+
+### Notes
+- Current test outcome: runtime remained effectively capped at monitor limit (144 FPS) during flashlight + muzzle-flash shadow usage on this machine.
+- Shadow policy now favors one primary gameplay shadow caster, with additional dynamic shadow casters gated behind explicit profiling/perf intent.
+
+---
+
 ## [Session 15] — 2026-03-10
 ### Added
 - **Universal lock/key foundation for puzzle gating** (`src/systems/lock.js`, `src/systems/itemRegistry.js`, `src/systems/door.js`, `src/main.js`)

@@ -1,4 +1,42 @@
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+
+const enemyTextureLoader = new THREE.TextureLoader();
+const enemyTextureCache = new Map();
+
+function getEnemyTexture(path) {
+  if (enemyTextureCache.has(path)) return enemyTextureCache.get(path);
+
+  const texture = enemyTextureLoader.load(path);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(2, 2);
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  enemyTextureCache.set(path, texture);
+  return texture;
+}
+
+function setShadowFlags(root) {
+  root.traverse((child) => {
+    if (child.isMesh) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+    }
+  });
+}
+
+export function createEnemyContainer({ type = 'enemy', hp = 1, name = 'Enemy' } = {}) {
+  const mesh = new THREE.Group();
+  mesh.name = name;
+  return {
+    mesh,
+    type,
+    hp,
+    state: {},
+    components: {},
+  };
+}
 
 /**
  * Pixel art texture generator for zombie faces.
@@ -617,4 +655,110 @@ export function createCharred(scene) {
 
   scene.add(group);
   return { mesh: group, type: 'charred', hp: 6 };
+}
+
+/**
+ * Reusable first enemy shell: static PS1-style zombie using an external CC0 texture.
+ * Kept intentionally inert so AI/pathing/health systems can be wired in later.
+ */
+export function createLobbyZombieSentry(
+  texturePath = '/assets/textures/enemies/fabric030_color_64.png'
+) {
+  const entity = createEnemyContainer({
+    type: 'zombieSentry',
+    hp: 4,
+    name: 'ZombieSentry',
+  });
+
+  const texture = getEnemyTexture(texturePath);
+
+  const zombieMat = new THREE.MeshStandardMaterial({
+    map: texture,
+    color: 0x74866d,
+    roughness: 0.9,
+    metalness: 0,
+  });
+
+  const group = entity.mesh;
+
+  // Build and merge all body parts into one mesh so placement is easy to manage.
+  const parts = [];
+  const temp = new THREE.Object3D();
+
+  function addPart(geometry, x, y, z, rx = 0, ry = 0, rz = 0) {
+    temp.position.set(x, y, z);
+    temp.rotation.set(rx, ry, rz);
+    temp.updateMatrix();
+    const g = geometry.clone();
+    g.applyMatrix4(temp.matrix);
+    parts.push(g);
+  }
+
+  addPart(new THREE.BoxGeometry(0.30, 0.34, 0.30), 0, 1.55, 0.02); // head
+  addPart(new THREE.BoxGeometry(0.38, 0.10, 0.30), 0, 1.30, 0.03); // collar
+  addPart(new THREE.BoxGeometry(0.46, 0.62, 0.34), 0, 0.90, 0.04, 0.06, 0, 0); // torso
+  addPart(new THREE.BoxGeometry(0.24, 0.22, 0.10), 0.04, 0.95, -0.18, 0, 0.16, 0); // rib area
+  addPart(new THREE.BoxGeometry(0.30, 0.20, 0.10), -0.02, 0.72, -0.18); // abdomen
+  addPart(new THREE.BoxGeometry(0.50, 0.24, 0.38), 0, 0.50, 0.03); // coat skirt
+  addPart(new THREE.BoxGeometry(0.12, 0.56, 0.14), -0.33, 0.90, -0.04, 0.08, 0, 0.24); // left arm
+  addPart(new THREE.BoxGeometry(0.12, 0.56, 0.14), 0.35, 0.86, -0.20, 0.2, 0, -0.48); // right arm
+  addPart(new THREE.BoxGeometry(0.12, 0.12, 0.14), 0.44, 0.56, -0.30); // right hand
+  addPart(new THREE.BoxGeometry(0.11, 0.11, 0.13), -0.43, 0.64, -0.08); // left hand
+  addPart(new THREE.BoxGeometry(0.16, 0.38, 0.18), -0.14, 0.22, 0.01); // left thigh
+  addPart(new THREE.BoxGeometry(0.16, 0.38, 0.18), 0.14, 0.22, 0.01); // right thigh
+  addPart(new THREE.BoxGeometry(0.14, 0.34, 0.15), -0.14, -0.12, 0.03); // left shin
+  addPart(new THREE.BoxGeometry(0.14, 0.34, 0.15), 0.14, -0.12, 0.03); // right shin
+  addPart(new THREE.BoxGeometry(0.16, 0.12, 0.25), -0.14, -0.36, 0.08); // left boot
+  addPart(new THREE.BoxGeometry(0.16, 0.12, 0.25), 0.14, -0.36, 0.08); // right boot
+  addPart(new THREE.BoxGeometry(0.16, 0.10, 0.18), -0.27, 1.12, 0.02, 0, 0, 0.18); // left shoulder
+  addPart(new THREE.BoxGeometry(0.16, 0.10, 0.18), 0.27, 1.10, -0.02, 0, 0, -0.22); // right shoulder
+
+  const merged = mergeGeometries(parts, false);
+  parts.forEach((g) => g.dispose());
+  const zombieMesh = new THREE.Mesh(merged, zombieMat);
+  group.add(zombieMesh);
+
+  setShadowFlags(group);
+  entity.components.visual = {
+    style: 'ps1-pixel',
+    texturePath,
+    // Keep profile metadata stable so future skinned/rigged swaps keep behavior settings.
+    rigProfile: {
+      skeletonType: 'humanoid-zombie',
+      rootBone: 'hips',
+      facingAxis: '-z',
+    },
+  };
+
+  entity.components.animation = {
+    state: 'idle',
+    states: ['idle', 'walk', 'attack', 'hit', 'death'],
+    clips: {},
+    mixer: null,
+  };
+
+  entity.components.pathing = {
+    mode: 'none',
+    moveSpeed: 0.75,
+    turnSpeed: 2.2,
+    targetPosition: null,
+    desiredVelocity: new THREE.Vector3(),
+  };
+
+  entity.components.controller = {
+    time: 0,
+    update(dt) {
+      this.time += dt;
+      // Tiny idle bob keeps a deterministic per-enemy runtime hook active.
+      group.position.y = Math.sin(this.time * 1.25) * 0.01;
+    },
+  };
+
+  entity.components.health = {
+    current: entity.hp,
+    max: entity.hp,
+    dead: false,
+  };
+
+  return entity;
 }

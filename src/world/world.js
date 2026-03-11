@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { createDoor } from '../entities/door.js';
+import { createLobbyZombieSentry } from '../entities/zombies.js';
 
 /**
  * Test room — RCPD-lobby inspired layout.
@@ -10,6 +11,7 @@ export function createWorld(scene, physicsWorld) {
   const colliders = [];
   const hazards = [];
   const doors = [];
+  const enemies = [];
   const roomMap = new Map();
   const roomVisibility = new Map();
   const objectRoomMemberships = new Map();
@@ -199,13 +201,72 @@ export function createWorld(scene, physicsWorld) {
   const EAST_MID_PARTITION_X = SIDE_ROOM_EAST_CENTER_X - OFFSHOOT_ROOM_W / 2 - WALL_THICK / 2;
   const MID_WEST_PARTITION_X = SIDE_ROOM_MID_CENTER_X - OFFSHOOT_ROOM_W / 2 - WALL_THICK / 2;
 
+  // ─── East Wing (administration) dimensions ────────────────────────────────
+  const EAST_CEIL       = 3.0;   // Lower office ceiling
+  const EAST_DOOR_OPENING_MIN_Z = DOOR_HINGE_Z;          // 2.0
+  const EAST_DOOR_OPENING_MAX_Z = DOOR_HINGE_Z + DOOR_WIDTH; // 3.0
+  const EAST_DOOR_INNER_X = RIGHT_WALL_X - WALL_THICK / 2; // 6.9
+
+  // Hallway runs east from lobby right wall
+  const EAST_HALL_MIN_X = RIGHT_WALL_X + WALL_THICK;      // 7.2
+  const EAST_HALL_MAX_X = 19.0;
+  const EAST_HALL_W     = EAST_HALL_MAX_X - EAST_HALL_MIN_X; // 11.8
+  const EAST_HALL_CENTER_X = (EAST_HALL_MIN_X + EAST_HALL_MAX_X) / 2; // 13.1
+  const EAST_HALL_MIN_Z = 1.0;
+  const EAST_HALL_MAX_Z = 4.0;
+  const EAST_HALL_D     = EAST_HALL_MAX_Z - EAST_HALL_MIN_Z; // 3.0
+  const EAST_HALL_CENTER_Z = (EAST_HALL_MIN_Z + EAST_HALL_MAX_Z) / 2; // 2.5
+
+  // North rooms (reception + admin office) sit above hallway
+  const EAST_NORTH_MIN_Z = EAST_HALL_MAX_Z + WALL_THICK;  // 4.2
+  const EAST_NORTH_MAX_Z = 8.5;
+  const EAST_NORTH_D    = EAST_NORTH_MAX_Z - EAST_NORTH_MIN_Z; // 4.3
+  const EAST_NORTH_CENTER_Z = (EAST_NORTH_MIN_Z + EAST_NORTH_MAX_Z) / 2;
+
+  // South rooms (manager + kitchenette) sit below hallway
+  const EAST_SOUTH_MIN_Z = -3.0;
+  const EAST_SOUTH_MAX_Z = EAST_HALL_MIN_Z - WALL_THICK;  // 0.8
+  const EAST_SOUTH_D    = EAST_SOUTH_MAX_Z - EAST_SOUTH_MIN_Z; // 3.8
+  const EAST_SOUTH_CENTER_Z = (EAST_SOUTH_MIN_Z + EAST_SOUTH_MAX_Z) / 2;
+
+  // Partition wall between left/right room columns
+  const EAST_PARTITION_X = 13.0;
+
+  // Left column rooms (reception / manager)
+  const EAST_LEFT_MIN_X  = EAST_HALL_MIN_X;               // 7.2
+  const EAST_LEFT_MAX_X  = EAST_PARTITION_X - WALL_THICK / 2; // 12.9
+  const EAST_LEFT_W      = EAST_LEFT_MAX_X - EAST_LEFT_MIN_X; // 5.7
+  const EAST_LEFT_CENTER_X = (EAST_LEFT_MIN_X + EAST_LEFT_MAX_X) / 2;
+
+  // Right column rooms (admin / kitchenette)
+  const EAST_RIGHT_MIN_X = EAST_PARTITION_X + WALL_THICK / 2; // 13.1
+  const EAST_RIGHT_MAX_X = EAST_HALL_MAX_X;                // 19.0
+  const EAST_RIGHT_W     = EAST_RIGHT_MAX_X - EAST_RIGHT_MIN_X; // 5.9
+  const EAST_RIGHT_CENTER_X = (EAST_RIGHT_MIN_X + EAST_RIGHT_MAX_X) / 2;
+
+  // Director's office at end of hallway
+  const EAST_DIR_MIN_X = EAST_HALL_MAX_X + WALL_THICK;    // 19.2
+  const EAST_DIR_MAX_X = 24.5;
+  const EAST_DIR_W     = EAST_DIR_MAX_X - EAST_DIR_MIN_X; // 5.3
+  const EAST_DIR_CENTER_X = (EAST_DIR_MIN_X + EAST_DIR_MAX_X) / 2;
+  const EAST_DIR_MIN_Z = -1.0;
+  const EAST_DIR_MAX_Z = 6.0;
+  const EAST_DIR_D     = EAST_DIR_MAX_Z - EAST_DIR_MIN_Z; // 7.0
+  const EAST_DIR_CENTER_Z = (EAST_DIR_MIN_Z + EAST_DIR_MAX_Z) / 2;
+
+  // Door positions along hallway walls (X positions of hinge centers)
+  const EAST_DOOR_RECEPTION_X = 9.5;
+  const EAST_DOOR_ADMIN_X     = 15.5;
+  const EAST_DOOR_MANAGER_X   = 9.5;
+  const EAST_DOOR_KITCHEN_X   = 15.5;
+
   registerRoom(
     'lobby',
     new THREE.Box3(
       new THREE.Vector3(LEFT_WALL_X - 0.2, -1.0, BACK_Z - 0.2),
       new THREE.Vector3(RIGHT_WALL_X + 0.2, CEIL + 0.5, FRONT_Z + 0.2)
     ),
-    ['sideRoomEast'],
+    ['sideRoomEast', 'eastHallway'],
     { label: 'Main Lobby', zone: 'lobby' }
   );
 
@@ -237,6 +298,67 @@ export function createWorld(scene, physicsWorld) {
     { label: 'Offshoot West', zone: 'offshootC' }
   );
 
+  // ─── East Wing Room Registrations ─────────────────────────────────────────
+  registerRoom(
+    'eastHallway',
+    new THREE.Box3(
+      new THREE.Vector3(EAST_HALL_MIN_X - 0.2, -1.0, EAST_HALL_MIN_Z - 0.2),
+      new THREE.Vector3(EAST_HALL_MAX_X + 0.2, EAST_CEIL + 0.5, EAST_HALL_MAX_Z + 0.2)
+    ),
+    ['lobby', 'eastReception', 'eastAdmin', 'eastManager', 'eastKitchen', 'eastDirector'],
+    { label: 'East Hallway', zone: 'eastHallway' }
+  );
+
+  registerRoom(
+    'eastReception',
+    new THREE.Box3(
+      new THREE.Vector3(EAST_LEFT_MIN_X - 0.2, -1.0, EAST_NORTH_MIN_Z - 0.2),
+      new THREE.Vector3(EAST_LEFT_MAX_X + 0.2, EAST_CEIL + 0.5, EAST_NORTH_MAX_Z + 0.2)
+    ),
+    ['eastHallway'],
+    { label: 'Reception Office', zone: 'eastReception' }
+  );
+
+  registerRoom(
+    'eastAdmin',
+    new THREE.Box3(
+      new THREE.Vector3(EAST_RIGHT_MIN_X - 0.2, -1.0, EAST_NORTH_MIN_Z - 0.2),
+      new THREE.Vector3(EAST_RIGHT_MAX_X + 0.2, EAST_CEIL + 0.5, EAST_NORTH_MAX_Z + 0.2)
+    ),
+    ['eastHallway'],
+    { label: 'Admin Office', zone: 'eastAdmin' }
+  );
+
+  registerRoom(
+    'eastManager',
+    new THREE.Box3(
+      new THREE.Vector3(EAST_LEFT_MIN_X - 0.2, -1.0, EAST_SOUTH_MIN_Z - 0.2),
+      new THREE.Vector3(EAST_LEFT_MAX_X + 0.2, EAST_CEIL + 0.5, EAST_SOUTH_MAX_Z + 0.2)
+    ),
+    ['eastHallway'],
+    { label: "Manager's Office", zone: 'eastManager' }
+  );
+
+  registerRoom(
+    'eastKitchen',
+    new THREE.Box3(
+      new THREE.Vector3(EAST_RIGHT_MIN_X - 0.2, -1.0, EAST_SOUTH_MIN_Z - 0.2),
+      new THREE.Vector3(EAST_RIGHT_MAX_X + 0.2, EAST_CEIL + 0.5, EAST_SOUTH_MAX_Z + 0.2)
+    ),
+    ['eastHallway'],
+    { label: 'Kitchenette', zone: 'eastKitchen' }
+  );
+
+  registerRoom(
+    'eastDirector',
+    new THREE.Box3(
+      new THREE.Vector3(EAST_DIR_MIN_X - 0.2, -1.0, EAST_DIR_MIN_Z - 0.2),
+      new THREE.Vector3(EAST_DIR_MAX_X + 0.2, EAST_CEIL + 0.5, EAST_DIR_MAX_Z + 0.2)
+    ),
+    ['eastHallway'],
+    { label: "Director's Office", zone: 'eastDirector' }
+  );
+
   // ─── Floors ──────────────────────────────────────────────────────────────
   box(W, 0.2, 20, 0, -0.1, 0, M.floor);
   box(W, 0.2,  4, 0, -0.1, -12, M.floor);                // back area under balcony
@@ -255,7 +377,17 @@ export function createWorld(scene, physicsWorld) {
     const centerZ = (DOOR_OPENING_MAX_Z + FRONT_Z) / 2;
     box(WALL_THICK, CEIL, leftWallBackDepth, LEFT_WALL_X, CEIL / 2, centerZ, M.wall);
   }
-  box(WALL_THICK, CEIL, DEPTH,  RIGHT_WALL_X, CEIL / 2, 0, M.wall);
+  // Right wall split to create a door opening for east wing
+  const rightWallFrontDepth = DOOR_OPENING_MIN_Z - BACK_Z;
+  const rightWallBackDepth = FRONT_Z - DOOR_OPENING_MAX_Z;
+  if (rightWallFrontDepth > 0) {
+    const centerZ = (BACK_Z + DOOR_OPENING_MIN_Z) / 2;
+    box(WALL_THICK, CEIL, rightWallFrontDepth, RIGHT_WALL_X, CEIL / 2, centerZ, M.wall);
+  }
+  if (rightWallBackDepth > 0) {
+    const centerZ = (DOOR_OPENING_MAX_Z + FRONT_Z) / 2;
+    box(WALL_THICK, CEIL, rightWallBackDepth, RIGHT_WALL_X, CEIL / 2, centerZ, M.wall);
+  }
   box(W,   CEIL, 0.2,   0, CEIL / 2, BACK_Z,  M.wall);
   box(W,   CEIL, 0.2,   0, CEIL / 2, FRONT_Z, M.wall);
   box(W,   0.2,  DEPTH, 0, CEIL + 0.1, 0,     M.ceiling);
@@ -271,7 +403,15 @@ export function createWorld(scene, physicsWorld) {
   if (leftWainscotDepthB > 0) {
     decor(0.12, 1.5, leftWainscotDepthB, -6.94, 0.75, (DOOR_OPENING_MAX_Z + FRONT_Z) / 2, M.wainscot);
   }
-  decor(0.12, 1.5, 26,    6.94, 0.75, 0,      M.wainscot); // right
+  // Right wainscot split to leave door opening
+  const rightWainscotDepthA = DOOR_OPENING_MIN_Z - BACK_Z - 0.2;
+  const rightWainscotDepthB = FRONT_Z - DOOR_OPENING_MAX_Z - 0.2;
+  if (rightWainscotDepthA > 0) {
+    decor(0.12, 1.5, rightWainscotDepthA, 6.94, 0.75, (BACK_Z + DOOR_OPENING_MIN_Z) / 2, M.wainscot);
+  }
+  if (rightWainscotDepthB > 0) {
+    decor(0.12, 1.5, rightWainscotDepthB, 6.94, 0.75, (DOOR_OPENING_MAX_Z + FRONT_Z) / 2, M.wainscot);
+  }
   decor(14,   1.5, 0.12,  0, 0.75, BACK_Z  + 0.06, M.wainscot); // back
   decor(14,   1.5, 0.12,  0, 0.75, FRONT_Z - 0.06, M.wainscot); // front
 
@@ -283,7 +423,13 @@ export function createWorld(scene, physicsWorld) {
   if (leftWallBackDepth > 0) {
     decor(0.18, 0.20, leftWallBackDepth, -6.91, CEIL - 0.10, (DOOR_OPENING_MAX_Z + FRONT_Z) / 2, M.wainscot);
   }
-  decor(0.18, 0.20, 28,    6.91, CEIL - 0.10, 0,          M.wainscot); // right
+  // Right crown molding split to leave door opening
+  if (rightWallFrontDepth > 0) {
+    decor(0.18, 0.20, rightWallFrontDepth, 6.91, CEIL - 0.10, (BACK_Z + DOOR_OPENING_MIN_Z) / 2, M.wainscot);
+  }
+  if (rightWallBackDepth > 0) {
+    decor(0.18, 0.20, rightWallBackDepth, 6.91, CEIL - 0.10, (DOOR_OPENING_MAX_Z + FRONT_Z) / 2, M.wainscot);
+  }
   decor(14,   0.20, 0.18,  0, CEIL - 0.10, BACK_Z  + 0.09, M.wainscot); // back
   decor(14,   0.20, 0.18,  0, CEIL - 0.10, FRONT_Z - 0.09, M.wainscot); // front
 
@@ -512,6 +658,8 @@ export function createWorld(scene, physicsWorld) {
 
   // ─── Wall Sconces (8 total — 4 per side wall) ─────────────────────────────
   const sconceZPositions = [8, 3, -2, -5];
+  // Right wall sconce at Z=3 conflicts with new door opening; shift to Z=5.5
+  const rightSconceZPositions = [8, 5.5, -2, -5];
   for (const sz of sconceZPositions) {
     // Left wall
     decor(0.22, 0.08, 0.32, -6.85, 2.5, sz, M.lamp);           // bracket
@@ -519,7 +667,8 @@ export function createWorld(scene, physicsWorld) {
     const sl = new THREE.PointLight(0xFFE0A0, 1.2, 6);
     sl.position.set(-6.1, 2.5, sz);
     registerLight(sl);
-
+  }
+  for (const sz of rightSconceZPositions) {
     // Right wall
     decor(0.22, 0.08, 0.32, 6.85, 2.5, sz, M.lamp);
     decor(0.28, 0.22, 0.28, 6.68, 2.58, sz, M.lampShade);
@@ -575,6 +724,66 @@ export function createWorld(scene, physicsWorld) {
     damageType: 'generic',
   });
 
+  // First enemy visual prototype: static zombie parked behind the desk.
+  // Add a dedicated world collider so the player cannot walk through it.
+  const zombieSentry = createLobbyZombieSentry();
+  zombieSentry.mesh.rotation.y = 2.75;
+
+  const zombieHalfSize = new THREE.Vector3(0.28, 0.9, 0.24);
+  const zombieFootOffsetY = 0.02;
+
+  function makeZombieColliderAt(x, z) {
+    return new THREE.Box3(
+      new THREE.Vector3(x - zombieHalfSize.x, zombieFootOffsetY, z - zombieHalfSize.z),
+      new THREE.Vector3(x + zombieHalfSize.x, zombieFootOffsetY + zombieHalfSize.y * 2, z + zombieHalfSize.z)
+    );
+  }
+
+  function intersectsExistingWorld(collider) {
+    for (const existing of colliders) {
+      // Ignore floor slabs so feet can rest on ground.
+      if (existing.max.y <= 0.05) continue;
+      if (collider.intersectsBox(existing)) return true;
+    }
+    return false;
+  }
+
+  const zombieSpawnCandidates = [
+    new THREE.Vector3(1.8, 0, -2.6),
+    new THREE.Vector3(2.3, 0, -2.6),
+    new THREE.Vector3(1.2, 0, -2.6),
+    new THREE.Vector3(2.0, 0, -2.1),
+    new THREE.Vector3(2.0, 0, -3.0),
+  ];
+
+  let chosenZombiePos = zombieSpawnCandidates[0];
+  let zombieCollider = makeZombieColliderAt(chosenZombiePos.x, chosenZombiePos.z);
+  for (const candidate of zombieSpawnCandidates) {
+    const testCollider = makeZombieColliderAt(candidate.x, candidate.z);
+    if (!intersectsExistingWorld(testCollider)) {
+      chosenZombiePos = candidate;
+      zombieCollider = testCollider;
+      break;
+    }
+  }
+
+  zombieSentry.mesh.position.copy(chosenZombiePos);
+  zombieSentry.components.collision = {
+    shape: 'aabb',
+    box: zombieCollider,
+    halfSize: zombieHalfSize.clone(),
+    footOffsetY: zombieFootOffsetY,
+    syncFromEntity(enemyEntity) {
+      const p = enemyEntity.mesh.position;
+      this.box.min.set(p.x - this.halfSize.x, this.footOffsetY, p.z - this.halfSize.z);
+      this.box.max.set(p.x + this.halfSize.x, this.footOffsetY + this.halfSize.y * 2, p.z + this.halfSize.z);
+    },
+  };
+
+  registerObject(zombieSentry.mesh);
+  registerCollider(zombieCollider);
+  enemies.push(zombieSentry);
+
   // --- Door: lobby <-> offshoot east ---
   const primaryDoorRef = addLinkedDoor({
     id: 'doorLobbyEast',
@@ -589,6 +798,11 @@ export function createWorld(scene, physicsWorld) {
   decor(0.06, DOOR_HEIGHT + 0.1, 0.08, LEFT_WALL_X + 0.04, DOOR_HEIGHT / 2, DOOR_OPENING_MIN_Z - 0.02, M.wainscot);
   decor(0.06, DOOR_HEIGHT + 0.1, 0.08, LEFT_WALL_X + 0.04, DOOR_HEIGHT / 2, DOOR_OPENING_MAX_Z + 0.02, M.wainscot);
   decor(0.06, 0.08, DOOR_WIDTH + 0.2, LEFT_WALL_X + 0.04, DOOR_HEIGHT + 0.04, DOOR_OPENING_CENTER_Z, M.wainscot);
+
+  // Right wall door frame (decorative) — east wing entrance
+  decor(0.06, DOOR_HEIGHT + 0.1, 0.08, RIGHT_WALL_X - 0.04, DOOR_HEIGHT / 2, DOOR_OPENING_MIN_Z - 0.02, M.wainscot);
+  decor(0.06, DOOR_HEIGHT + 0.1, 0.08, RIGHT_WALL_X - 0.04, DOOR_HEIGHT / 2, DOOR_OPENING_MAX_Z + 0.02, M.wainscot);
+  decor(0.06, 0.08, DOOR_WIDTH + 0.2, RIGHT_WALL_X - 0.04, DOOR_HEIGHT + 0.04, DOOR_OPENING_CENTER_Z, M.wainscot);
 
   // Door collision is handled dynamically by the door system (not a static collider)
 
@@ -645,6 +859,7 @@ export function createWorld(scene, physicsWorld) {
     roomB,
     hingeX,
     hingeZ = DOOR_HINGE_Z,
+    hingeRotY = 0,
     color = 0x6F4A2A,
   }) {
     const doorEntity = createDoor({
@@ -654,12 +869,26 @@ export function createWorld(scene, physicsWorld) {
       color,
     });
 
-    doorEntity.pivot.position.set(hingeX, 0, hingeZ);
+    // When hingeRotY is non-zero, wrap the pivot in a parent group so the
+    // door physics system (which reads getWorldQuaternion) inherits the
+    // rotation transparently.  Standard (0) case is unchanged.
+    let rootObject;
+    if (hingeRotY) {
+      const wrapper = new THREE.Group();
+      wrapper.position.set(hingeX, 0, hingeZ);
+      wrapper.rotation.y = hingeRotY;
+      doorEntity.pivot.position.set(0, 0, 0);
+      wrapper.add(doorEntity.pivot);
+      rootObject = wrapper;
+    } else {
+      doorEntity.pivot.position.set(hingeX, 0, hingeZ);
+      rootObject = doorEntity.pivot;
+    }
 
     withRoom(roomA, () => {
-      registerObject(doorEntity.pivot);
+      registerObject(rootObject);
     });
-    registerExternalRoomObject(roomB, doorEntity.pivot);
+    registerExternalRoomObject(roomB, rootObject);
 
     const doorRef = {
       id,
@@ -710,6 +939,386 @@ export function createWorld(scene, physicsWorld) {
     roomA: 'sideRoomMid',
     roomB: 'sideRoomWest',
     hingeX: MID_WEST_PARTITION_X + WALL_THICK / 2,
+    hingeZ: DOOR_HINGE_Z,
+    color: 0x5D3A22,
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ███ EAST WING — Administration Area ███████████████████████████████████████
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  // --- Lobby → East Hallway door (standard orientation like left-wall door) ---
+  addLinkedDoor({
+    id: 'doorLobbyEastWing',
+    roomA: 'lobby',
+    roomB: 'eastHallway',
+    hingeX: EAST_DOOR_INNER_X,
+    hingeZ: DOOR_HINGE_Z,
+    color: 0x6F4A2A,
+  });
+
+  // ─── East Hallway Geometry ────────────────────────────────────────────────
+  withRoom('eastHallway', () => {
+    // Floor & ceiling
+    box(EAST_HALL_W, 0.2, EAST_HALL_D, EAST_HALL_CENTER_X, -0.1, EAST_HALL_CENTER_Z, M.floor);
+    box(EAST_HALL_W, 0.2, EAST_HALL_D, EAST_HALL_CENTER_X, EAST_CEIL + 0.1, EAST_HALL_CENTER_Z, M.ceiling);
+
+    // ─── North wall (Z = EAST_HALL_MAX_Z) — split for reception + admin doors ───
+    // Segment 1: left of reception door
+    const nSeg1W = EAST_DOOR_RECEPTION_X - DOOR_WIDTH / 2 - EAST_HALL_MIN_X;
+    if (nSeg1W > 0) {
+      const cx = (EAST_HALL_MIN_X + EAST_DOOR_RECEPTION_X - DOOR_WIDTH / 2) / 2;
+      box(nSeg1W, EAST_CEIL, WALL_THICK, cx, EAST_CEIL / 2, EAST_HALL_MAX_Z, M.wall);
+      decor(nSeg1W - 0.08, 1.5, 0.12, cx, 0.75, EAST_HALL_MAX_Z - 0.06, M.wainscot);
+      decor(nSeg1W - 0.08, 0.20, 0.18, cx, EAST_CEIL - 0.10, EAST_HALL_MAX_Z - 0.09, M.wainscot);
+    }
+    // Segment 2: between reception and admin doors
+    const nSeg2Left  = EAST_DOOR_RECEPTION_X + DOOR_WIDTH / 2;
+    const nSeg2Right = EAST_DOOR_ADMIN_X - DOOR_WIDTH / 2;
+    const nSeg2W = nSeg2Right - nSeg2Left;
+    if (nSeg2W > 0) {
+      const cx = (nSeg2Left + nSeg2Right) / 2;
+      box(nSeg2W, EAST_CEIL, WALL_THICK, cx, EAST_CEIL / 2, EAST_HALL_MAX_Z, M.wall);
+      decor(nSeg2W - 0.08, 1.5, 0.12, cx, 0.75, EAST_HALL_MAX_Z - 0.06, M.wainscot);
+      decor(nSeg2W - 0.08, 0.20, 0.18, cx, EAST_CEIL - 0.10, EAST_HALL_MAX_Z - 0.09, M.wainscot);
+    }
+    // Segment 3: right of admin door
+    const nSeg3W = EAST_HALL_MAX_X - (EAST_DOOR_ADMIN_X + DOOR_WIDTH / 2);
+    if (nSeg3W > 0) {
+      const cx = (EAST_DOOR_ADMIN_X + DOOR_WIDTH / 2 + EAST_HALL_MAX_X) / 2;
+      box(nSeg3W, EAST_CEIL, WALL_THICK, cx, EAST_CEIL / 2, EAST_HALL_MAX_Z, M.wall);
+      decor(nSeg3W - 0.08, 1.5, 0.12, cx, 0.75, EAST_HALL_MAX_Z - 0.06, M.wainscot);
+      decor(nSeg3W - 0.08, 0.20, 0.18, cx, EAST_CEIL - 0.10, EAST_HALL_MAX_Z - 0.09, M.wainscot);
+    }
+    // Door frame trim — reception door (north wall)
+    decor(0.08, DOOR_HEIGHT + 0.1, 0.06, EAST_DOOR_RECEPTION_X - DOOR_WIDTH / 2 - 0.02, DOOR_HEIGHT / 2, EAST_HALL_MAX_Z - 0.05, M.wainscot);
+    decor(0.08, DOOR_HEIGHT + 0.1, 0.06, EAST_DOOR_RECEPTION_X + DOOR_WIDTH / 2 + 0.02, DOOR_HEIGHT / 2, EAST_HALL_MAX_Z - 0.05, M.wainscot);
+    decor(DOOR_WIDTH + 0.2, 0.08, 0.06, EAST_DOOR_RECEPTION_X, DOOR_HEIGHT + 0.04, EAST_HALL_MAX_Z - 0.05, M.wainscot);
+    // Door frame trim — admin door (north wall)
+    decor(0.08, DOOR_HEIGHT + 0.1, 0.06, EAST_DOOR_ADMIN_X - DOOR_WIDTH / 2 - 0.02, DOOR_HEIGHT / 2, EAST_HALL_MAX_Z - 0.05, M.wainscot);
+    decor(0.08, DOOR_HEIGHT + 0.1, 0.06, EAST_DOOR_ADMIN_X + DOOR_WIDTH / 2 + 0.02, DOOR_HEIGHT / 2, EAST_HALL_MAX_Z - 0.05, M.wainscot);
+    decor(DOOR_WIDTH + 0.2, 0.08, 0.06, EAST_DOOR_ADMIN_X, DOOR_HEIGHT + 0.04, EAST_HALL_MAX_Z - 0.05, M.wainscot);
+
+    // ─── South wall (Z = EAST_HALL_MIN_Z) — split for manager + kitchen doors ───
+    const sSeg1W = EAST_DOOR_MANAGER_X - DOOR_WIDTH / 2 - EAST_HALL_MIN_X;
+    if (sSeg1W > 0) {
+      const cx = (EAST_HALL_MIN_X + EAST_DOOR_MANAGER_X - DOOR_WIDTH / 2) / 2;
+      box(sSeg1W, EAST_CEIL, WALL_THICK, cx, EAST_CEIL / 2, EAST_HALL_MIN_Z, M.wall);
+      decor(sSeg1W - 0.08, 1.5, 0.12, cx, 0.75, EAST_HALL_MIN_Z + 0.06, M.wainscot);
+      decor(sSeg1W - 0.08, 0.20, 0.18, cx, EAST_CEIL - 0.10, EAST_HALL_MIN_Z + 0.09, M.wainscot);
+    }
+    const sSeg2Left  = EAST_DOOR_MANAGER_X + DOOR_WIDTH / 2;
+    const sSeg2Right = EAST_DOOR_KITCHEN_X - DOOR_WIDTH / 2;
+    const sSeg2W = sSeg2Right - sSeg2Left;
+    if (sSeg2W > 0) {
+      const cx = (sSeg2Left + sSeg2Right) / 2;
+      box(sSeg2W, EAST_CEIL, WALL_THICK, cx, EAST_CEIL / 2, EAST_HALL_MIN_Z, M.wall);
+      decor(sSeg2W - 0.08, 1.5, 0.12, cx, 0.75, EAST_HALL_MIN_Z + 0.06, M.wainscot);
+      decor(sSeg2W - 0.08, 0.20, 0.18, cx, EAST_CEIL - 0.10, EAST_HALL_MIN_Z + 0.09, M.wainscot);
+    }
+    const sSeg3W = EAST_HALL_MAX_X - (EAST_DOOR_KITCHEN_X + DOOR_WIDTH / 2);
+    if (sSeg3W > 0) {
+      const cx = (EAST_DOOR_KITCHEN_X + DOOR_WIDTH / 2 + EAST_HALL_MAX_X) / 2;
+      box(sSeg3W, EAST_CEIL, WALL_THICK, cx, EAST_CEIL / 2, EAST_HALL_MIN_Z, M.wall);
+      decor(sSeg3W - 0.08, 1.5, 0.12, cx, 0.75, EAST_HALL_MIN_Z + 0.06, M.wainscot);
+      decor(sSeg3W - 0.08, 0.20, 0.18, cx, EAST_CEIL - 0.10, EAST_HALL_MIN_Z + 0.09, M.wainscot);
+    }
+    // Door frame trim — manager door (south wall)
+    decor(0.08, DOOR_HEIGHT + 0.1, 0.06, EAST_DOOR_MANAGER_X - DOOR_WIDTH / 2 - 0.02, DOOR_HEIGHT / 2, EAST_HALL_MIN_Z + 0.05, M.wainscot);
+    decor(0.08, DOOR_HEIGHT + 0.1, 0.06, EAST_DOOR_MANAGER_X + DOOR_WIDTH / 2 + 0.02, DOOR_HEIGHT / 2, EAST_HALL_MIN_Z + 0.05, M.wainscot);
+    decor(DOOR_WIDTH + 0.2, 0.08, 0.06, EAST_DOOR_MANAGER_X, DOOR_HEIGHT + 0.04, EAST_HALL_MIN_Z + 0.05, M.wainscot);
+    // Door frame trim — kitchen door (south wall)
+    decor(0.08, DOOR_HEIGHT + 0.1, 0.06, EAST_DOOR_KITCHEN_X - DOOR_WIDTH / 2 - 0.02, DOOR_HEIGHT / 2, EAST_HALL_MIN_Z + 0.05, M.wainscot);
+    decor(0.08, DOOR_HEIGHT + 0.1, 0.06, EAST_DOOR_KITCHEN_X + DOOR_WIDTH / 2 + 0.02, DOOR_HEIGHT / 2, EAST_HALL_MIN_Z + 0.05, M.wainscot);
+    decor(DOOR_WIDTH + 0.2, 0.08, 0.06, EAST_DOOR_KITCHEN_X, DOOR_HEIGHT + 0.04, EAST_HALL_MIN_Z + 0.05, M.wainscot);
+
+    // ─── East end wall (X = EAST_HALL_MAX_X) — split for director door ───
+    const eSeg1D = EAST_DOOR_OPENING_MIN_Z - EAST_HALL_MIN_Z;
+    if (eSeg1D > 0) {
+      const cz = (EAST_HALL_MIN_Z + EAST_DOOR_OPENING_MIN_Z) / 2;
+      box(WALL_THICK, EAST_CEIL, eSeg1D, EAST_HALL_MAX_X, EAST_CEIL / 2, cz, M.wall);
+      decor(0.12, 1.5, eSeg1D - 0.08, EAST_HALL_MAX_X - 0.06, 0.75, cz, M.wainscot);
+      decor(0.18, 0.20, eSeg1D - 0.08, EAST_HALL_MAX_X - 0.09, EAST_CEIL - 0.10, cz, M.wainscot);
+    }
+    const eSeg2D = EAST_HALL_MAX_Z - EAST_DOOR_OPENING_MAX_Z;
+    if (eSeg2D > 0) {
+      const cz = (EAST_DOOR_OPENING_MAX_Z + EAST_HALL_MAX_Z) / 2;
+      box(WALL_THICK, EAST_CEIL, eSeg2D, EAST_HALL_MAX_X, EAST_CEIL / 2, cz, M.wall);
+      decor(0.12, 1.5, eSeg2D - 0.08, EAST_HALL_MAX_X - 0.06, 0.75, cz, M.wainscot);
+      decor(0.18, 0.20, eSeg2D - 0.08, EAST_HALL_MAX_X - 0.09, EAST_CEIL - 0.10, cz, M.wainscot);
+    }
+    // Door frame trim — director door (east end wall)
+    decor(0.06, DOOR_HEIGHT + 0.1, 0.08, EAST_HALL_MAX_X - 0.05, DOOR_HEIGHT / 2, EAST_DOOR_OPENING_MIN_Z - 0.02, M.wainscot);
+    decor(0.06, DOOR_HEIGHT + 0.1, 0.08, EAST_HALL_MAX_X - 0.05, DOOR_HEIGHT / 2, EAST_DOOR_OPENING_MAX_Z + 0.02, M.wainscot);
+    decor(0.06, 0.08, DOOR_WIDTH + 0.2, EAST_HALL_MAX_X - 0.05, DOOR_HEIGHT + 0.04, DOOR_OPENING_CENTER_Z, M.wainscot);
+
+    // ─── Hallway ceiling lights (3 evenly spaced) ───
+    const hallLightSpacing = EAST_HALL_W / 4;
+    for (let i = 1; i <= 3; i++) {
+      const lx = EAST_HALL_MIN_X + hallLightSpacing * i;
+      const hl = new THREE.PointLight(0xFFF4E8, 1.8, 10, 1.8);
+      hl.position.set(lx, EAST_CEIL - 0.3, EAST_HALL_CENTER_Z);
+      registerLight(hl);
+    }
+
+    // ─── Hallway wall sconces (2 per side) ───
+    const hallSconceXPositions = [10.0, 16.0];
+    for (const sx of hallSconceXPositions) {
+      // North wall sconces
+      decor(0.32, 0.08, 0.22, sx, 2.5, EAST_HALL_MAX_Z - 0.15, M.lamp);
+      decor(0.28, 0.22, 0.28, sx, 2.58, EAST_HALL_MAX_Z - 0.32, M.lampShade);
+      const sn = new THREE.PointLight(0xFFE0A0, 1.2, 6);
+      sn.position.set(sx, 2.5, EAST_HALL_MAX_Z - 0.6);
+      registerLight(sn);
+      // South wall sconces
+      decor(0.32, 0.08, 0.22, sx, 2.5, EAST_HALL_MIN_Z + 0.15, M.lamp);
+      decor(0.28, 0.22, 0.28, sx, 2.58, EAST_HALL_MIN_Z + 0.32, M.lampShade);
+      const ss = new THREE.PointLight(0xFFE0A0, 1.2, 6);
+      ss.position.set(sx, 2.5, EAST_HALL_MIN_Z + 0.6);
+      registerLight(ss);
+    }
+  });
+
+  // ─── East Wing Room Builder ───────────────────────────────────────────────
+  function buildEastRoom(roomId, minX, maxX, minZ, maxZ, doorWall, doorX, lightColor, lightIntensity) {
+    const w = maxX - minX;
+    const d = maxZ - minZ;
+    const cx = (minX + maxX) / 2;
+    const cz = (minZ + maxZ) / 2;
+
+    withRoom(roomId, () => {
+      // Floor & ceiling
+      box(w, 0.2, d, cx, -0.1, cz, M.floor);
+      box(w, 0.2, d, cx, EAST_CEIL + 0.1, cz, M.ceiling);
+
+      // ─── Walls ─── (split the hallway-facing wall for the door opening)
+      // Far wall (opposite hallway-facing side)
+      if (doorWall === 'south') {
+        // Door is on south face (minZ). Far wall is north (maxZ).
+        box(w, EAST_CEIL, WALL_THICK, cx, EAST_CEIL / 2, maxZ, M.wall);
+        decor(w - 0.08, 1.5, 0.12, cx, 0.75, maxZ - 0.06, M.wainscot);
+        decor(w - 0.08, 0.20, 0.18, cx, EAST_CEIL - 0.10, maxZ - 0.09, M.wainscot);
+        // Hallway-facing wall (south, split for door)
+        const dMinX = doorX - DOOR_WIDTH / 2;
+        const dMaxX = doorX + DOOR_WIDTH / 2;
+        const seg1W = dMinX - minX;
+        if (seg1W > 0.1) {
+          const scx = (minX + dMinX) / 2;
+          box(seg1W, EAST_CEIL, WALL_THICK, scx, EAST_CEIL / 2, minZ, M.wall);
+          decor(seg1W - 0.08, 1.5, 0.12, scx, 0.75, minZ + 0.06, M.wainscot);
+          decor(seg1W - 0.08, 0.20, 0.18, scx, EAST_CEIL - 0.10, minZ + 0.09, M.wainscot);
+        }
+        const seg2W = maxX - dMaxX;
+        if (seg2W > 0.1) {
+          const scx = (dMaxX + maxX) / 2;
+          box(seg2W, EAST_CEIL, WALL_THICK, scx, EAST_CEIL / 2, minZ, M.wall);
+          decor(seg2W - 0.08, 1.5, 0.12, scx, 0.75, minZ + 0.06, M.wainscot);
+          decor(seg2W - 0.08, 0.20, 0.18, scx, EAST_CEIL - 0.10, minZ + 0.09, M.wainscot);
+        }
+      } else {
+        // Door is on north face (maxZ). Far wall is south (minZ).
+        box(w, EAST_CEIL, WALL_THICK, cx, EAST_CEIL / 2, minZ, M.wall);
+        decor(w - 0.08, 1.5, 0.12, cx, 0.75, minZ + 0.06, M.wainscot);
+        decor(w - 0.08, 0.20, 0.18, cx, EAST_CEIL - 0.10, minZ + 0.09, M.wainscot);
+        // Hallway-facing wall (north, split for door)
+        const dMinX = doorX - DOOR_WIDTH / 2;
+        const dMaxX = doorX + DOOR_WIDTH / 2;
+        const seg1W = dMinX - minX;
+        if (seg1W > 0.1) {
+          const scx = (minX + dMinX) / 2;
+          box(seg1W, EAST_CEIL, WALL_THICK, scx, EAST_CEIL / 2, maxZ, M.wall);
+          decor(seg1W - 0.08, 1.5, 0.12, scx, 0.75, maxZ - 0.06, M.wainscot);
+          decor(seg1W - 0.08, 0.20, 0.18, scx, EAST_CEIL - 0.10, maxZ - 0.09, M.wainscot);
+        }
+        const seg2W = maxX - dMaxX;
+        if (seg2W > 0.1) {
+          const scx = (dMaxX + maxX) / 2;
+          box(seg2W, EAST_CEIL, WALL_THICK, scx, EAST_CEIL / 2, maxZ, M.wall);
+          decor(seg2W - 0.08, 1.5, 0.12, scx, 0.75, maxZ - 0.06, M.wainscot);
+          decor(seg2W - 0.08, 0.20, 0.18, scx, EAST_CEIL - 0.10, maxZ - 0.09, M.wainscot);
+        }
+      }
+
+      // East wall (right side)
+      box(WALL_THICK, EAST_CEIL, d, maxX, EAST_CEIL / 2, cz, M.wall);
+      decor(0.12, 1.5, d - 0.08, maxX - 0.06, 0.75, cz, M.wainscot);
+      decor(0.18, 0.20, d - 0.08, maxX - 0.09, EAST_CEIL - 0.10, cz, M.wainscot);
+
+      // West wall (left side)
+      box(WALL_THICK, EAST_CEIL, d, minX, EAST_CEIL / 2, cz, M.wall);
+      decor(0.12, 1.5, d - 0.08, minX + 0.06, 0.75, cz, M.wainscot);
+      decor(0.18, 0.20, d - 0.08, minX + 0.09, EAST_CEIL - 0.10, cz, M.wainscot);
+
+      // Ceiling light
+      const rl = new THREE.PointLight(lightColor, lightIntensity, 8, 1.8);
+      rl.position.set(cx, EAST_CEIL - 0.3, cz);
+      registerLight(rl);
+
+      // Wall sconce on far wall (opposite door)
+      const farZ = doorWall === 'south' ? maxZ : minZ;
+      const sconceOffsetZ = doorWall === 'south' ? -0.15 : 0.15;
+      const shadeOffsetZ  = doorWall === 'south' ? -0.32 : 0.32;
+      const lightOffsetZ  = doorWall === 'south' ? -0.6 : 0.6;
+      decor(0.32, 0.08, 0.22, cx, 2.5, farZ + sconceOffsetZ, M.lamp);
+      decor(0.28, 0.22, 0.28, cx, 2.58, farZ + shadeOffsetZ, M.lampShade);
+      const scLight = new THREE.PointLight(0xFFE0A0, 1.2, 6);
+      scLight.position.set(cx, 2.5, farZ + lightOffsetZ);
+      registerLight(scLight);
+    });
+  }
+
+  // ─── Build north rooms (door on south face = hallway north wall) ──────────
+  buildEastRoom(
+    'eastReception',
+    EAST_LEFT_MIN_X, EAST_LEFT_MAX_X,
+    EAST_NORTH_MIN_Z, EAST_NORTH_MAX_Z,
+    'south', EAST_DOOR_RECEPTION_X,
+    0xFFF4E8, 1.6
+  );
+
+  buildEastRoom(
+    'eastAdmin',
+    EAST_RIGHT_MIN_X, EAST_RIGHT_MAX_X,
+    EAST_NORTH_MIN_Z, EAST_NORTH_MAX_Z,
+    'south', EAST_DOOR_ADMIN_X,
+    0xFFF4E8, 1.6
+  );
+
+  // ─── Build south rooms (door on north face = hallway south wall) ──────────
+  buildEastRoom(
+    'eastManager',
+    EAST_LEFT_MIN_X, EAST_LEFT_MAX_X,
+    EAST_SOUTH_MIN_Z, EAST_SOUTH_MAX_Z,
+    'north', EAST_DOOR_MANAGER_X,
+    0xFDE2BA, 1.5
+  );
+
+  buildEastRoom(
+    'eastKitchen',
+    EAST_RIGHT_MIN_X, EAST_RIGHT_MAX_X,
+    EAST_SOUTH_MIN_Z, EAST_SOUTH_MAX_Z,
+    'north', EAST_DOOR_KITCHEN_X,
+    0xFDE2BA, 1.5
+  );
+
+  // ─── Director's Office (larger room at end of hallway) ────────────────────
+  withRoom('eastDirector', () => {
+    const w = EAST_DIR_W;
+    const d = EAST_DIR_D;
+    const cx = EAST_DIR_CENTER_X;
+    const cz = EAST_DIR_CENTER_Z;
+
+    // Floor & ceiling
+    box(w, 0.2, d, cx, -0.1, cz, M.floor);
+    box(w, 0.2, d, cx, EAST_CEIL + 0.1, cz, M.ceiling);
+
+    // North wall
+    box(w, EAST_CEIL, WALL_THICK, cx, EAST_CEIL / 2, EAST_DIR_MAX_Z, M.wall);
+    decor(w - 0.08, 1.5, 0.12, cx, 0.75, EAST_DIR_MAX_Z - 0.06, M.wainscot);
+    decor(w - 0.08, 0.20, 0.18, cx, EAST_CEIL - 0.10, EAST_DIR_MAX_Z - 0.09, M.wainscot);
+
+    // South wall
+    box(w, EAST_CEIL, WALL_THICK, cx, EAST_CEIL / 2, EAST_DIR_MIN_Z, M.wall);
+    decor(w - 0.08, 1.5, 0.12, cx, 0.75, EAST_DIR_MIN_Z + 0.06, M.wainscot);
+    decor(w - 0.08, 0.20, 0.18, cx, EAST_CEIL - 0.10, EAST_DIR_MIN_Z + 0.09, M.wainscot);
+
+    // East wall (far end)
+    box(WALL_THICK, EAST_CEIL, d, EAST_DIR_MAX_X, EAST_CEIL / 2, cz, M.wall);
+    decor(0.12, 1.5, d - 0.08, EAST_DIR_MAX_X - 0.06, 0.75, cz, M.wainscot);
+    decor(0.18, 0.20, d - 0.08, EAST_DIR_MAX_X - 0.09, EAST_CEIL - 0.10, cz, M.wainscot);
+
+    // West wall (hallway-facing, split for door at Z 2.0→3.0)
+    const dirDoorMinZ = EAST_DOOR_OPENING_MIN_Z;
+    const dirDoorMaxZ = EAST_DOOR_OPENING_MAX_Z;
+    const wSeg1D = dirDoorMinZ - EAST_DIR_MIN_Z;
+    if (wSeg1D > 0) {
+      const scz = (EAST_DIR_MIN_Z + dirDoorMinZ) / 2;
+      box(WALL_THICK, EAST_CEIL, wSeg1D, EAST_DIR_MIN_X, EAST_CEIL / 2, scz, M.wall);
+      decor(0.12, 1.5, wSeg1D - 0.08, EAST_DIR_MIN_X + 0.06, 0.75, scz, M.wainscot);
+      decor(0.18, 0.20, wSeg1D - 0.08, EAST_DIR_MIN_X + 0.09, EAST_CEIL - 0.10, scz, M.wainscot);
+    }
+    const wSeg2D = EAST_DIR_MAX_Z - dirDoorMaxZ;
+    if (wSeg2D > 0) {
+      const scz = (dirDoorMaxZ + EAST_DIR_MAX_Z) / 2;
+      box(WALL_THICK, EAST_CEIL, wSeg2D, EAST_DIR_MIN_X, EAST_CEIL / 2, scz, M.wall);
+      decor(0.12, 1.5, wSeg2D - 0.08, EAST_DIR_MIN_X + 0.06, 0.75, scz, M.wainscot);
+      decor(0.18, 0.20, wSeg2D - 0.08, EAST_DIR_MIN_X + 0.09, EAST_CEIL - 0.10, scz, M.wainscot);
+    }
+    // Door frame (west wall of director's office)
+    decor(0.06, DOOR_HEIGHT + 0.1, 0.08, EAST_DIR_MIN_X + 0.05, DOOR_HEIGHT / 2, dirDoorMinZ - 0.02, M.wainscot);
+    decor(0.06, DOOR_HEIGHT + 0.1, 0.08, EAST_DIR_MIN_X + 0.05, DOOR_HEIGHT / 2, dirDoorMaxZ + 0.02, M.wainscot);
+    decor(0.06, 0.08, DOOR_WIDTH + 0.2, EAST_DIR_MIN_X + 0.05, DOOR_HEIGHT + 0.04, (dirDoorMinZ + dirDoorMaxZ) / 2, M.wainscot);
+
+    // Two ceiling lights (room is larger)
+    const rl1 = new THREE.PointLight(0xFFF4E8, 1.8, 10, 1.8);
+    rl1.position.set(cx, EAST_CEIL - 0.3, cz - d / 4);
+    registerLight(rl1);
+    const rl2 = new THREE.PointLight(0xFFF4E8, 1.8, 10, 1.8);
+    rl2.position.set(cx, EAST_CEIL - 0.3, cz + d / 4);
+    registerLight(rl2);
+
+    // Two sconce pairs on east wall (far end)
+    const dirSconceZ = [cz - 1.5, cz + 1.5];
+    for (const sz of dirSconceZ) {
+      decor(0.22, 0.08, 0.32, EAST_DIR_MAX_X - 0.15, 2.5, sz, M.lamp);
+      decor(0.28, 0.22, 0.28, EAST_DIR_MAX_X - 0.32, 2.58, sz, M.lampShade);
+      const dsl = new THREE.PointLight(0xFFE0A0, 1.2, 6);
+      dsl.position.set(EAST_DIR_MAX_X - 0.6, 2.5, sz);
+      registerLight(dsl);
+    }
+  });
+
+  // ─── East Wing Doors (hallway to rooms) ───────────────────────────────────
+  // Reception door (north wall, rotated +π/2 so door swings into room)
+  addLinkedDoor({
+    id: 'doorHallReception',
+    roomA: 'eastHallway',
+    roomB: 'eastReception',
+    hingeX: EAST_DOOR_RECEPTION_X - DOOR_WIDTH / 2,
+    hingeZ: EAST_HALL_MAX_Z,
+    hingeRotY: Math.PI / 2,
+    color: 0x6A4327,
+  });
+
+  // Admin door (north wall)
+  addLinkedDoor({
+    id: 'doorHallAdmin',
+    roomA: 'eastHallway',
+    roomB: 'eastAdmin',
+    hingeX: EAST_DOOR_ADMIN_X - DOOR_WIDTH / 2,
+    hingeZ: EAST_HALL_MAX_Z,
+    hingeRotY: Math.PI / 2,
+    color: 0x6A4327,
+  });
+
+  // Manager door (south wall, rotated -π/2)
+  addLinkedDoor({
+    id: 'doorHallManager',
+    roomA: 'eastHallway',
+    roomB: 'eastManager',
+    hingeX: EAST_DOOR_MANAGER_X + DOOR_WIDTH / 2,
+    hingeZ: EAST_HALL_MIN_Z,
+    hingeRotY: -Math.PI / 2,
+    color: 0x6A4327,
+  });
+
+  // Kitchen door (south wall)
+  addLinkedDoor({
+    id: 'doorHallKitchen',
+    roomA: 'eastHallway',
+    roomB: 'eastKitchen',
+    hingeX: EAST_DOOR_KITCHEN_X + DOOR_WIDTH / 2,
+    hingeZ: EAST_HALL_MIN_Z,
+    hingeRotY: -Math.PI / 2,
+    color: 0x6A4327,
+  });
+
+  // Director door (hallway end wall, standard orientation)
+  addLinkedDoor({
+    id: 'doorHallDirector',
+    roomA: 'eastHallway',
+    roomB: 'eastDirector',
+    hingeX: EAST_HALL_MAX_X + WALL_THICK / 2,
     hingeZ: DOOR_HINGE_Z,
     color: 0x5D3A22,
   });
@@ -793,9 +1402,11 @@ export function createWorld(scene, physicsWorld) {
   return {
     colliders,
     hazards,
+    enemies,
     door: primaryDoorRef.door,
     doors,
     update: () => {},
+    getEnemies: () => enemies,
     getRoomIds,
     getRoomConnections,
     getRoomMeta,
