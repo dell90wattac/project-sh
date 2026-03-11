@@ -20,6 +20,8 @@ import * as THREE from 'three';
 
 const _v = new THREE.Vector3();
 const _center = new THREE.Vector3();
+const _candidate = new THREE.Vector3();
+const _best = new THREE.Vector3();
 
 // ── BFS room-graph pathfinder ────────────────────────────────────────────────
 
@@ -89,6 +91,7 @@ const AI_STATE = {
 };
 
 function createEnemyAIState(enemy, homeZone, aggroDepth) {
+  const stableHash = enemy?.mesh?.id ?? 0;
   return {
     state: AI_STATE.IDLE,
     homeZone,
@@ -103,6 +106,14 @@ function createEnemyAIState(enemy, homeZone, aggroDepth) {
     decisionTimer: 0,         // time until next aggro/state re-evaluation
     wasKnockedBack: false,    // set by runtime when knockback ends
     timeSincePlayerSeen: 0,   // for delayed de-aggro (leash cooldown)
+    forwardBlockedTimer: 0,   // accumulates while forward clearance fails
+    recoveryTimer: 0,         // temporary sidestep/reverse timer
+    recoveryDirection: new THREE.Vector3(),
+    recoveryCooldownTimer: 0,
+    recoverySideBias: (stableHash % 2 === 0) ? -1 : 1,
+    stallTimer: 0,
+    recentMoveSpeed: 0,
+    lastPosition: new THREE.Vector3(),
   };
 }
 
@@ -117,6 +128,12 @@ const RETURN_ARRIVE_DIST = 1.0;      // close enough to home center
 const LEASH_COOLDOWN = 2.0;          // seconds after leaving aggro zone before de-aggro
 const FACING_BLEND = 4.0;            // radians/sec for rotation toward movement
 
+const NAV_PROBE_DISTANCE = 0.65;
+const NAV_CLEARANCE_PADDING = 0.02;
+const NAV_MIN_CLEARANCE_RATIO = 0.12;
+const NAV_STEER_ANGLE_STEP = 0.35;
+const NAV_STEER_MAX_ANGLE = 1.4;
+
 // ── Main AI update ───────────────────────────────────────────────────────────
 
 /**
@@ -126,11 +143,168 @@ const FACING_BLEND = 4.0;            // radians/sec for rotation toward movement
 export function createEnemyAI(world, roomCulling) {
   const aiStates = new Map(); // enemy → AIState
 
+  function ensureNavigationConfig(enemy, pathing) {
+    if (!pathing) return null;
+
+    const col = enemy.components?.collision;
+    const halfSize = col?.halfSize;
+    const defaultRadius = halfSize ? Math.max(halfSize.x, halfSize.z) : 0.28;
+
+    if (!pathing.navigation) {
+      pathing.navigation = {};
+    }
+
+    const nav = pathing.navigation;
+    nav.radius = nav.radius ?? defaultRadius;
+    nav.probeDistance = nav.probeDistance ?? Math.max(NAV_PROBE_DISTANCE, nav.radius * 2.2);
+    nav.clearancePadding = nav.clearancePadding ?? NAV_CLEARANCE_PADDING;
+    nav.minClearanceRatio = nav.minClearanceRatio ?? NAV_MIN_CLEARANCE_RATIO;
+    nav.steerAngleStep = nav.steerAngleStep ?? NAV_STEER_ANGLE_STEP;
+    nav.maxSteerAngle = nav.maxSteerAngle ?? NAV_STEER_MAX_ANGLE;
+
+    return nav;
+  }
+
+  function intersectsWorldAtPosition(enemy, x, z, extraPadding = 0) {
+    const col = enemy.components?.collision;
+    if (!col || !col.halfSize || !col.box) return false;
+
+    const colliders = world.colliders;
+    if (!colliders || colliders.length === 0) return false;
+
+    const hs = col.halfSize;
+    const footY = col.footOffsetY || 0;
+
+    const eMinX = x - hs.x - extraPadding;
+    const eMaxX = x + hs.x + extraPadding;
+    const eMinY = footY;
+    const eMaxY = footY + hs.y * 2;
+    const eMinZ = z - hs.z - extraPadding;
+    const eMaxZ = z + hs.z + extraPadding;
+
+    for (let i = 0; i < colliders.length; i++) {
+      const box = colliders[i];
+      if (box === col.box) continue;
+
+      if (
+        eMinX >= box.max.x || eMaxX <= box.min.x ||
+        eMinY >= box.max.y || eMaxY <= box.min.y ||
+        eMinZ >= box.max.z || eMaxZ <= box.min.z
+      ) {
+        continue;
+      }
+
+      return true;
+    }
+
+    return false;
+  }
+
+  function hasForwardClearance(enemy, dir, probeDistance, padding) {
+    if (dir.lengthSq() < 0.0001) return true;
+
+    const col = enemy.components?.collision;
+    const hs = col?.halfSize;
+    if (!col || !hs) return true;
+
+    const pos = enemy.mesh.position;
+    const step = Math.max(0.18, Math.max(hs.x, hs.z) * 0.7);
+
+    for (let d = step; d <= probeDistance; d += step) {
+      const sx = pos.x + dir.x * d;
+      const sz = pos.z + dir.z * d;
+      if (intersectsWorldAtPosition(enemy, sx, sz, padding)) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  function getClearanceRatio(enemy, dir, probeDistance, padding) {
+    if (dir.lengthSq() < 0.0001) return 0;
+
+    const col = enemy.components?.collision;
+    const hs = col?.halfSize;
+    if (!col || !hs) return 1;
+
+    const pos = enemy.mesh.position;
+    const step = Math.max(0.16, Math.max(hs.x, hs.z) * 0.65);
+
+    for (let d = step; d <= probeDistance; d += step) {
+      const sx = pos.x + dir.x * d;
+      const sz = pos.z + dir.z * d;
+      if (intersectsWorldAtPosition(enemy, sx, sz, padding)) {
+        return Math.max(0, (d - step) / probeDistance);
+      }
+    }
+
+    return 1;
+  }
+
+  function rotateDirXZ(dir, angle, out) {
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    out.set(
+      dir.x * c - dir.z * s,
+      0,
+      dir.x * s + dir.z * c
+    );
+    return out.normalize();
+  }
+
+  function computeSteerDirection(enemy, ai, desiredDir, nav, outDir) {
+    const step = nav.steerAngleStep;
+    const maxAngle = nav.maxSteerAngle;
+    const sideBias = ai.recoverySideBias;
+
+    const angles = [0];
+    for (let a = step; a <= maxAngle + 0.001; a += step) {
+      const primary = sideBias < 0 ? -a : a;
+      const secondary = -primary;
+      angles.push(primary, secondary);
+    }
+    angles.push(Math.PI);
+
+    let bestScore = -Infinity;
+    let bestAngle = 0;
+    let found = false;
+
+    for (let i = 0; i < angles.length; i++) {
+      const angle = angles[i];
+      rotateDirXZ(desiredDir, angle, _candidate);
+
+      const clearance = getClearanceRatio(enemy, _candidate, nav.probeDistance, nav.clearancePadding);
+      if (clearance < nav.minClearanceRatio) continue;
+
+      const align = _candidate.dot(desiredDir);
+      const sideBonus = Math.sign(angle) === Math.sign(sideBias) ? 0.04 : 0;
+      const score = align * 1.35 + clearance * 1.75 + sideBonus;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestAngle = angle;
+        _best.copy(_candidate);
+        found = true;
+      }
+    }
+
+    if (!found) return false;
+
+    if (bestAngle > 0.08) ai.recoverySideBias = 1;
+    else if (bestAngle < -0.08) ai.recoverySideBias = -1;
+
+    outDir.copy(_best);
+    return true;
+  }
+
   function register(enemy) {
     const pathing = enemy.components.pathing;
+    ensureNavigationConfig(enemy, pathing);
     const homeZone = pathing.homeZone || 'lobby';
     const aggroDepth = pathing.aggroDepth ?? 2;
     const aiState = createEnemyAIState(enemy, homeZone, aggroDepth);
+    aiState.lastPosition.copy(enemy.mesh.position);
 
     // Pre-compute aggro rooms
     aiState.aggroRooms = getRoomsWithinDepth(world, homeZone, aggroDepth);
@@ -190,23 +364,39 @@ export function createEnemyAI(world, roomCulling) {
   function enterIdle(ai) {
     ai.state = AI_STATE.IDLE;
     ai.wanderPauseTimer = WANDER_PAUSE_MIN + Math.random() * (WANDER_PAUSE_MAX - WANDER_PAUSE_MIN);
+    ai.forwardBlockedTimer = 0;
+    ai.recoveryTimer = 0;
+    ai.recoveryCooldownTimer = 0;
+    ai.stallTimer = 0;
   }
 
   function enterWander(ai) {
     ai.state = AI_STATE.WANDER;
     ai.wanderTarget = ai.wanderTarget || new THREE.Vector3();
     randomPointInRoom(ai.homeZone, ai.wanderTarget);
+    ai.forwardBlockedTimer = 0;
+    ai.recoveryTimer = 0;
+    ai.recoveryCooldownTimer = 0;
+    ai.stallTimer = 0;
   }
 
   function enterChase(ai, playerRoomId) {
     ai.state = AI_STATE.CHASE;
     ai.timeSincePlayerSeen = 0;
+    ai.forwardBlockedTimer = 0;
+    ai.recoveryTimer = 0;
+    ai.recoveryCooldownTimer = 0;
+    ai.stallTimer = 0;
     updateChasePath(ai, playerRoomId);
   }
 
   function enterReturn(ai) {
     ai.state = AI_STATE.RETURN;
     roomCenter(ai.homeZone, ai.steerTarget);
+    ai.forwardBlockedTimer = 0;
+    ai.recoveryTimer = 0;
+    ai.recoveryCooldownTimer = 0;
+    ai.stallTimer = 0;
   }
 
   // ── Chase path computation ─────────────────────────────────────────────────
@@ -255,6 +445,7 @@ export function createEnemyAI(world, roomCulling) {
   function updateEnemy(enemy, ai, dt, playerPosition) {
     const pathing = enemy.components.pathing;
     const health = enemy.components.health;
+    const pos = enemy.mesh.position;
 
     // Dead enemies don't think
     if (health && health.dead) {
@@ -265,6 +456,16 @@ export function createEnemyAI(world, roomCulling) {
 
     // Resolve current room
     resolveEnemyRoom(enemy, ai);
+
+    if (dt > 0) {
+      const frameDist = ai.lastPosition.distanceTo(pos);
+      ai.recentMoveSpeed = frameDist / dt;
+      ai.lastPosition.copy(pos);
+    }
+
+    if (ai.recoveryCooldownTimer > 0) {
+      ai.recoveryCooldownTimer = Math.max(0, ai.recoveryCooldownTimer - dt);
+    }
 
     // Post-knockback recovery: immediately re-evaluate
     if (ai.wasKnockedBack) {
@@ -368,6 +569,8 @@ export function createEnemyAI(world, roomCulling) {
   }
 
   function executeChase(enemy, ai, dt, pathing, playerPosition) {
+    const nav = ensureNavigationConfig(enemy, pathing);
+
     getChaseSteerTarget(ai, playerPosition);
 
     const pos = enemy.mesh.position;
@@ -389,12 +592,22 @@ export function createEnemyAI(world, roomCulling) {
 
     if (dist > 0.01) {
       _v.divideScalar(dist);
+      const hasSteer = computeSteerDirection(enemy, ai, _v, nav, ai.recoveryDirection);
+      if (!hasSteer) {
+        pathing.desiredVelocity.set(0, 0, 0);
+        pathing.mode = 'chase';
+        ai.decisionTimer = Math.min(ai.decisionTimer, 0.05);
+        return;
+      }
+
       pathing.desiredVelocity.set(
-        _v.x * pathing.moveSpeed,
+        ai.recoveryDirection.x * pathing.moveSpeed,
         0,
-        _v.z * pathing.moveSpeed
+        ai.recoveryDirection.z * pathing.moveSpeed
       );
-      faceDirection(enemy, _v, dt, pathing.turnSpeed);
+      faceDirection(enemy, ai.recoveryDirection, dt, pathing.turnSpeed);
+    } else {
+      pathing.desiredVelocity.set(0, 0, 0);
     }
     pathing.mode = 'chase';
   }

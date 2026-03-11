@@ -35,6 +35,21 @@ All notable changes to Project SH are documented here.
   - Death state visual: collapsed/face-planted animation with slow tilt and sink into ground over 0.6 seconds
 
 ### Changed
+- **Enemy chase narrow-gap recovery pass** (`src/systems/enemyAI.js`, `src/entities/zombies.js`)
+  - Added forward-clearance probing against world colliders during chase so enemies can detect unwalkable tight gaps before repeatedly pressing into them
+  - Added temporary sidestep/reverse recovery vectors with forced short repath refresh when sustained forward blockage is detected
+  - Added reusable per-enemy pathing navigation tuning fields (`navigation.*`) so the behavior can be shared across archetypes through `attachEnemyComponents()`
+  - Reduced left-right "shimmy" by prioritizing reverse escape when wedged, keeping a stable side-bias for fallback strafes, and reusing recent recovery direction briefly to avoid rapid flip-flopping
+  - Tuned probe and recovery defaults to be less conservative (`probeDistance` down, `clearancePadding` down, longer blocked hold and recovery windows)
+  - Added progress-based stall detection (`recentMoveSpeed` + `stallTimer`) so enemies only trigger anti-stuck recovery when they are truly failing to advance
+  - Added hold-and-repath fallback when blocked with no safe recovery vector, preventing repeated micro left/right velocity spam
+  - Reduced spin during recovery by suppressing aggressive turn updates while sidestep/reverse motion is active
+  - Reworked chase obstacle handling to a continuous direction-sampling steering model that scores candidate headings by clearance + target alignment, replacing the forward/back ping-pong recovery loop
+  - Playtest status: navigation behavior is substantially improved, but dense obstacle lanes still have edge-case failures; next pass will add room-transition portal waypoints and richer local route generation
+
+- **Temporary zombie collider reduction for pathing test phase** (`src/world/world.js`)
+  - Reduced lobby sentry AABB half-size from `(0.28, 0.9, 0.24)` to `(0.22, 0.9, 0.19)` and then to `(0.18, 0.85, 0.16)` to lower snagging frequency in tight furniture gaps while navigation tuning is in progress
+
 - **Zombie Sentry survivability pass** (`src/entities/zombies.js`)
   - Increased `createLobbyZombieSentry` HP from `4` to `15` to support longer chase sequences before destruction
   - Added `homeZone` and `aggroDepth` fields to pathing component for AI zone awareness

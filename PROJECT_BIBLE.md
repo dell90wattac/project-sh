@@ -45,6 +45,7 @@ Rule: extend the existing owner system first; do not create parallel authority f
 - Enemy collision uses `components.collision.syncFromEntity` after controller/knockback updates.
 - Enemy AI decision-making lives in `src/systems/enemyAI.js`; runtime orchestration (movement application, knockback, collision) stays in `src/systems/enemyRuntime.js`.
 - AI states: `idle` → `wander` → `chase` → `return`. Transitions are zone-driven (room-graph BFS).
+- Current chase local avoidance uses continuous direction-sampling steering in `enemyAI`; treat this as the baseline local solver until waypoint/portal routing is layered in.
 - Each enemy's `pathing.homeZone` (room ID) and `pathing.aggroDepth` (hop count) define territorial behavior.
 - Post-knockback recovery: `enemyRuntime` notifies `enemyAI.notifyKnockbackEnd()` so enemies re-evaluate immediately after shockwave displacement.
 - `attachEnemyComponents()` in `entities/zombies.js` is the canonical way to equip bare archetype meshes with AI-ready component sets.
@@ -108,6 +109,7 @@ Rule: extend the existing owner system first; do not create parallel authority f
 ## Current Priorities
 1. Shockwave Phase 2: lightweight debris (cap around 30 active objects).
 2. Shockwave Phase 3 follow-up: camera shake + stronger per-ammo recoil identity.
-3. Offscreen enemy simulation using room-graph distance tiers.
-4. Event-driven audio system (subscribed to gameplay events).
-5. If scaling to large room counts, evaluate `THREE.Layers` culling or static-merge strategies before `visible` toggling.
+3. Enemy pathing follow-up: room-transition portal waypoints + richer local route generation for dense furniture layouts.
+4. Offscreen enemy simulation using room-graph distance tiers.
+5. Event-driven audio system (subscribed to gameplay events).
+6. If scaling to large room counts, evaluate `THREE.Layers` culling or static-merge strategies before `visible` toggling.

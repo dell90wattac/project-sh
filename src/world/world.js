@@ -1051,7 +1051,7 @@ export function createWorld(scene, physicsWorld) {
   const zombieSentry = createLobbyZombieSentry();
   zombieSentry.mesh.rotation.y = 2.75;
 
-  const zombieHalfSize = new THREE.Vector3(0.28, 0.9, 0.24);
+  const zombieHalfSize = new THREE.Vector3(0.18, 0.85, 0.16);
   const zombieFootOffsetY = 0.02;
 
   function makeZombieColliderAt(x, z) {

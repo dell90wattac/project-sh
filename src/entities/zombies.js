@@ -76,6 +76,13 @@ export function attachEnemyComponents(entity, options = {}) {
     aggroDepth,
     targetPosition: null,
     desiredVelocity: new THREE.Vector3(),
+    navigation: {
+      probeDistance: 0.65,
+      clearancePadding: 0.02,
+      minClearanceRatio: 0.12,
+      steerAngleStep: 0.35,
+      maxSteerAngle: 1.4,
+    },
   };
 
   entity.components.controller = entity.components.controller || {
@@ -807,6 +814,13 @@ export function createLobbyZombieSentry(
     aggroDepth: 2,        // chase through N connected rooms
     targetPosition: null,
     desiredVelocity: new THREE.Vector3(),
+    navigation: {
+      probeDistance: 0.65,
+      clearancePadding: 0.02,
+      minClearanceRatio: 0.12,
+      steerAngleStep: 0.35,
+      maxSteerAngle: 1.4,
+    },
   };
 
   entity.components.controller = {
