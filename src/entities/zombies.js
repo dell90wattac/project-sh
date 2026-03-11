@@ -840,3 +840,187 @@ export function createLobbyZombieSentry(
 
   return entity;
 }
+
+/**
+ * Spider — small arachnid predator, roughly 1/4 the height of a zombie.
+ * Eight spindly legs radiating from a low-slung carapace with a bulbous abdomen.
+ * No external textures; procedural canvas detail only.
+ * Supports surface-snap locomotion (handled in enemyRuntime).
+ */
+export function createSpider() {
+  const group = new THREE.Group();
+
+  // ── Materials ──────────────────────────────────────────────────────────
+  const carapaceMat = new THREE.MeshStandardMaterial({
+    map: makeZombieTexture(0x1a1208, (ctx) => {
+      // Chitin segmentation lines
+      ctx.strokeStyle = '#2d2010';
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 8; i++) {
+        const x = Math.random() * 32;
+        const y = Math.random() * 32;
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(x + (Math.random() - 0.5) * 14, y + (Math.random() - 0.5) * 14);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#3a2c14';
+      for (let i = 0; i < 12; i++) {
+        ctx.fillRect(Math.random() * 32, Math.random() * 32, 1, 1);
+      }
+    }),
+    roughness: 0.55,
+    metalness: 0.15,
+  });
+
+  const eyeMat = new THREE.MeshStandardMaterial({
+    color: 0xcc2200,
+    emissive: 0xcc2200,
+    emissiveIntensity: 0.9,
+    roughness: 0.2,
+    metalness: 0,
+  });
+
+  const legMat = new THREE.MeshStandardMaterial({
+    color: 0x120e06,
+    roughness: 0.7,
+    metalness: 0.1,
+  });
+
+  // ── Body ───────────────────────────────────────────────────────────────
+  // Cephalothorax (front body) — flat and wide, low to surface
+  const cephalo = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.07, 0.16), carapaceMat);
+  cephalo.position.set(0, 0.065, 0.05);
+  cephalo.castShadow = true;
+  cephalo.receiveShadow = true;
+  group.add(cephalo);
+
+  // Abdomen (rear bulge)
+  const abdomen = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.10, 0.18), carapaceMat);
+  abdomen.position.set(0, 0.07, -0.12);
+  abdomen.castShadow = true;
+  abdomen.receiveShadow = true;
+  group.add(abdomen);
+
+  // Neck connector
+  const neck = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.05, 0.06), carapaceMat);
+  neck.position.set(0, 0.055, -0.03);
+  neck.castShadow = true;
+  neck.receiveShadow = true;
+  group.add(neck);
+
+  // ── Eyes (4 front-facing red glowing clusters) ─────────────────────────
+  const eyeGeo = new THREE.BoxGeometry(0.025, 0.025, 0.018);
+  [
+    [-0.055, 0.098, 0.125],
+    [-0.025, 0.100, 0.130],
+    [ 0.025, 0.100, 0.130],
+    [ 0.055, 0.098, 0.125],
+  ].forEach(([ex, ey, ez]) => {
+    const eye = new THREE.Mesh(eyeGeo, eyeMat);
+    eye.position.set(ex, ey, ez);
+    group.add(eye);
+  });
+
+  // ── Legs (8 total — 4 per side) ────────────────────────────────────────
+  const legGeo  = new THREE.BoxGeometry(0.025, 0.12, 0.025);
+  const legGeo2 = new THREE.BoxGeometry(0.02,  0.10, 0.02);
+
+  const legDefs = [
+    { x:  1, z:  0.08, upperRz: -0.7, upperRx:  0.5 },
+    { x: -1, z:  0.08, upperRz:  0.7, upperRx:  0.5 },
+    { x:  1, z:  0.02, upperRz: -0.9, upperRx:  0.15 },
+    { x: -1, z:  0.02, upperRz:  0.9, upperRx:  0.15 },
+    { x:  1, z: -0.04, upperRz: -0.9, upperRx: -0.15 },
+    { x: -1, z: -0.04, upperRz:  0.9, upperRx: -0.15 },
+    { x:  1, z: -0.10, upperRz: -0.7, upperRx: -0.5 },
+    { x: -1, z: -0.10, upperRz:  0.7, upperRx: -0.5 },
+  ];
+
+  legDefs.forEach(({ x, z, upperRz, upperRx }) => {
+    const upper = new THREE.Mesh(legGeo, legMat);
+    upper.position.set(x * 0.13, 0.06, z);
+    upper.rotation.set(upperRx, 0, upperRz);
+    upper.castShadow = true;
+    upper.receiveShadow = true;
+    group.add(upper);
+
+    const lower = new THREE.Mesh(legGeo2, legMat);
+    lower.position.set(x * 0.21, 0.015, z + upperRx * 0.06);
+    lower.rotation.set(upperRx * 0.5, 0, upperRz * 0.4);
+    lower.castShadow = true;
+    lower.receiveShadow = true;
+    group.add(lower);
+  });
+
+  setShadowFlags(group);
+
+  const entity = createEnemyContainer({
+    type: 'spider',
+    hp: 8,
+    name: 'Spider',
+  });
+  entity.mesh = group;
+
+  entity.components.visual = {
+    style: 'ps1-pixel',
+    rigProfile: {
+      skeletonType: 'spider',
+      rootBone: 'cephalo',
+      facingAxis: '+z',
+    },
+  };
+
+  entity.components.animation = {
+    state: 'idle',
+    states: ['idle', 'walk', 'attack', 'hit', 'death'],
+    clips: {},
+    mixer: null,
+  };
+
+  entity.components.pathing = {
+    mode: 'none',
+    moveSpeed: 1.25,
+    turnSpeed: 4.0,
+    homeZone: 'lobby',
+    aggroDepth: 99,
+    targetPosition: null,
+    desiredVelocity: new THREE.Vector3(),
+    navigation: {
+      probeDistance: 0.5,
+      clearancePadding: 0.04,
+      blockedHoldTime: 0.08,
+      recoveryDuration: 0.22,
+      recoverySpeedScale: 0.85,
+      repathBlockedTime: 0.4,
+    },
+  };
+
+  entity.components.controller = {
+    time: 0,
+    update(dt) { this.time += dt; },
+  };
+
+  entity.components.health = {
+    current: entity.hp,
+    max: entity.hp,
+    dead: false,
+  };
+
+  entity.components.knockback = {
+    velocity: new THREE.Vector3(),
+    active: false,
+  };
+
+  // Surface locomotion state — consumed by enemyRuntime for wall/ceiling walking
+  entity.components.surface = {
+    normal: new THREE.Vector3(0, 1, 0), // current contact surface normal
+    airborne: false,                     // true while shockwave-launched (arc phase)
+    airborneTimer: 0,                    // safety timeout accumulator
+    climbAssistTimer: 0,
+    noContactTimer: 0,
+    contactOffset: 0.04,               // push-out gap to avoid mesh embedding
+  };
+
+  return entity;
+}

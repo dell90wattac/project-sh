@@ -437,22 +437,46 @@ for (const enemy of worldEnemies) {
   if (!enemy.components.knockback) {
     enemy.components.knockback = { velocity: new THREE.Vector3(), active: false };
   }
-  shockwave.registerTarget('enemy', {
-    getPosition() { return enemy.mesh.position; },
-    applyForce(forceDir, magnitude) {
-      // Dead enemies don't react to shockwaves
-      if (enemy.components.health?.dead) return;
-      const kb = enemy.components.knockback;
-      kb.velocity.addScaledVector(forceDir, magnitude * 0.5);
-      kb.active = true;
-    },
-    takeDamage(/* amount */) {
-      // TODO: enemy damage system — disabled for AI testing
-      // if (!enemy.components.health || enemy.components.health.dead) return;
-      // enemy.components.health.current = Math.max(0, enemy.components.health.current - amount);
-      // if (enemy.components.health.current <= 0) enemy.components.health.dead = true;
-    },
-  });
+  if (enemy.type === 'spider') {
+    // Spider shockwave: launches into a full 3D arc (gravity applied in runtime).
+    // Damage intake disabled — health component present for future use.
+    shockwave.registerTarget('enemy', {
+      getPosition() { return enemy.mesh.position; },
+      applyForce(forceDir, magnitude) {
+        if (enemy.components.health?.dead) return;
+        const kb = enemy.components.knockback;
+        const surf = enemy.components.surface;
+        // Full 3D launch — forward + slight upward lift for satisfying arc
+        kb.velocity.addScaledVector(forceDir, magnitude * 0.6);
+        kb.velocity.y += magnitude * 0.15; // small upward nudge ensures visible arc
+        kb.active = true;
+        if (surf) {
+          surf.airborne = true;
+          surf.airborneTimer = 0;
+        }
+      },
+      takeDamage(/* amount */) {
+        // Damage disabled for spiders at this time
+      },
+    });
+  } else {
+    shockwave.registerTarget('enemy', {
+      getPosition() { return enemy.mesh.position; },
+      applyForce(forceDir, magnitude) {
+        // Dead enemies don't react to shockwaves
+        if (enemy.components.health?.dead) return;
+        const kb = enemy.components.knockback;
+        kb.velocity.addScaledVector(forceDir, magnitude * 0.5);
+        kb.active = true;
+      },
+      takeDamage(/* amount */) {
+        // TODO: enemy damage system — disabled for AI testing
+        // if (!enemy.components.health || enemy.components.health.dead) return;
+        // enemy.components.health.current = Math.max(0, enemy.components.health.current - amount);
+        // if (enemy.components.health.current <= 0) enemy.components.health.dead = true;
+      },
+    });
+  }
 }
 
 // Register shakeable furniture

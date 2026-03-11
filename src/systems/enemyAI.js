@@ -185,6 +185,9 @@ export function createEnemyAI(world, roomCulling) {
     for (let i = 0; i < colliders.length; i++) {
       const box = colliders[i];
       if (box === col.box) continue;
+      if (enemy.type === 'spider' && box._enemyCollider && box._enemyEntity && box._enemyEntity !== enemy) {
+        continue;
+      }
 
       if (
         eMinX >= box.max.x || eMaxX <= box.min.x ||
@@ -570,6 +573,7 @@ export function createEnemyAI(world, roomCulling) {
 
   function executeChase(enemy, ai, dt, pathing, playerPosition) {
     const nav = ensureNavigationConfig(enemy, pathing);
+    const isSpider = enemy.type === 'spider';
 
     getChaseSteerTarget(ai, playerPosition);
 
@@ -592,20 +596,31 @@ export function createEnemyAI(world, roomCulling) {
 
     if (dist > 0.01) {
       _v.divideScalar(dist);
-      const hasSteer = computeSteerDirection(enemy, ai, _v, nav, ai.recoveryDirection);
-      if (!hasSteer) {
-        pathing.desiredVelocity.set(0, 0, 0);
-        pathing.mode = 'chase';
-        ai.decisionTimer = Math.min(ai.decisionTimer, 0.05);
-        return;
-      }
+      if (isSpider) {
+        // Spiders must push directly into blockers so runtime collision can
+        // transition them onto walls/ceilings.
+        ai.recoveryDirection.copy(_v);
+        pathing.desiredVelocity.set(
+          ai.recoveryDirection.x * pathing.moveSpeed,
+          0,
+          ai.recoveryDirection.z * pathing.moveSpeed
+        );
+      } else {
+        const hasSteer = computeSteerDirection(enemy, ai, _v, nav, ai.recoveryDirection);
+        if (!hasSteer) {
+          pathing.desiredVelocity.set(0, 0, 0);
+          pathing.mode = 'chase';
+          ai.decisionTimer = Math.min(ai.decisionTimer, 0.05);
+          return;
+        }
 
-      pathing.desiredVelocity.set(
-        ai.recoveryDirection.x * pathing.moveSpeed,
-        0,
-        ai.recoveryDirection.z * pathing.moveSpeed
-      );
-      faceDirection(enemy, ai.recoveryDirection, dt, pathing.turnSpeed);
+        pathing.desiredVelocity.set(
+          ai.recoveryDirection.x * pathing.moveSpeed,
+          0,
+          ai.recoveryDirection.z * pathing.moveSpeed
+        );
+        faceDirection(enemy, ai.recoveryDirection, dt, pathing.turnSpeed);
+      }
     } else {
       pathing.desiredVelocity.set(0, 0, 0);
     }
@@ -633,6 +648,8 @@ export function createEnemyAI(world, roomCulling) {
   // ── Rotation helper ────────────────────────────────────────────────────────
 
   function faceDirection(enemy, dir, dt, turnSpeed) {
+    if (enemy.type === 'spider') return;
+
     const targetAngle = Math.atan2(dir.x, dir.z);
     let current = enemy.mesh.rotation.y;
     let delta = targetAngle - current;

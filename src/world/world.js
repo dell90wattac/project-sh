@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { createDoor } from '../entities/door.js';
-import { createLobbyZombieSentry } from '../entities/zombies.js';
+import { createLobbyZombieSentry, createSpider } from '../entities/zombies.js';
 
 /**
  * Test room — RCPD-lobby inspired layout.
@@ -1089,6 +1089,10 @@ export function createWorld(scene, physicsWorld) {
     }
   }
 
+  // Tag as an enemy-owned collider so spider logic can ignore other enemies.
+  zombieCollider._enemyCollider = true;
+  zombieCollider._enemyEntity = zombieSentry;
+
   zombieSentry.mesh.position.copy(chosenZombiePos);
   zombieSentry.components.collision = {
     shape: 'aabb',
@@ -1105,6 +1109,56 @@ export function createWorld(scene, physicsWorld) {
   registerObject(zombieSentry.mesh);
   registerCollider(zombieCollider);
   enemies.push(zombieSentry);
+
+  // ─── Spider enemies — two in the rear-left of the lobby ──────────────────
+  const spiderHalfSize = new THREE.Vector3(0.13, 0.12, 0.13);
+  const spiderFootOffsetY = 0.01;
+
+  function makeSpiderColliderAt(x, y, z) {
+    return new THREE.Box3(
+      new THREE.Vector3(x - spiderHalfSize.x, y + spiderFootOffsetY, z - spiderHalfSize.z),
+      new THREE.Vector3(x + spiderHalfSize.x, y + spiderFootOffsetY + spiderHalfSize.y * 2, z + spiderHalfSize.z)
+    );
+  }
+
+  const spiderSpawnPositions = [
+    new THREE.Vector3(-2.2, 0, -4.5),
+    new THREE.Vector3(-1.2, 0, -5.2),
+  ];
+
+  for (const spawnPos of spiderSpawnPositions) {
+    const spider = createSpider();
+    spider.mesh.position.copy(spawnPos);
+    spider.mesh.rotation.y = Math.PI; // face toward player start
+
+    const spiderCollider = makeSpiderColliderAt(spawnPos.x, spawnPos.y, spawnPos.z);
+    spiderCollider._enemyCollider = true;
+    spiderCollider._enemyEntity = spider;
+    spider.components.collision = {
+      shape: 'aabb',
+      box: spiderCollider,
+      halfSize: spiderHalfSize.clone(),
+      footOffsetY: spiderFootOffsetY,
+      syncFromEntity(enemyEntity) {
+        const p = enemyEntity.mesh.position;
+        // Full 3D collider update — spiders can be on any surface
+        this.box.min.set(
+          p.x - this.halfSize.x,
+          p.y + this.footOffsetY,
+          p.z - this.halfSize.z
+        );
+        this.box.max.set(
+          p.x + this.halfSize.x,
+          p.y + this.footOffsetY + this.halfSize.y * 2,
+          p.z + this.halfSize.z
+        );
+      },
+    };
+
+    registerObject(spider.mesh);
+    registerCollider(spiderCollider);
+    enemies.push(spider);
+  }
 
   // --- Door: lobby <-> offshoot east ---
   const primaryDoorRef = addLinkedDoor({
