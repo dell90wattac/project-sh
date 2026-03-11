@@ -4,6 +4,52 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 21] — 2026-03-11
+### Added
+- **Chandelier shockwave-driven motion upgrade** (`src/main.js`, `src/systems/chandelierMotion.js`)
+  - Disabled canned ambient sway for chandeliers in gameplay config (`breezeStrengthX/Z: 0`, `microMotion: 0`) so swing is primarily shockwave-driven
+  - Retargeted chandelier shockwave hit position to the hanging body (world position with downward offset) instead of ceiling anchor for more natural hit registration
+  - Increased chandelier impulse coupling scale to make hits clearly readable in gameplay
+  - Added impulse clamping and dynamic max-swing boost logic tied to impact magnitude for stronger but stable reaction arcs
+
+- **Windchime-style independent chandelier part motion** (`src/systems/chandelierMotion.js`)
+  - Added per-part spring-like state for chains, arms, bulbs, and main bulb (response/follow/damping/bias/velocity)
+  - Added per-part lag/follow solvers so chandelier components no longer move as a rigid block
+  - Shockwave impulses now propagate into each part with slight deterministic variation, producing controlled "chime" behavior
+  - Added tunable `chimeResponse` parameter and tuned session value to `1.22` for slightly more pronounced chime feel without instability
+
+- **Static world prop shake architecture (lobby)** (`src/world/world.js`)
+  - Added static object classification registry (`staticWorldObjects`) and `markStaticWorldObject(...)`
+  - Updated `box(...)` and `decor(...)` helpers to auto-mark created meshes as static world props
+  - Replaced manual hand-picked `shakeables.push(...)` furniture list with rule-based rebuild from static classification
+  - Added `isFlatStaticPlane(...)` filter to exclude structural slabs (walls/ceilings/floors style flat planes)
+  - Added `rebuildLobbyShakeables()` to derive lobby shakeables from static props while excluding physics-controlled shockwave objects
+  - Added `registerExternalRoomObject(roomId, object3D, options?)` static-world option support and new helper `registerExternalStaticRoomObject(...)` for externally-created static props
+
+### Changed
+- **Door exclusion from canned shake via explicit physics ownership tags** (`src/world/world.js`)
+  - Door root objects are now marked `shockwavePhysicsControlled` and `excludeShockwaveShake`, guaranteeing they are excluded from static canned shake selection
+
+- **Shockwave/static object contract updated in architecture bible** (`PROJECT_BIBLE.md`)
+  - Added critical contract that static props created via `box`/`decor` are automatically included in shake classification
+  - Added rule that externally-created static props must use `registerExternalStaticRoomObject(...)` to remain consistent
+  - Added explicit prohibition on manual per-feature `world.shakeables` curation
+
+- **Debug/version iteration policy added to architecture contracts** (`PROJECT_BIBLE.md`)
+  - Added required debug interface version format: `Session X.Y`
+  - Defined iteration progression per session (`X` = session, `Y` increments each accepted change)
+  - Locked requirement that debug interface version and changelog version labels must remain synchronized
+
+- **Debug overlay build tag now explicitly marked for this iteration** (`src/main.js`, `src/ui/perfOverlay.js`)
+  - Added `BUILD_VERSION = '21.7'` and wired it into the perf/debug overlay
+  - Replaced stale hardcoded overlay label (`session 20.3`) with runtime-configured `session 21.7`
+
+### Notes
+- This session formalizes a future-proof static prop policy: lobby canned shake is derived from classification rules, not ad-hoc lists.
+- Dedicated shockwave physics actors (doors/chandeliers/enemies/custom targets) remain separate from canned static shake by design.
+
+---
+
 ## [Session 20] — 2026-03-11
 ### Added
 - **Shockwave weapon system — core mechanic** (`src/systems/shockwave.js`, `src/systems/ammoTypes.js`)

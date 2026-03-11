@@ -20,6 +20,8 @@ import { createEnemyRuntime } from './systems/enemyRuntime.js';
 import { createShockwaveSystem } from './systems/shockwave.js';
 import { AMMO_TYPES } from './systems/ammoTypes.js';
 
+const BUILD_VERSION = '21.7';
+
 // ─── Renderer ──────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -239,7 +241,7 @@ function getWorldRoomCount() {
 
 // ─── HUD ───────────────────────────────────────────────────────────────────
 const hud = createHUD(gun, playerHealth);
-const perfOverlay = createPerfOverlay();
+const perfOverlay = createPerfOverlay({ buildVersion: BUILD_VERSION });
 
 // ─── Camera state for inventory ────────────────────────────────────────────
 let savedCameraQuaternion = null;
@@ -328,7 +330,15 @@ addLobbyChandelier(0, 5.1, 0, 1);
 addLobbyChandelier(0, 5.1, 6, 2);
 addLobbyChandelier(0, 5.1, -4, 3);
 
-const chandelierMotion = createChandelierMotionSystem(lobbyChandeliers);
+const chandelierMotion = createChandelierMotionSystem(lobbyChandeliers, {
+  // Disable canned idle motion so shockwaves are the primary driver.
+  breezeStrengthX: 0,
+  breezeStrengthZ: 0,
+  microMotion: 0,
+  chimeResponse: 1.22,
+  maxSwing: 0.11,
+  damping: 1.85,
+});
 
 // ─── Shockwave System ──────────────────────────────────────────────────────
 const shockwave = createShockwaveSystem();
@@ -337,6 +347,7 @@ const shockwave = createShockwaveSystem();
 const _doorPivotPos = new THREE.Vector3();
 const _doorNormalW = new THREE.Vector3();
 const _doorForceDir = new THREE.Vector3();
+const _chandelierTargetPos = new THREE.Vector3();
 
 for (const doorEntry of doorSystems) {
   const door = doorEntry.door;
@@ -365,9 +376,19 @@ for (let i = 0; i < lobbyChandeliers.length; i++) {
   const chandelierGroup = lobbyChandeliers[i].group;
   const idx = i;
   shockwave.registerTarget('chandelier', {
-    getPosition() { return chandelierGroup.position; },
+    getPosition() {
+      // Target the hanging body, not the top anchor, so forward shots register naturally.
+      chandelierGroup.getWorldPosition(_chandelierTargetPos);
+      _chandelierTargetPos.y -= 1.2;
+      return _chandelierTargetPos;
+    },
     applyForce(forceDir, magnitude) {
-      chandelierMotion.applyImpulse(idx, forceDir.x * magnitude * 0.15, forceDir.z * magnitude * 0.15);
+      const impulseScale = 0.45;
+      chandelierMotion.applyImpulse(
+        idx,
+        forceDir.x * magnitude * impulseScale,
+        forceDir.z * magnitude * impulseScale
+      );
     },
   });
 }

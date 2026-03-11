@@ -15,7 +15,10 @@ export function createChandelierMotionSystem(chandeliers, options = {}) {
   const breezeStrengthX = options.breezeStrengthX ?? 0.12;
   const breezeStrengthZ = options.breezeStrengthZ ?? 0.16;
   const breezeFreq = options.breezeFreq ?? 0.42;
+  const microMotion = options.microMotion ?? 1;
   const maxSwing = options.maxSwing ?? 0.075;
+  const maxImpulse = options.maxImpulse ?? 2.2;
+  const chimeResponse = options.chimeResponse ?? 1;
   const partFollow = options.partFollow ?? 0.75;
   const partDamping = options.partDamping ?? 8.0;
 
@@ -35,6 +38,16 @@ export function createChandelierMotionSystem(chandeliers, options = {}) {
             mesh,
             phase: seededUnit(seed, 10 + index) * Math.PI * 2,
             amp: 0.0025 + seededUnit(seed, 20 + index) * 0.0018,
+            response: (0.7 + seededUnit(seed, 30 + index) * 0.7) * chimeResponse,
+            follow: 9.5 + seededUnit(seed, 32 + index) * 2.5,
+            damping: 5.6 + seededUnit(seed, 34 + index) * 1.8,
+            maxAngle: 0.11,
+            biasX: seededUnit(seed, 36 + index) * 2 - 1,
+            biasZ: seededUnit(seed, 38 + index) * 2 - 1,
+            swingX: 0,
+            swingZ: 0,
+            velX: 0,
+            velZ: 0,
           }))
         : [];
 
@@ -43,6 +56,16 @@ export function createChandelierMotionSystem(chandeliers, options = {}) {
             mesh,
             phase: seededUnit(seed, 40 + index) * Math.PI * 2,
             amp: 0.0018 + seededUnit(seed, 50 + index) * 0.0012,
+            response: (0.55 + seededUnit(seed, 52 + index) * 0.45) * chimeResponse,
+            follow: 8.2 + seededUnit(seed, 54 + index) * 2.3,
+            damping: 6.2 + seededUnit(seed, 56 + index) * 1.8,
+            maxAngle: 0.075,
+            biasX: seededUnit(seed, 58 + index) * 2 - 1,
+            biasZ: seededUnit(seed, 60 + index) * 2 - 1,
+            swingX: 0,
+            swingZ: 0,
+            velX: 0,
+            velZ: 0,
           }))
         : [];
 
@@ -54,6 +77,16 @@ export function createChandelierMotionSystem(chandeliers, options = {}) {
             baseZ: mesh.position.z,
             phase: seededUnit(seed, 70 + index) * Math.PI * 2,
             amp: 0.008 + seededUnit(seed, 80 + index) * 0.004,
+            response: (0.5 + seededUnit(seed, 82 + index) * 0.5) * chimeResponse,
+            follow: 9.0 + seededUnit(seed, 84 + index) * 2.4,
+            damping: 6.8 + seededUnit(seed, 86 + index) * 1.6,
+            maxOffset: 0.06,
+            biasX: seededUnit(seed, 88 + index) * 2 - 1,
+            biasZ: seededUnit(seed, 90 + index) * 2 - 1,
+            offsetX: 0,
+            offsetZ: 0,
+            velX: 0,
+            velZ: 0,
           }))
         : [];
 
@@ -65,6 +98,14 @@ export function createChandelierMotionSystem(chandeliers, options = {}) {
             baseZ: chandelier.mainBulb.position.z,
             phase: seededUnit(seed, 95) * Math.PI * 2,
             amp: 0.01,
+            response: 0.8 * chimeResponse,
+            follow: 8.4,
+            damping: 6.3,
+            maxOffset: 0.08,
+            offsetX: 0,
+            offsetZ: 0,
+            velX: 0,
+            velZ: 0,
           }
         : null;
 
@@ -145,32 +186,82 @@ export function createChandelierMotionSystem(chandeliers, options = {}) {
 
       for (let j = 0; j < inst.chainData.length; j++) {
         const chain = inst.chainData[j];
-        const micro = Math.sin(t * 2.2 + chain.phase) * chain.amp;
-        chain.mesh.rotation.x = secondaryX + micro * 0.5;
-        chain.mesh.rotation.z = secondaryZ - micro * 0.4;
+        const targetX = -inst.angleX * (0.35 + chain.response * 0.5);
+        const targetZ = -inst.angleZ * (0.35 + chain.response * 0.5);
+        chain.velX += (targetX - chain.swingX) * chain.follow * frameDt;
+        chain.velZ += (targetZ - chain.swingZ) * chain.follow * frameDt;
+        const chainDamp = Math.max(0, 1 - chain.damping * frameDt);
+        chain.velX *= chainDamp;
+        chain.velZ *= chainDamp;
+        chain.swingX += chain.velX * frameDt;
+        chain.swingZ += chain.velZ * frameDt;
+        chain.swingX = Math.max(-chain.maxAngle, Math.min(chain.maxAngle, chain.swingX));
+        chain.swingZ = Math.max(-chain.maxAngle, Math.min(chain.maxAngle, chain.swingZ));
+
+        const micro = Math.sin(t * 2.2 + chain.phase) * chain.amp * microMotion;
+        chain.mesh.rotation.x = secondaryX * 0.35 + chain.swingX + micro * 0.45;
+        chain.mesh.rotation.z = secondaryZ * 0.35 + chain.swingZ - micro * 0.35;
       }
 
       for (let j = 0; j < inst.armData.length; j++) {
         const arm = inst.armData[j];
-        const lag = Math.sin(t * 1.8 + arm.phase) * arm.amp;
-        arm.mesh.rotation.x = secondaryX * 0.75 + lag;
-        arm.mesh.rotation.z = secondaryZ * 0.75 - lag * 0.4;
+        const targetX = -inst.angleX * (0.24 + arm.response * 0.42);
+        const targetZ = -inst.angleZ * (0.24 + arm.response * 0.42);
+        arm.velX += (targetX - arm.swingX) * arm.follow * frameDt;
+        arm.velZ += (targetZ - arm.swingZ) * arm.follow * frameDt;
+        const armDamp = Math.max(0, 1 - arm.damping * frameDt);
+        arm.velX *= armDamp;
+        arm.velZ *= armDamp;
+        arm.swingX += arm.velX * frameDt;
+        arm.swingZ += arm.velZ * frameDt;
+        arm.swingX = Math.max(-arm.maxAngle, Math.min(arm.maxAngle, arm.swingX));
+        arm.swingZ = Math.max(-arm.maxAngle, Math.min(arm.maxAngle, arm.swingZ));
+
+        const lag = Math.sin(t * 1.8 + arm.phase) * arm.amp * microMotion;
+        arm.mesh.rotation.x = secondaryX * 0.4 + arm.swingX + lag;
+        arm.mesh.rotation.z = secondaryZ * 0.4 + arm.swingZ - lag * 0.35;
       }
 
       for (let j = 0; j < inst.bulbData.length; j++) {
         const bulb = inst.bulbData[j];
-        const drift = Math.sin(t * 1.9 + bulb.phase) * bulb.amp;
-        bulb.mesh.position.x = bulb.baseX + secondaryX * 0.35 + drift * 0.35;
-        bulb.mesh.position.y = bulb.baseY + Math.cos(t * 2.0 + bulb.phase) * bulb.amp * 0.2;
-        bulb.mesh.position.z = bulb.baseZ + secondaryZ * 0.35 - drift * 0.25;
+        const targetOffsetX = -inst.partLagX * (0.03 + bulb.response * 0.035);
+        const targetOffsetZ = -inst.partLagZ * (0.03 + bulb.response * 0.035);
+        bulb.velX += (targetOffsetX - bulb.offsetX) * bulb.follow * frameDt;
+        bulb.velZ += (targetOffsetZ - bulb.offsetZ) * bulb.follow * frameDt;
+        const bulbDamp = Math.max(0, 1 - bulb.damping * frameDt);
+        bulb.velX *= bulbDamp;
+        bulb.velZ *= bulbDamp;
+        bulb.offsetX += bulb.velX * frameDt;
+        bulb.offsetZ += bulb.velZ * frameDt;
+        bulb.offsetX = Math.max(-bulb.maxOffset, Math.min(bulb.maxOffset, bulb.offsetX));
+        bulb.offsetZ = Math.max(-bulb.maxOffset, Math.min(bulb.maxOffset, bulb.offsetZ));
+
+        const drift = Math.sin(t * 1.9 + bulb.phase) * bulb.amp * microMotion;
+        bulb.mesh.position.x = bulb.baseX + secondaryX * 0.2 + bulb.offsetX + drift * 0.3;
+        bulb.mesh.position.y = bulb.baseY + Math.cos(t * 2.0 + bulb.phase) * bulb.amp * 0.2
+          - (Math.abs(bulb.offsetX) + Math.abs(bulb.offsetZ)) * 0.05;
+        bulb.mesh.position.z = bulb.baseZ + secondaryZ * 0.2 + bulb.offsetZ - drift * 0.22;
       }
 
       if (inst.mainBulbData) {
         const mainBulb = inst.mainBulbData;
-        const drift = Math.sin(t * 1.5 + mainBulb.phase) * mainBulb.amp;
-        mainBulb.mesh.position.x = mainBulb.baseX + secondaryX * 0.55 + drift * 0.3;
-        mainBulb.mesh.position.y = mainBulb.baseY + Math.cos(t * 1.7 + mainBulb.phase) * mainBulb.amp * 0.18;
-        mainBulb.mesh.position.z = mainBulb.baseZ + secondaryZ * 0.55 - drift * 0.25;
+        const mainTargetX = -inst.partLagX * (0.045 + mainBulb.response * 0.04);
+        const mainTargetZ = -inst.partLagZ * (0.045 + mainBulb.response * 0.04);
+        mainBulb.velX += (mainTargetX - mainBulb.offsetX) * mainBulb.follow * frameDt;
+        mainBulb.velZ += (mainTargetZ - mainBulb.offsetZ) * mainBulb.follow * frameDt;
+        const mainDamp = Math.max(0, 1 - mainBulb.damping * frameDt);
+        mainBulb.velX *= mainDamp;
+        mainBulb.velZ *= mainDamp;
+        mainBulb.offsetX += mainBulb.velX * frameDt;
+        mainBulb.offsetZ += mainBulb.velZ * frameDt;
+        mainBulb.offsetX = Math.max(-mainBulb.maxOffset, Math.min(mainBulb.maxOffset, mainBulb.offsetX));
+        mainBulb.offsetZ = Math.max(-mainBulb.maxOffset, Math.min(mainBulb.maxOffset, mainBulb.offsetZ));
+
+        const drift = Math.sin(t * 1.5 + mainBulb.phase) * mainBulb.amp * microMotion;
+        mainBulb.mesh.position.x = mainBulb.baseX + secondaryX * 0.3 + mainBulb.offsetX + drift * 0.25;
+        mainBulb.mesh.position.y = mainBulb.baseY + Math.cos(t * 1.7 + mainBulb.phase) * mainBulb.amp * 0.18
+          - (Math.abs(mainBulb.offsetX) + Math.abs(mainBulb.offsetZ)) * 0.06;
+        mainBulb.mesh.position.z = mainBulb.baseZ + secondaryZ * 0.3 + mainBulb.offsetZ - drift * 0.22;
       }
 
       if (inst.light) {
@@ -185,11 +276,42 @@ export function createChandelierMotionSystem(chandeliers, options = {}) {
   function applyImpulse(index, impulseX, impulseZ) {
     if (index < 0 || index >= instances.length) return;
     const inst = instances[index];
-    inst.velX += impulseX;
-    inst.velZ += impulseZ;
-    inst.maxSwingOverride = 0.4;
-    inst.overrideDecayDuration = 2.0;
-    inst.overrideDecayTimer = 2.0;
+    const clampedX = Math.max(-maxImpulse, Math.min(maxImpulse, impulseX));
+    const clampedZ = Math.max(-maxImpulse, Math.min(maxImpulse, impulseZ));
+    inst.velX += clampedX;
+    inst.velZ += clampedZ;
+
+    const impulseMag = Math.hypot(clampedX, clampedZ);
+    const partImpulse = impulseMag * 0.34;
+
+    for (let i = 0; i < inst.chainData.length; i++) {
+      const chain = inst.chainData[i];
+      chain.velX += clampedX * (0.18 + chain.response * 0.2) + chain.biasX * partImpulse * 0.08;
+      chain.velZ += clampedZ * (0.18 + chain.response * 0.2) + chain.biasZ * partImpulse * 0.08;
+    }
+
+    for (let i = 0; i < inst.armData.length; i++) {
+      const arm = inst.armData[i];
+      arm.velX += clampedX * (0.12 + arm.response * 0.16) + arm.biasX * partImpulse * 0.06;
+      arm.velZ += clampedZ * (0.12 + arm.response * 0.16) + arm.biasZ * partImpulse * 0.06;
+    }
+
+    for (let i = 0; i < inst.bulbData.length; i++) {
+      const bulb = inst.bulbData[i];
+      bulb.velX += clampedX * (0.08 + bulb.response * 0.12) + bulb.biasX * partImpulse * 0.04;
+      bulb.velZ += clampedZ * (0.08 + bulb.response * 0.12) + bulb.biasZ * partImpulse * 0.04;
+    }
+
+    if (inst.mainBulbData) {
+      const mainBulb = inst.mainBulbData;
+      mainBulb.velX += clampedX * 0.16;
+      mainBulb.velZ += clampedZ * 0.16;
+    }
+
+    const boostedMaxSwing = Math.min(0.42, maxSwing + impulseMag * 0.18);
+    inst.maxSwingOverride = Math.max(inst.maxSwingOverride, boostedMaxSwing);
+    inst.overrideDecayDuration = 2.4;
+    inst.overrideDecayTimer = 2.4;
   }
 
   return {

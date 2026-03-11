@@ -97,10 +97,26 @@ Current depth target by system type:
 ## Shockwave System Guidance
 - The shockwave is the core weapon mechanic. Guns fire shockwaves, not bullets. Different ammo types produce different shockwave profiles.
 - The shockwave system (`src/systems/shockwave.js`) owns force distribution and furniture shake. It does not own target-specific behavior — each target system handles its own response to force.
-- To make any world object react to shockwaves: (1) push it to `world.shakeables` for canned rattle, or (2) register it as a shockwave target via `shockwave.registerTarget(type, { getPosition, applyForce, takeDamage? })` for custom behavior.
+- To make any world object react to shockwaves: use static world object contracts for canned rattle and `shockwave.registerTarget(type, { getPosition, applyForce, takeDamage? })` for custom physics behavior.
 - Doors respond via `applyExternalTorque`; chandeliers via `applyImpulse`; enemies via knockback velocity + health damage; furniture via position shake. Each uses its own existing simulation — no new physics bodies were added.
 - Ammo types (`src/systems/ammoTypes.js`) are the sole source of shockwave tuning. Do not hardcode force/damage/radius values elsewhere.
 - Phase 2 (debris: small flyable objects with lightweight custom physics) and Phase 3 (visual ring effect, camera shake, per-ammo recoil) are designed but not yet implemented.
+
+## Static World Prop Shockwave Contract (Critical)
+- Static world props are the canonical source for canned shockwave shake. This rule is now architecture, not a one-off implementation detail.
+- If static props are created through `box`/`decor` in `src/world/world.js`, they are automatically classified as static world objects and eligible for lobby shake filtering.
+- If static props are created externally (outside `box`/`decor`), they must be registered through `registerExternalStaticRoomObject(roomId, object3D, options?)` so they join the same static classification pipeline.
+- Lobby canned shake selection is rebuilt from static object classification and excludes:
+  - flat structural planes (walls/ceilings/floors style slabs), and
+  - objects already controlled by dedicated shockwave physics (`shockwavePhysicsControlled`), such as doors/chandeliers.
+- Do not manually curate `world.shakeables` per feature. The shake list must come from static classification rules so behavior stays consistent as content scales.
+
+## Debug Versioning Contract (Critical)
+- The debug interface (perf/debug overlay) must display the current build/session version in `Session X.Y` format.
+- `X` is the session number and `Y` is the iteration number for that session.
+- Every accepted change/iteration in the same session must increment `Y` (for example: `21.1`, `21.2`, `21.3`).
+- On a new session, increment `X` and reset `Y` to `1`.
+- Changelog entries and debug interface version display must stay aligned so the in-game debug view always identifies the exact iteration being tested.
 
 ## Path Forward (Code-Altering Priorities)
 1. **Shockwave Phase 2**: Debris system — small world objects (pencils, papers, magazines) fly off surfaces with lightweight custom physics (no Cannon-ES). Cap at ~30 active debris objects.
@@ -113,4 +129,6 @@ Current depth target by system type:
 ## Change Discipline For Agents
 - Update `CHANGELOG.md` every working session.
 - Update this file only when architecture, ownership, or system contracts change.
+- Maintain session iteration numbering using `Session X.Y`, incrementing `Y` for each accepted iteration within the current session.
+- Keep debug interface version display and changelog version labels synchronized.
 - Keep tuning values and moment-to-moment balance in code constants, not here.

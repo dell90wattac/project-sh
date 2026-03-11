@@ -1,4 +1,6 @@
-export function createPerfOverlay() {
+export function createPerfOverlay(options = {}) {
+  const buildVersion = options.buildVersion || '0.0';
+
   const panel = document.createElement('div');
   panel.id = 'perf-overlay';
   panel.style.cssText = `
@@ -51,7 +53,7 @@ export function createPerfOverlay() {
       `room ${stats.currentRoomLabel ?? stats.currentRoomId ?? '-'}`,
       `zone ${stats.currentZone ?? '-'}`,
       `calls ${stats.drawCalls ?? '-'}  tris ${stats.triangles ?? '-'}`,
-      'session 20.3 | F3 hide/show',
+      `session ${buildVersion} | F3 hide/show`,
     ];
 
     panel.textContent = lines.join('\n');

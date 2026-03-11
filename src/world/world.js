@@ -13,6 +13,7 @@ export function createWorld(scene, physicsWorld) {
   const doors = [];
   const enemies = [];
   const shakeables = [];
+  const staticWorldObjects = new Set();
   const roomMap = new Map();
   const roomVisibility = new Map();
   const roomTransitionCursors = new Map();
@@ -96,6 +97,19 @@ export function createWorld(scene, physicsWorld) {
     if (room) room.hazards.push(hazard);
   }
 
+  function markStaticWorldObject(object3D, options = {}) {
+    if (!object3D) return object3D;
+    object3D.userData.isStaticWorldObject = true;
+    if (options.excludeShockwaveShake === true) {
+      object3D.userData.excludeShockwaveShake = true;
+    }
+    if (options.shockwavePhysicsControlled === true) {
+      object3D.userData.shockwavePhysicsControlled = true;
+    }
+    staticWorldObjects.add(object3D);
+    return object3D;
+  }
+
   // ─── Materials ──────────────────────────────────────────────────────────
   // Procedural marble texture for floor
   const floorCanvas = document.createElement('canvas');
@@ -150,21 +164,23 @@ export function createWorld(scene, physicsWorld) {
     magazine:   new THREE.MeshStandardMaterial({ color: 0x8B2020, roughness: 0.9 }),
   };
 
-  function box(w, h, d, x, y, z, mat) {
+  function box(w, h, d, x, y, z, mat, options = {}) {
     const mesh = registerObject(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat));
     mesh.position.set(x, y, z);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
+    markStaticWorldObject(mesh, options);
     registerCollider(new THREE.Box3().setFromObject(mesh));
     return mesh;
   }
 
   // Non-collider decoration (no Box3 push)
-  function decor(w, h, d, x, y, z, mat) {
+  function decor(w, h, d, x, y, z, mat, options = {}) {
     const mesh = registerObject(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat));
     mesh.position.set(x, y, z);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
+    markStaticWorldObject(mesh, options);
     return mesh;
   }
 
@@ -476,9 +492,9 @@ export function createWorld(scene, physicsWorld) {
 
   // ─── Front Desk (centered at Z=0) ────────────────────────────────────────
   // Main counter body
-  shakeables.push(box(4.5, 1.1, 0.7, 0, 0.55, 0.0, M.desk));
+  box(4.5, 1.1, 0.7, 0, 0.55, 0.0, M.desk);
   // Marble counter top
-  shakeables.push(box(4.7, 0.08, 0.9, 0, 1.12, 0.05, M.deskTop));
+  box(4.7, 0.08, 0.9, 0, 1.12, 0.05, M.deskTop);
   // Back panel (tall dark wood)
   box(4.5, 2.0, 0.2, 0, 1.0, -0.75, M.desk);
   // Raised center check-in tower
@@ -519,7 +535,7 @@ export function createWorld(scene, physicsWorld) {
   }
 
   // Chair (left of center)
-  shakeables.push(box(0.60, 0.08, 0.60, -1.0, 0.52, 0.1, M.bench));       // seat
+  box(0.60, 0.08, 0.60, -1.0, 0.52, 0.1, M.bench);       // seat
   decor(0.06, 0.42, 0.60, -1.0, 0.75, -0.16, M.bench);   // back
   decor(0.05, 0.50, 0.05, -1.30, 0.25, 0.38, M.lamp);    // leg FL
   decor(0.05, 0.50, 0.05, -0.70, 0.25, 0.38, M.lamp);    // leg FR
@@ -527,7 +543,7 @@ export function createWorld(scene, physicsWorld) {
   decor(0.05, 0.50, 0.05, -0.70, 0.25, -0.18, M.lamp);   // leg BR
 
   // Filing cabinet behind desk (left side)
-  shakeables.push(box(0.46, 1.0, 0.58, -1.7, 0.50, -0.55, M.desk));
+  box(0.46, 1.0, 0.58, -1.7, 0.50, -0.55, M.desk);
   decor(0.40, 0.05, 0.02, -1.7, 0.65, -0.28, M.metal);  // drawer 1 handle
   decor(0.40, 0.05, 0.02, -1.7, 0.95, -0.28, M.metal);  // drawer 2 handle
 
@@ -614,7 +630,7 @@ export function createWorld(scene, physicsWorld) {
 
   // ─── Benches (front hall, between columns and walls) ─────────────────────
   // Left bench
-  shakeables.push(box(2.0, 0.10, 0.70, -4.5, 0.52, 4.5, M.bench));           // seat
+  box(2.0, 0.10, 0.70, -4.5, 0.52, 4.5, M.bench);           // seat
   box(0.10, 0.50, 0.70, -5.5, 0.25, 4.5, M.bench);          // left leg
   box(0.10, 0.50, 0.70, -3.5, 0.25, 4.5, M.bench);          // right leg
   box(0.10, 0.50, 0.70, -4.5, 0.75, 4.12, M.bench);         // back
@@ -624,12 +640,12 @@ export function createWorld(scene, physicsWorld) {
   decor(0.20, 0.03, 0.56, -4.2, 0.54, 4.65, M.paper);       // magazine 2
 
   // Left side table
-  shakeables.push(box(0.50, 0.45, 0.48, -5.9, 0.22, 4.5, M.bench));
-  shakeables.push(box(0.56, 0.05, 0.54, -5.9, 0.47, 4.5, M.bench));
+  box(0.50, 0.45, 0.48, -5.9, 0.22, 4.5, M.bench);
+  box(0.56, 0.05, 0.54, -5.9, 0.47, 4.5, M.bench);
   decor(0.20, 0.03, 0.56, -5.9, 0.51, 4.5, M.magazine);
 
   // Right bench
-  shakeables.push(box(2.0, 0.10, 0.70, 4.5, 0.52, 3.0, M.bench));
+  box(2.0, 0.10, 0.70, 4.5, 0.52, 3.0, M.bench);
   box(0.10, 0.50, 0.70, 3.5, 0.25, 3.0, M.bench);
   box(0.10, 0.50, 0.70, 5.5, 0.25, 3.0, M.bench);
   box(0.10, 0.50, 0.70, 4.5, 0.75, 2.62, M.bench);
@@ -639,8 +655,8 @@ export function createWorld(scene, physicsWorld) {
   decor(0.20, 0.03, 0.56, 4.8, 0.54, 3.15, M.paper);
 
   // Right side table
-  shakeables.push(box(0.50, 0.45, 0.48, 5.9, 0.22, 3.0, M.bench));
-  shakeables.push(box(0.56, 0.05, 0.54, 5.9, 0.47, 3.0, M.bench));
+  box(0.50, 0.45, 0.48, 5.9, 0.22, 3.0, M.bench);
+  box(0.56, 0.05, 0.54, 5.9, 0.47, 3.0, M.bench);
   decor(0.20, 0.03, 0.56, 5.9, 0.51, 3.0, M.magazine);
 
   // ─── Standing Lamps ──────────────────────────────────────────────────────
@@ -886,6 +902,12 @@ export function createWorld(scene, physicsWorld) {
       doorEntity.pivot.position.set(hingeX, 0, hingeZ);
       rootObject = doorEntity.pivot;
     }
+
+    // Doors use dedicated shockwave physics and must never be in static shakeables.
+    rootObject.traverse?.(child => {
+      child.userData.shockwavePhysicsControlled = true;
+      child.userData.excludeShockwaveShake = true;
+    });
 
     withRoom(roomA, () => {
       registerObject(rootObject);
@@ -1437,11 +1459,75 @@ export function createWorld(scene, physicsWorld) {
     return bestRoom.id;
   }
 
-  function registerExternalRoomObject(roomId, object3D) {
+  function registerExternalRoomObject(roomId, object3D, options = {}) {
     if (!roomMap.has(roomId)) return;
     assignObjectToRoom(roomId, object3D);
     recomputeObjectVisibility(object3D);
+
+    if (options.staticWorld === true) {
+      if (object3D && typeof object3D.traverse === 'function') {
+        object3D.traverse(child => {
+          if (child && child.isMesh) {
+            markStaticWorldObject(child, options);
+          }
+        });
+      } else if (object3D && object3D.isMesh) {
+        markStaticWorldObject(object3D, options);
+      }
+
+      if (roomId === 'lobby') {
+        rebuildLobbyShakeables();
+      }
+    }
   }
+
+  function registerExternalStaticRoomObject(roomId, object3D, options = {}) {
+    registerExternalRoomObject(roomId, object3D, {
+      ...options,
+      staticWorld: true,
+    });
+  }
+
+  function isFlatStaticPlane(mesh) {
+    if (!mesh || !mesh.geometry) return false;
+    if (!mesh.geometry.boundingBox) {
+      mesh.geometry.computeBoundingBox();
+    }
+
+    const bounds = mesh.geometry.boundingBox;
+    if (!bounds) return false;
+
+    const sx = Math.abs((bounds.max.x - bounds.min.x) * mesh.scale.x);
+    const sy = Math.abs((bounds.max.y - bounds.min.y) * mesh.scale.y);
+    const sz = Math.abs((bounds.max.z - bounds.min.z) * mesh.scale.z);
+    const dims = [sx, sy, sz].sort((a, b) => a - b);
+
+    const thin = dims[0] <= 0.22;
+    const broad = dims[2] >= 3.0;
+    const tallOrWide = dims[1] >= 2.0;
+    return thin && broad && tallOrWide;
+  }
+
+  function rebuildLobbyShakeables() {
+    shakeables.length = 0;
+
+    for (const object3D of staticWorldObjects) {
+      if (!object3D || !object3D.isMesh) continue;
+
+      const memberships = objectRoomMemberships.get(object3D);
+      if (!memberships || !memberships.has('lobby')) continue;
+
+      if (object3D.userData.excludeShockwaveShake === true) continue;
+      if (object3D.userData.shockwavePhysicsControlled === true) continue;
+      if (isFlatStaticPlane(object3D)) continue;
+
+      shakeables.push(object3D);
+    }
+  }
+
+  // Canonical rule: lobby shockwave shake applies to static world props only,
+  // excluding flat structural planes and objects with dedicated shockwave physics.
+  rebuildLobbyShakeables();
 
   return {
     colliders,
@@ -1461,5 +1547,6 @@ export function createWorld(scene, physicsWorld) {
     setRoomVisibilityProgressive,
     getRoomObjectCount,
     registerExternalRoomObject,
+    registerExternalStaticRoomObject,
   };
 }
