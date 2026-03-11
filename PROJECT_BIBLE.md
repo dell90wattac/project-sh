@@ -59,6 +59,11 @@ Rule: extend the existing owner system first; do not create parallel authority f
   1. Register via shockwave target contract.
   2. Keep gameplay in target system; visuals remain in `shockwaveFx.js`.
   3. If static prop, follow world static classification pipeline.
+- Add furniture to a room:
+  1. Use existing factory functions in `world.js` (`makeDesk`, `makeChair`, `makeComputer`, etc.).
+  2. Wrap placement calls in `withRoom(roomId, () => { ... })` for room ownership.
+  3. Use `orient(dx, dz, facing)` / `dimOrient(w, d, facing)` for wall-relative placement.
+  4. Shockwave shake is automatic via `box()`/`decor()` pipeline — no manual registration.
 - Add/modify enemy archetypes:
   1. Archetype data in `entities/zombies.js`.
   2. Runtime/state/collision integration in `systems/enemyRuntime.js`.
@@ -76,6 +81,14 @@ Rule: extend the existing owner system first; do not create parallel authority f
 - Opposite-ammo swaps are atomic: verify ejection capacity first, then eject to inventory stacks (with overflow to empty slots); cancel entire transaction if capacity is insufficient.
 - Inventory UI may trigger handgun+ammo combine from either grid or equipped slot interactions, but should delegate execution to gun transaction APIs.
 - HUD ammo styling can reflect currently loaded ammo type, but must remain presentation-only and never become source-of-truth for weapon state.
+
+## Furniture Factory Contract
+- All reusable furniture factories live inside `createWorld()` in `world.js`, using closure over `box`, `decor`, `M`, and `registerLight`.
+- Factories accept `(x, z, facing)` with `facing` as `'north'`/`'south'`/`'east'`/`'west'`; orientation is axis-swap based (no mesh rotation).
+- Use `box()` for collidable main bodies (desks, cabinets, seats); use `decor()` for detail parts (legs, handles, screens, keyboards).
+- Rugs use `excludeShockwaveShake: true` option to avoid shaking flat floor decor.
+- Limit to 1 PointLight per desk lamp per room; rooms already have ceiling and sconce lights from structure builders.
+- Maintain 1.0m clear zone around all door positions for player navigation.
 
 ## Versioning + Discipline
 - Keep debug overlay and changelog in `Session X.Y` sync.

@@ -169,6 +169,12 @@ export function createWorld(scene, physicsWorld) {
     darkGrey:   new THREE.MeshStandardMaterial({ color: 0x2A2A2A, roughness: 0.6 }),
     paper:      new THREE.MeshStandardMaterial({ color: 0xF5F0E0, roughness: 0.9 }),
     magazine:   new THREE.MeshStandardMaterial({ color: 0x8B2020, roughness: 0.9 }),
+    screen:     new THREE.MeshStandardMaterial({ color: 0x1A3A2A, roughness: 0.5, emissive: 0x0A2A1A, emissiveIntensity: 0.15 }),
+    plastic:    new THREE.MeshStandardMaterial({ color: 0xE8E0D0, roughness: 0.7 }),
+    rug:        new THREE.MeshStandardMaterial({ color: 0x8B3030, roughness: 1.0 }),
+    rugBorder:  new THREE.MeshStandardMaterial({ color: 0x5A1A1A, roughness: 1.0 }),
+    stainless:  new THREE.MeshStandardMaterial({ color: 0xBBBBBB, roughness: 0.3, metalness: 0.9 }),
+    ceramic:    new THREE.MeshStandardMaterial({ color: 0xF0EEE8, roughness: 0.4 }),
   };
 
   function box(w, h, d, x, y, z, mat, options = {}) {
@@ -189,6 +195,280 @@ export function createWorld(scene, physicsWorld) {
     mesh.receiveShadow = true;
     markStaticWorldObject(mesh, options);
     return mesh;
+  }
+
+  // ─── Orientation Helpers ────────────────────────────────────────────────────
+  function orient(dx, dz, facing) {
+    switch (facing) {
+      case 'north': return { dx: -dx, dz: -dz };
+      case 'east':  return { dx: -dz, dz: dx };
+      case 'west':  return { dx: dz, dz: -dx };
+      default:      return { dx, dz }; // 'south'
+    }
+  }
+  function dimOrient(w, d, facing) {
+    return (facing === 'east' || facing === 'west') ? { w: d, d: w } : { w, d };
+  }
+
+  // ─── Reusable Furniture Factories ───────────────────────────────────────────
+
+  function makeDesk(x, z, facing) {
+    const bodyW = 1.4, bodyH = 0.72, bodyD = 0.7;
+    const topW = 1.5, topD = 0.75;
+    const { w: bw, d: bd } = dimOrient(bodyW, bodyD, facing);
+    const { w: tw, d: td } = dimOrient(topW, topD, facing);
+    box(bw, bodyH, bd, x, bodyH / 2, z, M.desk);
+    decor(tw, 0.04, td, x, bodyH + 0.02, z, M.deskTop);
+  }
+
+  function makeLargeDesk(x, z, facing) {
+    const bodyW = 2.0, bodyH = 0.72, bodyD = 0.9;
+    const topW = 2.1, topD = 0.95;
+    const { w: bw, d: bd } = dimOrient(bodyW, bodyD, facing);
+    const { w: tw, d: td } = dimOrient(topW, topD, facing);
+    box(bw, bodyH, bd, x, bodyH / 2, z, M.desk);
+    decor(tw, 0.05, td, x, bodyH + 0.025, z, M.deskTop);
+    // Side panels
+    const o1 = orient(-bodyW / 2 + 0.05, 0, facing);
+    const o2 = orient(bodyW / 2 - 0.05, 0, facing);
+    const { w: pw, d: pd } = dimOrient(0.05, bodyD - 0.1, facing);
+    decor(pw, bodyH - 0.1, pd, x + o1.dx, (bodyH - 0.1) / 2, z + o1.dz, M.desk);
+    decor(pw, bodyH - 0.1, pd, x + o2.dx, (bodyH - 0.1) / 2, z + o2.dz, M.desk);
+  }
+
+  function makeChair(x, z, facing) {
+    const seatY = 0.48;
+    box(0.50, 0.08, 0.50, x, seatY, z, M.bench);
+    // Backrest
+    const back = orient(0, -0.22, facing);
+    const { w: backW, d: backD } = dimOrient(0.50, 0.06, facing);
+    decor(backW, 0.42, backD, x + back.dx, seatY + 0.23, z + back.dz, M.bench);
+    // Legs
+    const legOffsets = [
+      orient(-0.20, 0.20, facing),
+      orient(0.20, 0.20, facing),
+      orient(-0.20, -0.20, facing),
+      orient(0.20, -0.20, facing),
+    ];
+    for (const lo of legOffsets) {
+      decor(0.05, seatY - 0.04, 0.05, x + lo.dx, (seatY - 0.04) / 2, z + lo.dz, M.lamp);
+    }
+  }
+
+  function makeMonitor(x, z, facing, surfaceY) {
+    const sy = surfaceY || 0.76;
+    // Base
+    decor(0.20, 0.02, 0.14, x, sy + 0.01, z, M.black);
+    // Neck
+    const neckO = orient(0, -0.02, facing);
+    decor(0.04, 0.18, 0.04, x + neckO.dx, sy + 0.11, z + neckO.dz, M.black);
+    // Screen
+    const screenO = orient(0, -0.06, facing);
+    const { w: sw, d: sd } = dimOrient(0.44, 0.06, facing);
+    decor(sw, 0.30, sd, x + screenO.dx, sy + 0.35, z + screenO.dz, M.screen);
+    // Bezel frame
+    decor(sw + 0.04, 0.32, sd, x + screenO.dx, sy + 0.35, z + screenO.dz, M.darkGrey);
+  }
+
+  function makeKeyboard(x, z, facing, surfaceY) {
+    const sy = surfaceY || 0.76;
+    const { w: kw, d: kd } = dimOrient(0.38, 0.14, facing);
+    decor(kw, 0.02, kd, x, sy + 0.01, z, M.plastic);
+  }
+
+  function makeMouse(x, z, facing, surfaceY) {
+    const sy = surfaceY || 0.76;
+    const { w: mw, d: md } = dimOrient(0.06, 0.10, facing);
+    decor(mw, 0.03, md, x, sy + 0.015, z, M.plastic);
+  }
+
+  function makeComputer(x, z, facing, surfaceY) {
+    const sy = surfaceY || 0.76;
+    // Monitor centered, keyboard in front, mouse to the right
+    const monO = orient(0, -0.15, facing);
+    const kbO = orient(0, 0.15, facing);
+    const msO = orient(0.28, 0.15, facing);
+    makeMonitor(x + monO.dx, z + monO.dz, facing, sy);
+    makeKeyboard(x + kbO.dx, z + kbO.dz, facing, sy);
+    makeMouse(x + msO.dx, z + msO.dz, facing, sy);
+  }
+
+  function makeLaptop(x, z, facing, surfaceY) {
+    const sy = surfaceY || 0.76;
+    // Base
+    const { w: bw, d: bd } = dimOrient(0.34, 0.24, facing);
+    decor(bw, 0.02, bd, x, sy + 0.01, z, M.darkGrey);
+    // Screen (angled back)
+    const screenO = orient(0, -0.10, facing);
+    const { w: sw, d: sd } = dimOrient(0.32, 0.02, facing);
+    decor(sw, 0.22, sd, x + screenO.dx, sy + 0.13, z + screenO.dz, M.screen);
+  }
+
+  function makeFilingCabinet(x, z, facing) {
+    const { w: bw, d: bd } = dimOrient(0.46, 0.58, facing);
+    box(bw, 1.0, bd, x, 0.50, z, M.desk);
+    // Drawer handles
+    const h1 = orient(0, 0.30, facing);
+    const h2 = orient(0, 0.30, facing);
+    const { w: hw, d: hd } = dimOrient(0.30, 0.02, facing);
+    decor(hw, 0.04, hd, x + h1.dx, 0.35, z + h1.dz, M.metal);
+    decor(hw, 0.04, hd, x + h2.dx, 0.65, z + h2.dz, M.metal);
+  }
+
+  function makeTallCabinet(x, z, facing) {
+    const { w: bw, d: bd } = dimOrient(0.46, 0.58, facing);
+    box(bw, 1.5, bd, x, 0.75, z, M.desk);
+    // 4 drawer handles
+    const hO = orient(0, 0.30, facing);
+    const { w: hw, d: hd } = dimOrient(0.30, 0.02, facing);
+    for (let i = 0; i < 4; i++) {
+      decor(hw, 0.04, hd, x + hO.dx, 0.22 + i * 0.34, z + hO.dz, M.metal);
+    }
+  }
+
+  function makeBookshelf(x, z, facing) {
+    const { w: fw, d: fd } = dimOrient(0.90, 0.30, facing);
+    box(fw, 1.8, fd, x, 0.90, z, M.desk);
+    // Shelf planks (3 internal)
+    for (let i = 0; i < 3; i++) {
+      const shelfY = 0.45 + i * 0.45;
+      decor(fw - 0.04, 0.03, fd - 0.04, x, shelfY, z, M.deskTop);
+    }
+    // Books (random-height colored blocks on each shelf)
+    const bookColors = [M.magazine, M.bench, M.wainscot, M.paper, M.darkGrey, M.desk];
+    let bookIdx = 0;
+    for (let shelf = 0; shelf < 3; shelf++) {
+      const shelfTop = 0.47 + shelf * 0.45;
+      const numBooks = 3 + (shelf % 2);
+      for (let b = 0; b < numBooks; b++) {
+        const bh = 0.18 + (bookIdx * 0.037) % 0.14;
+        const bx = -0.30 + b * 0.20;
+        const o = orient(bx, 0, facing);
+        const { w: bookW, d: bookD } = dimOrient(0.12, fd - 0.08, facing);
+        decor(bookW, bh, bookD, x + o.dx, shelfTop + bh / 2, z + o.dz, bookColors[bookIdx % bookColors.length]);
+        bookIdx++;
+      }
+    }
+  }
+
+  function makeDeskLamp(x, z, surfaceY) {
+    const sy = surfaceY || 0.76;
+    decor(0.10, 0.05, 0.10, x, sy + 0.025, z, M.lamp);
+    decor(0.04, 0.35, 0.04, x, sy + 0.225, z, M.lamp);
+    decor(0.22, 0.16, 0.22, x, sy + 0.48, z, M.lampShade);
+    const ll = new THREE.PointLight(0xFFE890, 1.5, 5);
+    ll.position.set(x, sy + 0.42, z);
+    registerLight(ll);
+  }
+
+  function makeStandingLamp(x, z) {
+    box(0.12, 1.8, 0.12, x, 0.90, z, M.lamp);
+    decor(0.38, 0.28, 0.38, x, 1.96, z, M.lampShade);
+    const sl = new THREE.PointLight(0xFFDF80, 2.0, 8);
+    sl.position.set(x, 1.80, z);
+    registerLight(sl);
+  }
+
+  function makeWallClock(x, z, wallSide) {
+    const clockY = 2.2;
+    let cx = x, cz = z;
+    let fw, fd;
+    if (wallSide === 'north' || wallSide === 'south') {
+      fw = 0.30; fd = 0.04;
+    } else {
+      fw = 0.04; fd = 0.30;
+    }
+    decor(fw, 0.30, fd, cx, clockY, cz, M.paper);
+    // Rim
+    decor(fw + 0.04, 0.32, fd + 0.04, cx, clockY, cz, M.lamp);
+    // Hour hand
+    decor(fw > fd ? 0.10 : 0.02, 0.02, fw > fd ? 0.02 : 0.10, cx, clockY + 0.02, cz, M.black);
+    // Minute hand
+    decor(fw > fd ? 0.02 : 0.02, 0.12, fw > fd ? 0.02 : 0.02, cx, clockY + 0.04, cz, M.black);
+  }
+
+  function makeRug(x, z, w, d) {
+    decor(w + 0.10, 0.01, d + 0.10, x, 0.005, z, M.rugBorder, { excludeShockwaveShake: true });
+    decor(w, 0.02, d, x, 0.015, z, M.rug, { excludeShockwaveShake: true });
+  }
+
+  function makeTable(x, z, w, d) {
+    const topH = 0.72;
+    box(w, 0.05, d, x, topH, z, M.desk);
+    decor(w + 0.04, 0.03, d + 0.04, x, topH + 0.015, z, M.deskTop);
+    // 4 legs
+    const hw = w / 2 - 0.06, hd = d / 2 - 0.06;
+    const legPositions = [[-hw, -hd], [hw, -hd], [-hw, hd], [hw, hd]];
+    for (const [lx, lz] of legPositions) {
+      decor(0.05, topH - 0.05, 0.05, x + lx, (topH - 0.05) / 2, z + lz, M.lamp);
+    }
+  }
+
+  function makeCounter(x, z, facing, w) {
+    const counterH = 0.88, counterD = 0.60;
+    const { w: cw, d: cd } = dimOrient(w, counterD, facing);
+    box(cw, counterH, cd, x, counterH / 2, z, M.desk);
+    decor(cw + 0.04, 0.04, cd + 0.04, x, counterH + 0.02, z, M.deskTop);
+  }
+
+  function makeSink(x, z, facing) {
+    const counterH = 0.88;
+    const { w: bw, d: bd } = dimOrient(0.80, 0.60, facing);
+    box(bw, counterH, bd, x, counterH / 2, z, M.wainscot);
+    // Counter surface
+    decor(bw + 0.04, 0.04, bd + 0.04, x, counterH + 0.02, z, M.stainless);
+    // Basin indent (darker inset)
+    const { w: sw, d: sd } = dimOrient(0.50, 0.36, facing);
+    decor(sw, 0.03, sd, x, counterH + 0.005, z, M.darkGrey);
+    // Faucet arm
+    const fO = orient(0, -0.18, facing);
+    const { w: fw, d: ffd } = dimOrient(0.04, 0.04, facing);
+    decor(fw, 0.30, ffd, x + fO.dx, counterH + 0.17, z + fO.dz, M.stainless);
+    // Faucet spout
+    const spO = orient(0, -0.08, facing);
+    const { w: spw, d: spd } = dimOrient(0.03, 0.14, facing);
+    decor(spw, 0.03, spd, x + spO.dx, counterH + 0.30, z + spO.dz, M.stainless);
+  }
+
+  function makeMicrowave(x, z, facing, surfaceY) {
+    const sy = surfaceY || 0.88;
+    const { w: bw, d: bd } = dimOrient(0.46, 0.32, facing);
+    decor(bw, 0.28, bd, x, sy + 0.14, z, M.darkGrey);
+    // Door face
+    const doorO = orient(0, 0.14, facing);
+    const { w: dw, d: dd } = dimOrient(0.40, 0.02, facing);
+    decor(dw, 0.22, dd, x + doorO.dx, sy + 0.14, z + doorO.dz, M.black);
+    // Handle
+    const hO = orient(0.18, 0.16, facing);
+    decor(0.02, 0.16, 0.02, x + hO.dx, sy + 0.14, z + hO.dz, M.metal);
+  }
+
+  function makeCoffeeMaker(x, z, facing, surfaceY) {
+    const sy = surfaceY || 0.88;
+    const { w: bw, d: bd } = dimOrient(0.22, 0.22, facing);
+    decor(bw, 0.32, bd, x, sy + 0.16, z, M.black);
+    // Carafe
+    const cO = orient(0, 0.08, facing);
+    decor(0.14, 0.14, 0.10, x + cO.dx, sy + 0.07, z + cO.dz, M.darkGrey);
+    // Top
+    decor(bw, 0.03, bd, x, sy + 0.33, z, M.darkGrey);
+  }
+
+  function makeKitchenCabinet(x, z, facing) {
+    const cabY = 1.60, cabH = 0.60;
+    const { w: cw, d: cd } = dimOrient(0.90, 0.30, facing);
+    box(cw, cabH, cd, x, cabY + cabH / 2, z, M.desk);
+    // Door handles
+    const hO = orient(0, 0.16, facing);
+    const { w: hw, d: hd } = dimOrient(0.02, 0.02, facing);
+    decor(hw, 0.10, hd, x + hO.dx - 0.15, cabY + cabH / 2, z + hO.dz, M.metal);
+    decor(hw, 0.10, hd, x + hO.dx + 0.15, cabY + cabH / 2, z + hO.dz, M.metal);
+  }
+
+  function makeWaterCooler(x, z) {
+    box(0.50, 1.2, 0.50, x, 0.60, z, M.wainscot);
+    decor(0.36, 0.40, 0.36, x, 1.40, z, new THREE.MeshStandardMaterial({ color: 0x6688CC, roughness: 0.4, metalness: 0.3 }));
+    decor(0.44, 0.05, 0.44, x, 1.62, z, M.metal);
   }
 
   // ─── Dimensions ──────────────────────────────────────────────────────────
@@ -1125,6 +1405,13 @@ export function createWorld(scene, physicsWorld) {
       ss.position.set(sx, 2.5, EAST_HALL_MIN_Z + 0.6);
       registerLight(ss);
     }
+
+    // ─── Hallway Furniture ───
+    makeTable(8.5, 3.5, 0.60, 0.40);
+    decor(0.20, 0.03, 0.30, 8.5, 0.74, 3.5, M.paper);           // papers on table
+    makeWaterCooler(13.0, 1.5);
+    makeRug(13.0, 2.5, 2.0, 1.0);
+    makeWallClock(17.0, 1.3, 'south');
   });
 
   // ─── East Wing Room Builder ───────────────────────────────────────────────
@@ -1249,6 +1536,116 @@ export function createWorld(scene, physicsWorld) {
     0xFDE2BA, 1.5
   );
 
+  // ─── East Wing Room Furniture ───────────────────────────────────────────────
+
+  // --- Reception Office Furniture ---
+  withRoom('eastReception', () => {
+    // Desk facing south (toward door), in north half of room
+    makeDesk(10.0, 7.2, 'south');
+    makeChair(10.0, 6.4, 'south');
+    makeComputer(10.0, 7.2, 'south', 0.76);
+    makeDeskLamp(10.8, 7.4, 0.76);
+
+    // Filing cabinet NW corner
+    makeFilingCabinet(7.8, 8.0, 'north');
+    // Bookshelf north wall
+    makeBookshelf(10.5, 8.15, 'north');
+    // Filing cabinet east wall
+    makeFilingCabinet(12.4, 6.5, 'east');
+
+    // Rug under desk area
+    makeRug(10.0, 6.8, 2.5, 2.0);
+    // Wall clock north wall
+    makeWallClock(9.5, 8.35, 'north');
+  });
+
+  // --- Admin Office Furniture ---
+  withRoom('eastAdmin', () => {
+    // Two desks side-by-side facing south
+    makeDesk(14.8, 7.3, 'south');
+    makeChair(14.8, 6.5, 'south');
+    makeComputer(14.8, 7.3, 'south', 0.76);
+    makeDeskLamp(15.5, 7.5, 0.76);
+
+    makeDesk(17.2, 7.3, 'south');
+    makeChair(17.2, 6.5, 'south');
+    makeLaptop(17.2, 7.3, 'south', 0.76);
+
+    // 3 tall filing cabinets along north wall (admin records)
+    makeTallCabinet(13.7, 8.1, 'north');
+    makeTallCabinet(15.5, 8.1, 'north');
+    makeTallCabinet(17.3, 8.1, 'north');
+
+    // Bookshelf west wall
+    makeBookshelf(13.45, 6.5, 'west');
+    // Filing cabinet east wall
+    makeFilingCabinet(18.5, 6.5, 'east');
+
+    // Rug spanning both desks
+    makeRug(16.0, 6.8, 4.0, 2.5);
+    // Wall clock
+    makeWallClock(16.0, 8.35, 'north');
+  });
+
+  // --- Manager's Office Furniture ---
+  withRoom('eastManager', () => {
+    // Large desk facing north (toward door)
+    makeLargeDesk(10.0, -2.3, 'north');
+    makeChair(10.0, -1.6, 'south');  // manager sits behind desk facing door
+    makeComputer(10.0, -2.3, 'north', 0.76);
+    makeDeskLamp(10.9, -2.5, 0.76);
+
+    // 2 guest chairs facing south (toward desk)
+    makeChair(9.2, -0.8, 'south');
+    makeChair(10.8, -0.8, 'south');
+
+    // Bookshelf west wall
+    makeBookshelf(7.55, -1.8, 'west');
+    // Filing cabinets east wall
+    makeFilingCabinet(12.4, -2.0, 'east');
+    makeFilingCabinet(12.4, -0.8, 'east');
+
+    // Standing lamp NW area
+    makeStandingLamp(7.8, -0.2);
+
+    // Rug
+    makeRug(10.0, -1.3, 3.0, 2.2);
+    // Wall clock on south wall
+    makeWallClock(10.0, -2.85, 'south');
+  });
+
+  // --- Kitchenette Furniture ---
+  withRoom('eastKitchen', () => {
+    // Counter run along south wall
+    makeCounter(14.5, -2.65, 'north', 1.5);
+    makeSink(16.1, -2.65, 'north');
+    makeCounter(17.7, -2.65, 'north', 1.2);
+
+    // Appliances on counter
+    makeMicrowave(17.5, -2.65, 'north', 0.92);
+    makeCoffeeMaker(14.3, -2.65, 'north', 0.92);
+
+    // Upper wall cabinets
+    makeKitchenCabinet(14.5, -2.85, 'north');
+    makeKitchenCabinet(17.5, -2.85, 'north');
+
+    // Small table + chairs in center
+    makeTable(16.0, -1.0, 1.0, 0.70);
+    makeChair(15.5, -0.4, 'south');
+    makeChair(16.5, -1.6, 'north');
+
+    // Water cooler west wall
+    makeWaterCooler(13.6, -1.5);
+    // Tall cabinet (pantry) west wall
+    makeTallCabinet(13.55, -2.4, 'west');
+
+    // Shelf east wall (dish storage)
+    makeBookshelf(18.6, -1.8, 'east');
+
+    // Wall clock
+    makeWallClock(16.0, 0.65, 'north');
+  });
+
   // ─── Director's Office (larger room at end of hallway) ────────────────────
   withRoom('eastDirector', () => {
     const w = EAST_DIR_W;
@@ -1314,6 +1711,35 @@ export function createWorld(scene, physicsWorld) {
       dsl.position.set(EAST_DIR_MAX_X - 0.6, 2.5, sz);
       registerLight(dsl);
     }
+
+    // ─── Director's Office Furniture ───
+    // Large desk facing west (toward door)
+    makeLargeDesk(23.0, 2.5, 'west');
+    makeChair(22.2, 2.5, 'east');  // director sits behind desk
+    makeComputer(23.0, 2.5, 'west', 0.76);
+    makeDeskLamp(23.5, 3.3, 0.76);
+
+    // 2 guest chairs + side table near door
+    makeChair(21.0, 1.5, 'east');
+    makeChair(21.0, 3.5, 'east');
+    makeTable(20.5, 2.5, 0.50, 0.50);
+
+    // Bookshelves along north wall
+    makeBookshelf(21.5, 5.7, 'north');
+    makeBookshelf(23.2, 5.7, 'north');
+
+    // Filing cabinets south wall
+    makeTallCabinet(20.2, -0.65, 'south');
+    makeFilingCabinet(21.5, -0.65, 'south');
+
+    // Standing lamp NW corner
+    makeStandingLamp(19.8, 5.0);
+
+    // Large rug
+    makeRug(21.8, 2.5, 3.5, 4.0);
+
+    // Wall clock north wall
+    makeWallClock(22.0, 5.85, 'north');
   });
 
   // ─── East Wing Doors (hallway to rooms) ───────────────────────────────────

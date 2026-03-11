@@ -4,6 +4,25 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 23] — 2026-03-11
+### Added
+- **Reusable furniture factory system** (`src/world/world.js`)
+  - 22 factory functions for office and kitchen furniture: `makeDesk`, `makeLargeDesk`, `makeChair`, `makeMonitor`, `makeKeyboard`, `makeMouse`, `makeComputer`, `makeLaptop`, `makeFilingCabinet`, `makeTallCabinet`, `makeBookshelf`, `makeDeskLamp`, `makeStandingLamp`, `makeWallClock`, `makeRug`, `makeTable`, `makeCounter`, `makeSink`, `makeMicrowave`, `makeCoffeeMaker`, `makeKitchenCabinet`, `makeWaterCooler`
+  - `orient(dx, dz, facing)` and `dimOrient(w, d, facing)` helpers for placing furniture against any wall direction (`north`/`south`/`east`/`west`)
+  - All factory output uses existing `box()`/`decor()` pipeline — shockwave shake compatibility is automatic
+
+- **6 new materials** added to the `M` palette: `screen` (CRT green glow), `plastic` (off-white peripherals), `rug`/`rugBorder` (dark red floor coverings), `stainless` (kitchen metal), `ceramic` (sink/mug surfaces)
+
+- **East wing fully furnished** — all 6 rooms populated:
+  - **Reception Office**: desk, chair, computer, desk lamp, filing cabinet, bookshelf, rug, wall clock
+  - **Admin Office**: 2 workstations (computer + laptop), 3 tall filing cabinets, bookshelf, rug, wall clock
+  - **Manager's Office**: large executive desk, computer, 2 guest chairs, bookshelf, 2 filing cabinets, standing lamp, rug, wall clock
+  - **Kitchenette**: counter run with sink/microwave/coffee maker, upper wall cabinets, table + 2 chairs, water cooler, pantry cabinet, dish shelf, wall clock
+  - **Director's Office**: large desk, computer, 2 guest chairs + side table, 2 bookshelves, filing cabinets, standing lamp, large rug, wall clock
+  - **East Hallway**: side table, water cooler, runner rug, wall clock
+
+---
+
 ## [Session 22] — 2026-03-11
 ### Added
 - **Bullet-scoped ammo profile resolver and mapping** (`src/systems/ammoTypes.js`, `src/main.js`, `src/systems/weapons.js`)
