@@ -4,6 +4,33 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 19] — 2026-03-11
+### Changed
+- **Room culling disabled — all rooms always visible** (`src/systems/roomCulling.js`)
+  - Stripped visibility toggling, BFS graph walking, progressive mesh reveal, transition cursors, adaptive budgeting, and prewarm phases
+  - System retained as a lightweight room tracker: resolves the player's current room each frame for HUD zone display and perf overlay
+  - API surface preserved as no-op stubs (`setVisibilityDepth`, `setMeshOpsPerFrame`, etc.) so callers don't need guards
+  - Motivation: toggling `object3D.visible` caused Three.js to evict/re-upload GPU buffers on every room transition, producing recurring 1000ms+ hitches that no amount of progressive spreading could eliminate
+
+- **Startup loading simplified** (`src/main.js`)
+  - Removed multi-phase prewarm system (prewarm → normalize → settle), adaptive mesh-ops budget, `renderer.compile()` call, warmup depth calculation, and all associated constants
+  - Loading screen now shows a simple 0.9s progress bar before enabling "click to begin"
+  - Removed `onVisibilityChange` callback that reset doors when rooms were culled (no longer needed since rooms are never hidden)
+
+- **Perf overlay label updated** (`src/ui/perfOverlay.js`)
+  - `vis ops` renamed to `mesh ops` (now always shows 0)
+
+### Removed
+- Progressive visibility API (`world.setRoomVisibilityProgressive`, `world.getRoomObjectCount`) added in earlier session — no longer called by any system
+- Adaptive mesh-ops budget system and all related constants (`NORMAL_MESH_OPS_PER_FRAME`, `STARTUP_MESH_OPS_PER_FRAME`, `GAMEPLAY_MIN/MAX_MESH_OPS_PER_FRAME`, etc.)
+
+### Notes
+- With all 11 rooms (~162 meshes) always visible, the game runs at 144 FPS on target hardware (GTX 1060+)
+- The world will grow to approximately 4× current size (~44 rooms). If draw call count becomes a bottleneck at that scale, the plan is to revisit with a `THREE.Layers`-based approach (which keeps GPU buffers warm) and/or static geometry merging per room — not `visible` flag toggling
+- Room graph, room registration, room connections, and zone metadata remain intact for future use by fog, enemy simulation, and audio systems
+
+---
+
 ## [Session 18] — 2026-03-10
 ### Added
 - **East Wing administration area — 6-room layout** (`src/world/world.js`)

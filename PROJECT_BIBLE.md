@@ -17,7 +17,7 @@ Primary goal for code changes: preserve one coherent architecture as systems sca
 - A bad ESM import path can halt module bootstrap before input/click handlers bind, which appears as "click to begin" doing nothing.
 
 ## Ownership Boundaries (Do Not Blur)
-- Room visibility and graph traversal: `src/systems/roomCulling.js`
+- Room tracking and zone resolution: `src/systems/roomCulling.js`
 - Door entity behavior and door runtime coordination: `src/entities/door.js`, `src/systems/door.js`
 - Lock rules and unlock contracts: `src/systems/lock.js`
 - Inventory state and item definitions: `src/systems/inventory.js`, `src/systems/itemRegistry.js`
@@ -34,7 +34,7 @@ If adding a feature, extend the existing owner system first. Do not create paral
 
 ## Active Architectural Contracts
 - Room-ID agnostic design: avoid hardcoded room lists inside systems.
-- Visibility culling is authoritative for hidden/active room behavior and drives dependent systems.
+- Room tracking resolves the player's current room each frame; visibility culling is currently disabled (all rooms always visible).
 - Doors support explicit interaction gating; lock flow controls when interaction is enabled.
 - Doors support rotated placement via `hingeRotY` parameter in `addLinkedDoor`; non-zero rotation wraps the pivot in a parent group so door physics inherits world orientation transparently.
 - Locking is entity-agnostic and key-driven (`key:<id>` pattern via registry/inventory path).
@@ -58,18 +58,16 @@ If adding a feature, extend the existing owner system first. Do not create paral
 - Keep tunable values in code constants; keep architectural rules in this file.
 
 Current depth target by system type:
-- High depth: room culling, state authority, system integration points, performance budgeting.
+- High depth: state authority, system integration points, world room graph.
 - Medium depth: locks, doors, inventory/world-item interactions, offscreen simulation contracts.
 - Lower depth: visual polish systems such as fog and post effects, unless they become gameplay-critical or a performance hotspot.
 
-## Culling And Fog Guidance
-- Culling (`src/systems/roomCulling.js`) should expose stable visibility state that other systems consume directly.
-- Dependent systems must subscribe to culling outcomes instead of re-implementing room-visibility checks.
-- Culling changes should preserve deterministic behavior at room boundaries before adding complexity.
+## Room Tracking And Fog Guidance
+- Room tracking (`src/systems/roomCulling.js`) resolves the player's current room for HUD/zone display. Visibility culling is disabled — all rooms are always rendered.
+- If draw call count becomes a bottleneck at larger world scale, prefer a `THREE.Layers`-based culling approach or static geometry merging over `object3D.visible` toggling (which causes GPU buffer eviction and recurring stalls).
 - Fog (`src/systems/fog.js`) should remain a presentation system driven by world/room state.
 - Fog is zone-based: each fog zone defines its own bounds, ceiling height, wisp count, and ground fog plane. New world areas require a corresponding fog zone entry.
 - Do not move gameplay authority into fog logic; fog reacts to game state, it does not define it.
-- If fog quality increases, validate cost against culling/update budgets first.
 
 ## Lighting And Shadow Guidance
 - Keep lighting ownership split by role: world/environment lights in `src/world/world.js`, first-person effect lights in `src/player/viewmodel.js`, and frame-budget/shadow update policy in `src/main.js`.
@@ -86,14 +84,14 @@ Current depth target by system type:
   - End of hallway: Director's Office (5.3×7.0m)
   - All east wing rooms use 3.0m ceilings for realistic office scale.
   - 7 doors total (1 lobby→hallway, 4 hallway→offices rotated ±π/2, 1 hallway→director, plus existing lobby→offshoot).
-- Runtime assumes culling-based visibility (not asset streaming/unloading).
+- All rooms are always visible (no culling). Performance is sustained at 144 FPS with current mesh count (~162 meshes / 11 rooms).
 - Existing systems are already wired for multi-room expansion; scale by extending world descriptors and graph links.
 
 ## Path Forward (Code-Altering Priorities)
-1. Expand room graph content using existing room/culling contracts, not custom per-room logic.
-2. Add offscreen enemy simulation compatible with room visibility states (lightweight when hidden, full behavior when visible).
+1. Expand room graph content using existing room registration and graph link contracts, not custom per-room logic.
+2. Add offscreen enemy simulation using room graph distance from player (lightweight when far, full behavior when near).
 3. Introduce audio as a system-layer concern that subscribes to gameplay events (doors, weapons, footsteps, hazards), not ad-hoc calls spread across files.
-4. Keep performance work aligned to current model: culling throughput, update budgeting, and static/baked lighting where feasible.
+4. If performance becomes a concern at larger scale (~44+ rooms), investigate `THREE.Layers`-based culling or per-room static geometry merging before reverting to `visible` flag toggling.
 
 ## Change Discipline For Agents
 - Update `CHANGELOG.md` every working session.

@@ -14,6 +14,7 @@ export function createWorld(scene, physicsWorld) {
   const enemies = [];
   const roomMap = new Map();
   const roomVisibility = new Map();
+  const roomTransitionCursors = new Map();
   const objectRoomMemberships = new Map();
   let activeRoomId = 'lobby';
 
@@ -1328,9 +1329,51 @@ export function createWorld(scene, physicsWorld) {
     if (!room) return;
     if (roomVisibility.get(roomId) === visible) return;
     roomVisibility.set(roomId, visible);
+    roomTransitionCursors.delete(roomId);
     for (const object3D of room.objects) {
       recomputeObjectVisibility(object3D);
     }
+  }
+
+  function setRoomVisibilityProgressive(roomId, visible, maxMeshes) {
+    const room = roomMap.get(roomId);
+    if (!room) return { processed: 0, remaining: 0, complete: true };
+
+    const objects = room.objects;
+    const total = objects.length;
+
+    if (total === 0) {
+      roomVisibility.set(roomId, visible);
+      roomTransitionCursors.delete(roomId);
+      return { processed: 0, remaining: 0, complete: true };
+    }
+
+    roomVisibility.set(roomId, visible);
+
+    let cursor = roomTransitionCursors.get(roomId);
+    if (!cursor || cursor.targetVisible !== visible) {
+      cursor = { targetVisible: visible, index: 0 };
+      roomTransitionCursors.set(roomId, cursor);
+    }
+
+    let processed = 0;
+    while (cursor.index < total && processed < maxMeshes) {
+      recomputeObjectVisibility(objects[cursor.index]);
+      cursor.index++;
+      processed++;
+    }
+
+    const remaining = total - cursor.index;
+    if (remaining === 0) {
+      roomTransitionCursors.delete(roomId);
+    }
+
+    return { processed, remaining, complete: remaining === 0 };
+  }
+
+  function getRoomObjectCount(roomId) {
+    const room = roomMap.get(roomId);
+    return room ? room.objects.length : 0;
   }
 
   function getRoomIds() {
@@ -1412,6 +1455,8 @@ export function createWorld(scene, physicsWorld) {
     getRoomMeta,
     getRoomAtPosition,
     setRoomVisibility,
+    setRoomVisibilityProgressive,
+    getRoomObjectCount,
     registerExternalRoomObject,
   };
 }

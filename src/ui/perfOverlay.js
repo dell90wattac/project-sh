@@ -47,7 +47,7 @@ export function createPerfOverlay() {
       `fps ${fps.toFixed(1)}  ms ${smoothedMs.toFixed(2)}`,
       `rooms ${stats.visibleRooms ?? '-'} / ${stats.totalRooms ?? '-'}`,
       `vis queue ${stats.pendingVisibilityChanges ?? 0}`,
-      `vis ops ${stats.roomOpsPerFrame ?? '-'}`,
+      `mesh ops ${stats.meshOpsPerFrame ?? '-'}`,
       `room ${stats.currentRoomLabel ?? stats.currentRoomId ?? '-'}`,
       `zone ${stats.currentZone ?? '-'}`,
       `calls ${stats.drawCalls ?? '-'}  tris ${stats.triangles ?? '-'}`,
