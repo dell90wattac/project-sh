@@ -1013,13 +1013,18 @@ export function createSpider() {
   };
 
   // Surface locomotion state — consumed by enemyRuntime for wall/ceiling walking
+  // Uses raycast-based adhesion; spider hovers at a small offset above the
+  // detected surface and steers along its tangent plane.
   entity.components.surface = {
     normal: new THREE.Vector3(0, 1, 0), // current contact surface normal
     airborne: false,                     // true while shockwave-launched (arc phase)
     airborneTimer: 0,                    // safety timeout accumulator
-    climbAssistTimer: 0,
-    noContactTimer: 0,
-    contactOffset: 0.04,               // push-out gap to avoid mesh embedding
+    _landLockTimer: 0,
+    _airTravel: 0,
+    _relandGuardTimer: 0,
+    _recoverToFloorTimer: 0,
+    _launchNormal: new THREE.Vector3(0, 1, 0),
+    _launchPos: new THREE.Vector3(),
   };
 
   return entity;

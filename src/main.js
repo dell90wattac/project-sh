@@ -25,6 +25,32 @@ import { getAmmoConfigForItem } from './systems/ammoTypes.js';
 
 const BUILD_VERSION = '22.7';
 
+const SPIDER_DEBUG = (() => {
+  try {
+    if (typeof window === 'undefined') return false;
+    const enabledByQuery = new URLSearchParams(window.location.search).get('spiderDebug') === '1';
+    const enabledByGlobal = window.__SPIDER_DEBUG__ === true;
+    const enabled = enabledByQuery || enabledByGlobal;
+    window.__SPIDER_DEBUG__ = enabled;
+    return enabled;
+  } catch {
+    return false;
+  }
+})();
+
+function _dbgNum(n) {
+  return Number.isFinite(n) ? Number(n.toFixed(3)) : n;
+}
+
+function _dbgVec3(v) {
+  if (!v) return null;
+  return { x: _dbgNum(v.x), y: _dbgNum(v.y), z: _dbgNum(v.z) };
+}
+
+if (SPIDER_DEBUG) {
+  console.log('[SpiderDBG] enabled (?spiderDebug=1)');
+}
+
 // ─── Renderer ──────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -387,6 +413,8 @@ const _doorPivotPos = new THREE.Vector3();
 const _doorNormalW = new THREE.Vector3();
 const _doorForceDir = new THREE.Vector3();
 const _chandelierTargetPos = new THREE.Vector3();
+const _spiderImpulseDir = new THREE.Vector3();
+const _spiderSurfaceNormal = new THREE.Vector3();
 
 for (const doorEntry of doorSystems) {
   const door = doorEntry.door;
@@ -447,22 +475,91 @@ for (const enemy of worldEnemies) {
         if (enemy.components.health?.dead) return;
         const kb = enemy.components.knockback;
         const surf = enemy.components.surface;
-        // Full 3D launch — spiders are light so they fly far.
-        // magnitude already scales with distance falloff and ammo force.
-        kb.velocity.addScaledVector(forceDir, magnitude * 1.0);
-        // Floor spiders: muzzle-to-spider direction points downward, which
-        // can push the spider into the floor causing instant re-landing.
-        // Clamp Y to zero before adding lift so it always launches upward.
-        // Wall/ceiling spiders keep raw force direction for natural knockoff.
-        if (surf && surf.normal.y > 0.5) {
-          kb.velocity.y = Math.max(kb.velocity.y, 0) + magnitude * 0.3;
-        } else {
-          kb.velocity.y += magnitude * 0.3;
+        const preSpeed = kb.velocity.length();
+        const inwardDotBefore =
+          surf && surf.normal ? forceDir.dot(surf.normal) : 0;
+        _spiderImpulseDir.copy(forceDir);
+
+        // Prevent shockwave impulses from driving wall/ceiling spiders deeper
+        // into geometry: remove inward component against current surface normal.
+        if (surf && surf.normal.lengthSq() > 0.0001) {
+          _spiderSurfaceNormal.copy(surf.normal).normalize();
+          const nDot = _spiderImpulseDir.dot(_spiderSurfaceNormal);
+          if (nDot < 0) {
+            _spiderImpulseDir.addScaledVector(_spiderSurfaceNormal, -nDot);
+          }
+          // Add a slight outward bias so blasts peel spiders off walls cleanly.
+          if (Math.abs(_spiderSurfaceNormal.y) < 0.8) {
+            _spiderImpulseDir.addScaledVector(_spiderSurfaceNormal, 0.25);
+          }
         }
+
+        if (_spiderImpulseDir.lengthSq() > 0.0001) {
+          _spiderImpulseDir.normalize();
+        } else {
+          _spiderImpulseDir.copy(forceDir);
+        }
+
+        // Reduce compounding velocity when repeatedly blasted while airborne.
+        if (kb.active) {
+          kb.velocity.multiplyScalar(0.45);
+        }
+
+        // Spider launch tuning: keep knockback visible but avoid repeated
+        // high-energy re-impacts against nearby walls.
+        const effectiveMagnitude = Math.min(magnitude, 9.5);
+        kb.velocity.addScaledVector(_spiderImpulseDir, effectiveMagnitude * 0.82);
+
+        // Keep a controlled upward arc; floor hits get a stronger lift than wall hits.
+        if (surf && surf.normal.y > 0.5) {
+          kb.velocity.y = Math.max(kb.velocity.y, 0) + effectiveMagnitude * 0.36;
+        } else {
+          kb.velocity.y += effectiveMagnitude * 0.24;
+        }
+
+        // Cap launch speed to limit tunneling/embedding against thin walls.
+        const maxLaunchSpeed = 6.8;
+        const speedSq = kb.velocity.lengthSq();
+        if (speedSq > maxLaunchSpeed * maxLaunchSpeed) {
+          kb.velocity.multiplyScalar(maxLaunchSpeed / Math.sqrt(speedSq));
+        }
+
+        if (SPIDER_DEBUG) {
+          const postSpeed = kb.velocity.length();
+          const impulseDotAfter =
+            surf && surf.normal ? _spiderImpulseDir.dot(surf.normal) : 0;
+          console.log('[SpiderDBG][ShockwaveApply]', {
+            id: enemy.mesh.id,
+            magnitude: _dbgNum(magnitude),
+            preSpeed: _dbgNum(preSpeed),
+            postSpeed: _dbgNum(postSpeed),
+            inwardDotBefore: _dbgNum(inwardDotBefore),
+            impulseDotAfter: _dbgNum(impulseDotAfter),
+            forceDir: _dbgVec3(forceDir),
+            impulseDir: _dbgVec3(_spiderImpulseDir),
+            surfNormal: _dbgVec3(surf?.normal),
+            pos: _dbgVec3(enemy.mesh.position),
+          });
+        }
+
         kb.active = true;
         if (surf) {
           surf.airborne = true;
           surf.airborneTimer = 0;
+          // Briefly suppress landing so spiders can separate from launch surfaces.
+          surf._landLockTimer = 0.12;
+          surf._airTravel = 0;
+          // Additional guard: avoid instantly re-landing to the same face.
+          surf._relandGuardTimer = 0.55;
+          // For a short period after shockwave, bias recovery toward floor
+          // re-acquisition so spiders don't keep clinging to nearby walls.
+          surf._recoverToFloorTimer = 1.1;
+          if (surf._launchNormal && surf.normal) {
+            surf._launchNormal.copy(surf.normal).normalize();
+          }
+          if (surf._launchPos) {
+            surf._launchPos.copy(enemy.mesh.position);
+          }
         }
       },
       takeDamage(/* amount */) {

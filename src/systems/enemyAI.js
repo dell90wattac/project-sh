@@ -114,6 +114,10 @@ function createEnemyAIState(enemy, homeZone, aggroDepth) {
     stallTimer: 0,
     recentMoveSpeed: 0,
     lastPosition: new THREE.Vector3(),
+    // Per-spider path randomness: lateral offset applied to steer target
+    // so spiders fan out instead of all taking the same line.
+    pathOffset: new THREE.Vector3(),
+    pathOffsetTimer: 0,       // countdown — re-randomize when it hits 0
   };
 }
 
@@ -128,6 +132,11 @@ const RETURN_ARRIVE_DIST = 1.0;      // close enough to home center
 const LEASH_COOLDOWN = 2.0;          // seconds after leaving aggro zone before de-aggro
 const FACING_BLEND = 4.0;            // radians/sec for rotation toward movement
 
+// Spider path-randomness tuning
+const SPIDER_PATH_OFFSET_RANGE = 1.8;  // max lateral offset (metres) from ideal line
+const SPIDER_PATH_OFFSET_REROLL_MIN = 1.5; // seconds between offset re-randomizations
+const SPIDER_PATH_OFFSET_REROLL_MAX = 3.5;
+
 const NAV_PROBE_DISTANCE = 0.65;
 const NAV_CLEARANCE_PADDING = 0.02;
 const NAV_MIN_CLEARANCE_RATIO = 0.12;
@@ -137,6 +146,8 @@ const NAV_STEER_MAX_ANGLE = 1.4;
 // Temporary build toggle: disable enemy pursuit/tracking toward the player.
 // Set to true to restore normal chase behavior.
 const ENEMY_PURSUIT_ENABLED = false;
+// Spider-specific override for test builds where only spiders should hunt.
+const SPIDER_PURSUIT_ENABLED = true;
 
 // ── Main AI update ───────────────────────────────────────────────────────────
 
@@ -507,7 +518,7 @@ export function createEnemyAI(world, roomCulling) {
   // ── State evaluation (runs every DECISION_INTERVAL) ────────────────────────
 
   function evaluateState(enemy, ai, playerPosition) {
-    if (!ENEMY_PURSUIT_ENABLED) {
+    if (!ENEMY_PURSUIT_ENABLED && !(enemy.type === 'spider' && SPIDER_PURSUIT_ENABLED)) {
       if (ai.state === AI_STATE.CHASE || ai.state === AI_STATE.RETURN) {
         enterIdle(ai);
       }
@@ -582,6 +593,15 @@ export function createEnemyAI(world, roomCulling) {
     faceDirection(enemy, _v, dt, pathing.turnSpeed);
   }
 
+  function refreshSpiderPathOffset(ai) {
+    // Random lateral offset so each spider takes a unique line
+    const angle = Math.random() * Math.PI * 2;
+    const mag = (Math.random() * 0.6 + 0.4) * SPIDER_PATH_OFFSET_RANGE;
+    ai.pathOffset.set(Math.cos(angle) * mag, 0, Math.sin(angle) * mag);
+    ai.pathOffsetTimer = SPIDER_PATH_OFFSET_REROLL_MIN +
+      Math.random() * (SPIDER_PATH_OFFSET_REROLL_MAX - SPIDER_PATH_OFFSET_REROLL_MIN);
+  }
+
   function executeChase(enemy, ai, dt, pathing, playerPosition) {
     const nav = ensureNavigationConfig(enemy, pathing);
     const isSpider = enemy.type === 'spider';
@@ -591,6 +611,23 @@ export function createEnemyAI(world, roomCulling) {
     // Spiders use full 3D targeting so they can climb toward the player's height
     if (isSpider) {
       ai.steerTarget.y = playerPosition.y;
+
+      // Apply per-spider lateral offset to fan them out.
+      // Re-roll periodically so they weave instead of following one fixed path.
+      ai.pathOffsetTimer -= dt;
+      if (ai.pathOffsetTimer <= 0) {
+        refreshSpiderPathOffset(ai);
+      }
+
+      // Only apply offset when not very close to player (prevents orbiting)
+      const rawDist = _v.set(
+        ai.steerTarget.x - enemy.mesh.position.x,
+        ai.steerTarget.y - enemy.mesh.position.y,
+        ai.steerTarget.z - enemy.mesh.position.z
+      ).length();
+      const offsetFade = Math.min(1, Math.max(0, (rawDist - 1.5) / 2.0));
+      ai.steerTarget.x += ai.pathOffset.x * offsetFade;
+      ai.steerTarget.z += ai.pathOffset.z * offsetFade;
     }
 
     const pos = enemy.mesh.position;
@@ -621,6 +658,14 @@ export function createEnemyAI(world, roomCulling) {
         // transition them onto walls/ceilings. Full 3D velocity lets them
         // climb toward the player's height.
         ai.recoveryDirection.copy(_v);
+
+        // Keep strong climb intent even with lateral path randomness.
+        const heightDelta = playerPosition.y - pos.y;
+        if (Math.abs(heightDelta) > 0.15) {
+          ai.recoveryDirection.y += THREE.MathUtils.clamp(heightDelta * 0.45, -1.1, 1.1);
+          ai.recoveryDirection.normalize();
+        }
+
         pathing.desiredVelocity.set(
           ai.recoveryDirection.x * pathing.moveSpeed,
           ai.recoveryDirection.y * pathing.moveSpeed,

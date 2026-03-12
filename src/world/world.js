@@ -1110,7 +1110,7 @@ export function createWorld(scene, physicsWorld) {
   registerCollider(zombieCollider);
   enemies.push(zombieSentry);
 
-  // ─── Spider enemies — two in the rear-left of the lobby ──────────────────
+  // ─── Spider enemies — stress test pack from the back room area ───────────
   const spiderHalfSize = new THREE.Vector3(0.13, 0.12, 0.13);
   const spiderFootOffsetY = 0.01;
 
@@ -1122,8 +1122,16 @@ export function createWorld(scene, physicsWorld) {
   }
 
   const spiderSpawnPositions = [
-    new THREE.Vector3(-2.2, 0, -4.5),
-    new THREE.Vector3(-1.2, 0, -5.2),
+    new THREE.Vector3(-2.8, 0, -11.8),
+    new THREE.Vector3(-1.6, 0, -11.9),
+    new THREE.Vector3(-0.4, 0, -12.0),
+    new THREE.Vector3(0.8, 0, -11.9),
+    new THREE.Vector3(2.0, 0, -11.8),
+    new THREE.Vector3(-2.6, 0, -12.8),
+    new THREE.Vector3(-1.3, 0, -12.9),
+    new THREE.Vector3(0.0, 0, -13.0),
+    new THREE.Vector3(1.3, 0, -12.9),
+    new THREE.Vector3(2.6, 0, -12.8),
   ];
 
   for (const spawnPos of spiderSpawnPositions) {
