@@ -761,7 +761,7 @@ function updateStartupLoading(dt) {
     overlay.style.cursor = 'pointer';
     overlay.style.pointerEvents = 'all';
   }
-  setOverlayText('Project SH', 'click to begin\nQ inventory  R reload  F flashlight  N noclip debug');
+  setOverlayText('Project SH', 'click to begin\nQ inventory  R reload  F flashlight  N noclip debug\n\n⚠ mild arachnophobia warning');
 }
 
 // ─── Clock & Loop ──────────────────────────────────────────────────────────

@@ -1142,7 +1142,7 @@ export function createWorld(scene, physicsWorld) {
 
   const spiderSpawnPositions = [];
   const spiderSpawnCols = 10;
-  const spiderSpawnRows = 5;
+  const spiderSpawnRows = 10;
   const spiderSpawnXStart = -2.7;
   const spiderSpawnZStart = -11.8;
   const spiderSpawnXStep = 0.6;
