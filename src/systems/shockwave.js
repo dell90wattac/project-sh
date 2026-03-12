@@ -87,7 +87,13 @@ export function createShockwaveSystem() {
       if (magnitude < 0.01) continue;
 
       // Apply force
-      target.applyForce(_forceDir, magnitude);
+      target.applyForce(_forceDir, magnitude, {
+        ammoConfig,
+        distance: dist,
+        radius,
+        falloff,
+        forceMult,
+      });
       hitCount++;
 
       // Apply damage to damageable targets

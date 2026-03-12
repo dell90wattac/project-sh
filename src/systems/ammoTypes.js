@@ -22,6 +22,20 @@ export const AMMO_TYPES = {
     visualScale: 1.0,
     cameraShake: 0.08,
     recoilMagnitude: 0.03,
+    spiderShock: {
+      // Standard has force:10 / radius:5.75 vs heavy's force:20 / radius:17.25.
+      // knockbackMult compensates so close-range hits feel comparable to heavy.
+      knockbackMult: 6.0,
+      launchScalar: 0.88,
+      upwardScalarFloor: 0.38,
+      upwardScalarWall: 0.26,
+      magnitudeCap: 14.0,
+      maxLaunchSpeed: 9.5,
+      detachThreshold: 1.0,
+      landLockTime: 0.07,
+      landLockMinTravel: 0.09,
+      recoverFloorTime: 0.65,
+    },
   },
   heavyHandgun: {
     label: 'Heavy Handgun',
@@ -37,6 +51,18 @@ export const AMMO_TYPES = {
     visualScale: 1.0,
     cameraShake: 0.08,
     recoilMagnitude: 0.03,
+    spiderShock: {
+      knockbackMult: 1.0,
+      launchScalar: 0.96,
+      upwardScalarFloor: 0.78,
+      upwardScalarWall: 0.72,
+      magnitudeCap: 42.0,
+      maxLaunchSpeed: 28.5,
+      detachThreshold: 1.0,
+      landLockTime: 0.1,
+      landLockMinTravel: 0.14,
+      recoverFloorTime: 0.95,
+    },
   },
 };
 

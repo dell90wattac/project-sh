@@ -13,6 +13,8 @@ const STEP_HEIGHT   = 0.45;
 const ACCEL         = 0.14;
 const DECEL         = 0.08;
 const MOUSE_SENS    = 0.002;
+const NOCLIP_SPEED  = 5.5;
+const NOCLIP_SPRINT_MULT = 2.2;
 
 export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, playerHealth = null) {
   // ─── Body / camera hierarchy ─────────────────────────────────────────────
@@ -30,11 +32,13 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
   let fallbackMode = false;
   let fallbackActive = false;   // true once the player clicks to start in fallback
   let hasEverPointerLock = false;
+  let noclipEnabled = false;
   let windowFocused = document.hasFocus();
   let tabVisible = document.visibilityState !== 'hidden';
   const keys = {};
   let fallbackYaw   = 0;
   let fallbackPitch = 0;
+  const enemyTargetPosition = new THREE.Vector3();
 
   function applyCursorMode() {
     const inventoryOpen = !!(inventoryUI && inventoryUI.isOpen && inventoryUI.isOpen());
@@ -104,6 +108,16 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
   // ─── Input ───────────────────────────────────────────────────────────────
   let flashlightOn = false;
   window.addEventListener('keydown', e => { 
+    if (e.code === 'KeyN' && !e.repeat) {
+      noclipEnabled = !noclipEnabled;
+      enemyTargetPosition.copy(body.position);
+      velY = 0;
+      onGround = false;
+      wasOnGround = false;
+      if (!noclipEnabled) {
+        velocity.set(0, 0, 0);
+      }
+    }
     keys[e.code] = true; 
     if (e.code === 'KeyF') flashlightOn = !flashlightOn; 
   });
@@ -163,6 +177,7 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
   // ─── Reusable vectors ────────────────────────────────────────────────────
   const forward   = new THREE.Vector3();
   const right     = new THREE.Vector3();
+  const up        = new THREE.Vector3(0, 1, 0);
   const dir       = new THREE.Vector3();
   const targetVel = new THREE.Vector3();
   const playerBox = new THREE.Box3();
@@ -177,6 +192,8 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
   // ─── Sway state ──────────────────────────────────────────────────────────
   let swayPhase = 0;
   let lowHealthSwayPhase = 0;
+
+  enemyTargetPosition.copy(body.position);
 
   // ─── Collision helpers (AABB-based, fast) ───────────────────────────────
   function buildPlayerBox(pos) {
@@ -225,6 +242,51 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
     const pos    = body.position;
     const sprint = keys['ShiftLeft'] || keys['ShiftRight'];
     const speed  = MOVE_SPEED * (sprint ? SPRINT_MULT : 1);
+
+    if (noclipEnabled) {
+      const noclipSpeed = NOCLIP_SPEED * (sprint ? NOCLIP_SPRINT_MULT : 1);
+
+      camera.getWorldDirection(forward);
+      forward.normalize();
+      right.set(1, 0, 0).applyQuaternion(camera.quaternion).normalize();
+
+      dir.set(0, 0, 0);
+      if (keys['KeyW'] || keys['ArrowUp']) dir.add(forward);
+      if (keys['KeyS'] || keys['ArrowDown']) dir.addScaledVector(forward, -1);
+      if (keys['KeyD'] || keys['ArrowRight']) dir.add(right);
+      if (keys['KeyA'] || keys['ArrowLeft']) dir.addScaledVector(right, -1);
+      if (keys['Space']) dir.add(up);
+      if (keys['ControlLeft'] || keys['ControlRight']) dir.addScaledVector(up, -1);
+
+      const wantsMoveNoclip = dir.lengthSq() > 0;
+      targetVel.set(0, 0, 0);
+      if (wantsMoveNoclip) {
+        dir.normalize();
+        targetVel.copy(dir).multiplyScalar(noclipSpeed);
+      }
+
+      const noclipBlend = wantsMoveNoclip ? 0.22 : 0.18;
+      velocity.x += (targetVel.x - velocity.x) * noclipBlend;
+      velocity.y += (targetVel.y - velocity.y) * noclipBlend;
+      velocity.z += (targetVel.z - velocity.z) * noclipBlend;
+
+      pos.addScaledVector(velocity, dt);
+      velY = 0;
+      onGround = false;
+      wasOnGround = false;
+
+      playerPhysicsBody.position.set(pos.x, pos.y - PLAYER_HEIGHT + PLAYER_RADIUS, pos.z);
+
+      camera.position.x += (0 - camera.position.x) * 0.2;
+      camera.position.y += (0 - camera.position.y) * 0.2;
+
+      viewmodel.update(dt, false, sprint, mouseDX, mouseDY, flashlightOn, gunState, doorInteraction);
+      mouseDX = 0;
+      mouseDY = 0;
+
+      world.update(dt);
+      return;
+    }
 
     // ── Direction from camera look (yaw only) ────────────────────────────
     camera.getWorldDirection(forward);
@@ -309,6 +371,8 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
     mouseDY = 0;
 
     world.update(dt);
+
+    enemyTargetPosition.copy(pos);
   }
 
   function getPosition() {
@@ -321,9 +385,12 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
 
   function resetPosition() {
     body.position.set(0, 1.2 + PLAYER_HEIGHT, 4);
+    enemyTargetPosition.copy(body.position);
     velY = 0;
     velocity.set(0, 0, 0);
     onGround = false;
+    wasOnGround = false;
+    noclipEnabled = false;
     lowHealthSwayPhase = 0;
   }
 
@@ -337,8 +404,10 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
     keys,
     controls,
     getPosition,
+    getEnemyTargetPosition: () => enemyTargetPosition,
     getVelocity,
     getFlashlightOn: () => flashlightOn,
+    isNoclipEnabled: () => noclipEnabled,
     resetPosition,
   };
 }

@@ -525,7 +525,9 @@ export function createEnemyAI(world, roomCulling) {
       return;
     }
 
-    const playerRoomId = roomCulling.getCurrentRoomId();
+    const playerRoomId = world.getRoomAtPosition
+      ? (world.getRoomAtPosition(playerPosition, 0.2, roomCulling.getCurrentRoomId()) || roomCulling.getCurrentRoomId())
+      : roomCulling.getCurrentRoomId();
     const playerInAggroZone = ai.aggroRooms.has(playerRoomId);
 
     if (playerInAggroZone) {

@@ -232,6 +232,8 @@ for (const doorEntry of doorSystems) {
   doorSystemById.set(doorEntry.id, doorEntry.system);
 }
 
+enemyRuntime.setDoorSystems(doorSystems);
+
 function getBestDoorInteraction() {
   if (doorSystems.length === 0) return null;
 
@@ -468,13 +470,23 @@ for (const enemy of worldEnemies) {
   }
   if (enemy.type === 'spider') {
     // Spider shockwave: launches into a full 3D arc (gravity applied in runtime).
-    // Damage intake disabled — health component present for future use.
+    // Shockwaves do not directly damage spiders; only later impacts do.
     shockwave.registerTarget('enemy', {
       getPosition() { return enemy.mesh.position; },
-      applyForce(forceDir, magnitude) {
+      applyForce(forceDir, magnitude, shockMeta = null) {
         if (enemy.components.health?.dead) return;
         const kb = enemy.components.knockback;
         const surf = enemy.components.surface;
+        const spiderShock = shockMeta?.ammoConfig?.spiderShock || null;
+        const combat = enemy.components.spiderCombat || (enemy.components.spiderCombat = {
+          impactArmed: false,
+          launchStrength: 0,
+          lastImpactDamage: 0,
+          lastImpactSpeed: 0,
+          lastDamageSource: null,
+          lastDamageAt: -Infinity,
+          doorHits: Object.create(null),
+        });
         const preSpeed = kb.velocity.length();
         const inwardDotBefore =
           surf && surf.normal ? forceDir.dot(surf.normal) : 0;
@@ -505,20 +517,70 @@ for (const enemy of worldEnemies) {
           kb.velocity.multiplyScalar(0.45);
         }
 
+        const knockbackMult = spiderShock?.knockbackMult ?? 1;
+        const launchScalar = spiderShock?.launchScalar ?? 0.82;
+        const magnitudeCap = spiderShock?.magnitudeCap ?? 9.5;
+        const detachThreshold = spiderShock?.detachThreshold ?? 0.85;
+        const floorUpScalar = spiderShock?.upwardScalarFloor ?? 0.36;
+        const wallUpScalar = spiderShock?.upwardScalarWall ?? 0.24;
+        const maxLaunchSpeed = spiderShock?.maxLaunchSpeed ?? 6.8;
+        const landLockTime = spiderShock?.landLockTime ?? 0.12;
+        const landLockMinTravel = spiderShock?.landLockMinTravel ?? 0.22;
+        const recoverFloorTime = spiderShock?.recoverFloorTime ?? 1.1;
+
         // Spider launch tuning: keep knockback visible but avoid repeated
         // high-energy re-impacts against nearby walls.
-        const effectiveMagnitude = Math.min(magnitude, 9.5);
-        kb.velocity.addScaledVector(_spiderImpulseDir, effectiveMagnitude * 0.82);
+        const effectiveMagnitude = Math.min(magnitude * knockbackMult, magnitudeCap);
+
+        // Tiny blasts should not force airborne state; keep spiders adhered.
+        if (effectiveMagnitude < detachThreshold) {
+          const tangentNudge = effectiveMagnitude * 0.05;
+          if (surf && surf.normal && surf.normal.lengthSq() > 0.0001 && tangentNudge > 0) {
+            _spiderSurfaceNormal.copy(surf.normal).normalize();
+            _spiderImpulseDir.addScaledVector(_spiderSurfaceNormal, -_spiderImpulseDir.dot(_spiderSurfaceNormal));
+            if (_spiderImpulseDir.lengthSq() > 0.0001) {
+              _spiderImpulseDir.normalize();
+              enemy.mesh.position.addScaledVector(_spiderImpulseDir, tangentNudge);
+            }
+          }
+
+          kb.velocity.set(0, 0, 0);
+          kb.active = false;
+          combat.impactArmed = false;
+          combat.launchStrength = 0;
+
+          if (surf) {
+            surf.airborne = false;
+            surf.airborneTimer = 0;
+            surf._landLockTimer = 0;
+            surf._landLockMinTravel = 0;
+            surf._airTravel = 0;
+            surf._recoverToFloorTimer = Math.max(surf._recoverToFloorTimer || 0, 0.18);
+          }
+
+          if (SPIDER_DEBUG) {
+            console.log('[SpiderDBG][ShockwaveApplySmall]', {
+              id: enemy.mesh.id,
+              magnitude: _dbgNum(magnitude),
+              effectiveMagnitude: _dbgNum(effectiveMagnitude),
+              detachThreshold: _dbgNum(detachThreshold),
+              kbVel: _dbgVec3(kb.velocity),
+              ammo: shockMeta?.ammoConfig?.label || 'unknown',
+            });
+          }
+          return;
+        }
+
+        kb.velocity.addScaledVector(_spiderImpulseDir, effectiveMagnitude * launchScalar);
 
         // Keep a controlled upward arc; floor hits get a stronger lift than wall hits.
         if (surf && surf.normal.y > 0.5) {
-          kb.velocity.y = Math.max(kb.velocity.y, 0) + effectiveMagnitude * 0.36;
+          kb.velocity.y = Math.max(kb.velocity.y, 0) + effectiveMagnitude * floorUpScalar;
         } else {
-          kb.velocity.y += effectiveMagnitude * 0.24;
+          kb.velocity.y += effectiveMagnitude * wallUpScalar;
         }
 
         // Cap launch speed to limit tunneling/embedding against thin walls.
-        const maxLaunchSpeed = 6.8;
         const speedSq = kb.velocity.lengthSq();
         if (speedSq > maxLaunchSpeed * maxLaunchSpeed) {
           kb.velocity.multiplyScalar(maxLaunchSpeed / Math.sqrt(speedSq));
@@ -539,21 +601,25 @@ for (const enemy of worldEnemies) {
             impulseDir: _dbgVec3(_spiderImpulseDir),
             surfNormal: _dbgVec3(surf?.normal),
             pos: _dbgVec3(enemy.mesh.position),
+            ammo: shockMeta?.ammoConfig?.label || 'unknown',
           });
         }
 
         kb.active = true;
+        combat.impactArmed = effectiveMagnitude > 0.01;
+        combat.launchStrength = effectiveMagnitude;
         if (surf) {
           surf.airborne = true;
           surf.airborneTimer = 0;
           // Briefly suppress landing so spiders can separate from launch surfaces.
-          surf._landLockTimer = 0.12;
+          surf._landLockTimer = landLockTime;
+          surf._landLockMinTravel = landLockMinTravel;
           surf._airTravel = 0;
           // Additional guard: avoid instantly re-landing to the same face.
           surf._relandGuardTimer = 0.55;
           // For a short period after shockwave, bias recovery toward floor
           // re-acquisition so spiders don't keep clinging to nearby walls.
-          surf._recoverToFloorTimer = 1.1;
+          surf._recoverToFloorTimer = recoverFloorTime;
           if (surf._launchNormal && surf.normal) {
             surf._launchNormal.copy(surf.normal).normalize();
           }
@@ -561,9 +627,6 @@ for (const enemy of worldEnemies) {
             surf._launchPos.copy(enemy.mesh.position);
           }
         }
-      },
-      takeDamage(/* amount */) {
-        // Damage disabled for spiders at this time
       },
     });
   } else {
@@ -698,7 +761,7 @@ function updateStartupLoading(dt) {
     overlay.style.cursor = 'pointer';
     overlay.style.pointerEvents = 'all';
   }
-  setOverlayText('Project SH', 'click to begin\nQ to open and close inventory  R to reload weapon  F for flashlight');
+  setOverlayText('Project SH', 'click to begin\nQ inventory  R reload  F flashlight  N noclip debug');
 }
 
 // ─── Clock & Loop ──────────────────────────────────────────────────────────
@@ -744,6 +807,7 @@ function updateFlashlightShadowRefresh(dt, flashlightEnabled) {
 }
 
 let lastEKeyState = false;
+let lastNoclipState = false;
 
 window.addEventListener('keydown', e => {
   if (e.code !== 'KeyQ' || e.repeat) return;
@@ -764,6 +828,12 @@ window.addEventListener('keydown', e => {
 function loop() {
   requestAnimationFrame(loop);
   const dt = Math.min(clock.getDelta(), 0.05);
+
+  const noclipActive = !!(player.isNoclipEnabled && player.isNoclipEnabled());
+  if (noclipActive !== lastNoclipState) {
+    showActionLabel(noclipActive ? 'NOCLIP ON: ENEMY TARGET LOCKED' : 'NOCLIP OFF');
+    lastNoclipState = noclipActive;
+  }
 
   if (actionLabelTimer > 0) {
     actionLabelTimer -= dt;

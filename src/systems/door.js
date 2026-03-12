@@ -50,6 +50,7 @@ export function createDoorSystem(door, player, camera, options = {}) {
   function update(dt) {
     const doorPivot = door.pivot;
     const playerPos = player.getPosition();
+    const playerNoclip = !!(player.isNoclipEnabled && player.isNoclipEnabled());
     doorPivot.getWorldPosition(pivotWorldPos);
     doorPivot.getWorldQuaternion(tempQuat);
     invQuat.copy(tempQuat).invert();
@@ -96,7 +97,7 @@ export function createDoorSystem(door, player, camera, options = {}) {
     }
 
     // --- Contact-based push (physical torque model) ---
-    if (inZ && inY && Math.abs(distFromPlane) < PUSH_DETECT) {
+    if (!playerNoclip && inZ && inY && Math.abs(distFromPlane) < PUSH_DETECT) {
       const side = distFromPlane >= 0 ? 1 : -1;
       const penetration = Math.max(0, PUSH_DETECT - Math.abs(distFromPlane));
 
@@ -167,6 +168,8 @@ export function createDoorSystem(door, player, camera, options = {}) {
 
   /** Resolve player overlap with the door panel (call after player.update). */
   function applyPlayerPushback(playerRef) {
+    if (playerRef.isNoclipEnabled && playerRef.isNoclipEnabled()) return;
+
     const doorPivot = door.pivot;
     const pos = playerRef.getPosition();
     doorPivot.getWorldPosition(pivotWorldPos);

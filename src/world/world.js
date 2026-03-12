@@ -9,6 +9,7 @@ import { createLobbyZombieSentry, createSpider } from '../entities/zombies.js';
  */
 export function createWorld(scene, physicsWorld) {
   const colliders = [];
+  const spiderCrawlColliders = [];
   const hazards = [];
   const doors = [];
   const enemies = [];
@@ -85,10 +86,17 @@ export function createWorld(scene, physicsWorld) {
     return registerObject(light);
   }
 
-  function registerCollider(collider) {
+  function registerCollider(collider, options = {}) {
     colliders.push(collider);
     const room = roomMap.get(activeRoomId);
     if (room) room.colliders.push(collider);
+    if (options.spiderCrawl !== false) {
+      spiderCrawlColliders.push(collider);
+    }
+  }
+
+  function registerSpiderCrawlCollider(collider) {
+    spiderCrawlColliders.push(collider);
   }
 
   function registerHazard(hazard) {
@@ -183,7 +191,7 @@ export function createWorld(scene, physicsWorld) {
     mesh.castShadow = true;
     mesh.receiveShadow = true;
     markStaticWorldObject(mesh, options);
-    registerCollider(new THREE.Box3().setFromObject(mesh));
+    registerCollider(new THREE.Box3().setFromObject(mesh), options);
     return mesh;
   }
 
@@ -796,14 +804,25 @@ export function createWorld(scene, physicsWorld) {
 
   // ─── Front Desk (centered at Z=0) ────────────────────────────────────────
   // Main counter body
-  box(4.5, 1.1, 0.7, 0, 0.55, 0.0, M.desk);
+  box(4.5, 1.1, 0.7, 0, 0.55, 0.0, M.desk, { spiderCrawl: false });
   // Marble counter top
-  box(4.7, 0.08, 0.9, 0, 1.12, 0.05, M.deskTop);
+  box(4.7, 0.08, 0.9, 0, 1.12, 0.05, M.deskTop, { spiderCrawl: false });
   // Back panel (tall dark wood)
-  box(4.5, 2.0, 0.2, 0, 1.0, -0.75, M.desk);
+  box(4.5, 2.0, 0.2, 0, 1.0, -0.75, M.desk, { spiderCrawl: false });
   // Raised center check-in tower
-  box(1.5, 0.55, 0.72, 0, 1.42, 0.0, M.desk);
-  box(1.6, 0.07, 0.85, 0, 1.72, 0.02, M.deskTop); // tower top cap
+  box(1.5, 0.55, 0.72, 0, 1.42, 0.0, M.desk, { spiderCrawl: false });
+  box(1.6, 0.07, 0.85, 0, 1.72, 0.02, M.deskTop, { spiderCrawl: false }); // tower top cap
+
+  // Spider-only crawl proxy for the front desk.
+  // Temporary debug simplification: use a single solid crawl block matching the
+  // desk's overall silhouette so spiders treat the desk as one obstacle instead
+  // of a stack of seam-heavy colliders. This should prevent tunneling from one
+  // desk face to another while proving whether simplified crawl topology is the
+  // correct long-term fix.
+  registerSpiderCrawlCollider(new THREE.Box3(
+    new THREE.Vector3(-2.42, 0.0, -0.86),
+    new THREE.Vector3( 2.42, 2.04, 0.54)
+  ));
 
   // Pigeon-hole shelves on back panel (rows of small dividers)
   for (let row = 0; row < 2; row++) {
@@ -1112,7 +1131,7 @@ export function createWorld(scene, physicsWorld) {
 
   // ─── Spider enemies — stress test pack from the back room area ───────────
   const spiderHalfSize = new THREE.Vector3(0.13, 0.12, 0.13);
-  const spiderFootOffsetY = 0.01;
+  const spiderFootOffsetY = 0.03;
 
   function makeSpiderColliderAt(x, y, z) {
     return new THREE.Box3(
@@ -1121,18 +1140,22 @@ export function createWorld(scene, physicsWorld) {
     );
   }
 
-  const spiderSpawnPositions = [
-    new THREE.Vector3(-2.8, 0, -11.8),
-    new THREE.Vector3(-1.6, 0, -11.9),
-    new THREE.Vector3(-0.4, 0, -12.0),
-    new THREE.Vector3(0.8, 0, -11.9),
-    new THREE.Vector3(2.0, 0, -11.8),
-    new THREE.Vector3(-2.6, 0, -12.8),
-    new THREE.Vector3(-1.3, 0, -12.9),
-    new THREE.Vector3(0.0, 0, -13.0),
-    new THREE.Vector3(1.3, 0, -12.9),
-    new THREE.Vector3(2.6, 0, -12.8),
-  ];
+  const spiderSpawnPositions = [];
+  const spiderSpawnCols = 10;
+  const spiderSpawnRows = 5;
+  const spiderSpawnXStart = -2.7;
+  const spiderSpawnZStart = -11.8;
+  const spiderSpawnXStep = 0.6;
+  const spiderSpawnZStep = 0.72;
+
+  for (let row = 0; row < spiderSpawnRows; row++) {
+    const stagger = row % 2 === 0 ? 0 : spiderSpawnXStep * 0.5;
+    for (let col = 0; col < spiderSpawnCols; col++) {
+      const x = spiderSpawnXStart + col * spiderSpawnXStep + stagger;
+      const z = spiderSpawnZStart - row * spiderSpawnZStep;
+      spiderSpawnPositions.push(new THREE.Vector3(x, 0, z));
+    }
+  }
 
   for (const spawnPos of spiderSpawnPositions) {
     const spider = createSpider();
@@ -2043,6 +2066,7 @@ export function createWorld(scene, physicsWorld) {
 
   return {
     colliders,
+    spiderCrawlColliders,
     hazards,
     enemies,
     shakeables,
@@ -2050,6 +2074,7 @@ export function createWorld(scene, physicsWorld) {
     doors,
     update: () => {},
     getEnemies: () => enemies,
+    getSpiderCrawlColliders: () => spiderCrawlColliders,
     getShakeables: () => shakeables,
     getRoomIds,
     getRoomConnections,
