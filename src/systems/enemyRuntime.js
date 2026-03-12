@@ -17,8 +17,11 @@ import * as THREE from 'three';
 export function createEnemyRuntime(world, player, options = {}) {
   const scratchPlayerPos = new THREE.Vector3();
 
-  // Max distance an enemy can move in a single frame (prevents wall tunneling).
+  // Max distance an enemy can move in a single sub-step (prevents wall tunneling).
   const MAX_STEP = 0.1;
+  // Spiders use a tighter step — their collision box is small (halfSize 0.13)
+  // so 0.1 can push them past a wall's center, causing wrong-side resolution.
+  const SPIDER_MAX_STEP = 0.04;
 
   // Spider gravity constant (m/s² downward while airborne)
   const SPIDER_GRAVITY = 9.8;
@@ -26,7 +29,8 @@ export function createEnemyRuntime(world, player, options = {}) {
   // After this many seconds airborne with no landing, safety-reset to floor
   const SPIDER_AIRBORNE_TIMEOUT = 5.0;
   const SPIDER_CLIMB_ASSIST_TIME = 0.45;
-  const SPIDER_CONTACT_LOSS_TIME = 0.2;
+  const SPIDER_CONTACT_LOSS_TIME = 0.35;
+  const SPIDER_ADHESION_PRESS = 0.06;
 
   let enemyAI = options.enemyAI || null;
 
@@ -152,6 +156,7 @@ export function createEnemyRuntime(world, player, options = {}) {
 
     const pos = enemy.mesh.position;
     const hs = col.halfSize;
+    const footY = col.footOffsetY || 0;
 
     let hasContact = false;
     let bestScore = -Infinity;
@@ -164,11 +169,11 @@ export function createEnemyRuntime(world, player, options = {}) {
       const bMin = box.min;
       const bMax = box.max;
 
-      // Recompute AABB centred on current position (full 3D)
+      // Recompute AABB matching syncFromEntity (full 3D, offset by footY)
       const eMinX = pos.x - hs.x;
       const eMaxX = pos.x + hs.x;
-      const eMinY = pos.y - hs.y;
-      const eMaxY = pos.y + hs.y;
+      const eMinY = pos.y + footY;
+      const eMaxY = pos.y + footY + hs.y * 2;
       const eMinZ = pos.z - hs.z;
       const eMaxZ = pos.z + hs.z;
 
@@ -329,6 +334,9 @@ export function createEnemyRuntime(world, player, options = {}) {
     if (typeof surf.noContactTimer !== 'number') {
       surf.noContactTimer = 0;
     }
+    if (typeof surf.transitionCooldown !== 'number') {
+      surf.transitionCooldown = 0;
+    }
 
     if (isKnockedBack) {
       // ── Airborne arc phase ──────────────────────────────────────────────
@@ -340,8 +348,8 @@ export function createEnemyRuntime(world, player, options = {}) {
       const rawStep = speed * dt;
       let contactNormal = null;
 
-      if (rawStep > MAX_STEP) {
-        const steps = Math.ceil(rawStep / MAX_STEP);
+      if (rawStep > SPIDER_MAX_STEP) {
+        const steps = Math.ceil(rawStep / SPIDER_MAX_STEP);
         const subDt = dt / steps;
         for (let s = 0; s < steps; s++) {
           enemy.mesh.position.addScaledVector(kb.velocity, subDt);
@@ -353,8 +361,10 @@ export function createEnemyRuntime(world, player, options = {}) {
         contactNormal = applyWorldCollisionSpider(enemy, kb.velocity);
       }
 
-      // Exponential friction (same as zombie)
-      kb.velocity.multiplyScalar(Math.pow(0.1, dt));
+      // Light air friction — spiders are small and should fly far before
+      // hitting surfaces. 0.55^dt retains ~55% velocity per second (vs zombie
+      // 0.1^dt which retains only 10%).
+      kb.velocity.multiplyScalar(Math.pow(0.55, dt));
 
       surf.airborneTimer += dt;
 
@@ -366,9 +376,17 @@ export function createEnemyRuntime(world, player, options = {}) {
           : _tmpDir.copy(surf.travelDir).normalize();
         snapSpiderToSurface(enemy, contactNormal);
         remapSpiderDirectionToSurface(preImpactDir, _prevN, surf.normal, surf.travelDir);
+        // Push well clear of impact surface. A generous push (larger than
+        // halfSize) guarantees the spider's center exits the collider even
+        // from a deep embed. Cleanup passes catch any remaining overlaps.
+        enemy.mesh.position.addScaledVector(contactNormal, 0.18);
+        for (let pass = 0; pass < 5; pass++) {
+          if (!applyWorldCollisionSpider(enemy)) break;
+        }
         surf.airborne = false;
         surf.airborneTimer = 0;
         surf.noContactTimer = 0;
+        surf.transitionCooldown = 0.25;
         surf.climbAssistTimer = Math.abs(surf.normal.y) < 0.35 ? SPIDER_CLIMB_ASSIST_TIME : 0;
         kb.active = false;
         if (enemyAI) enemyAI.notifyKnockbackEnd(enemy);
@@ -389,6 +407,7 @@ export function createEnemyRuntime(world, player, options = {}) {
       // ── Normal surface-walk phase ───────────────────────────────────────
       const vel = pathing.desiredVelocity;
       surf.climbAssistTimer = Math.max(0, surf.climbAssistTimer - dt);
+      surf.transitionCooldown = Math.max(0, surf.transitionCooldown - dt);
 
       if (vel.lengthSq() > 0.0001) {
         // Project AI velocity onto current surface tangent
@@ -422,21 +441,35 @@ export function createEnemyRuntime(world, player, options = {}) {
         // Move spider
         enemy.mesh.position.addScaledVector(tangentVel, dt);
 
+        // Adhesion press: push spider into current surface so collision detects
+        // contact. Counteracts the previous frame's contactOffset push-out so the
+        // spider maintains wall/ceiling adhesion between frames.
+        if (surf.normal.y < 0.9) {
+          enemy.mesh.position.addScaledVector(surf.normal, -SPIDER_ADHESION_PRESS);
+        }
+
         // Apply 3D collision — get contact normal if we just hit something
         const contactNormal = applyWorldCollisionSpider(enemy, tangentVel);
         if (contactNormal) {
-          // Hit a new surface — snap orientation to it
-          _prevN.copy(surf.normal);
-          const preContactDir = tangentVel.lengthSq() > 0.0001
-            ? _tmpDir.copy(tangentVel).normalize()
-            : _tmpDir.copy(surf.travelDir).normalize();
-          snapSpiderToSurface(enemy, contactNormal);
-          remapSpiderDirectionToSurface(preContactDir, _prevN, surf.normal, surf.travelDir);
-          surf.noContactTimer = 0;
-          const transitionedToWall = Math.abs(_prevN.y) > 0.65 && Math.abs(surf.normal.y) < 0.35;
-          if (transitionedToWall || (Math.abs(surf.normal.y) < 0.35 && pushingIntoSurface)) {
-            surf.climbAssistTimer = SPIDER_CLIMB_ASSIST_TIME;
+          // During transition cooldown, collisions still resolve (push-out
+          // already happened inside applyWorldCollisionSpider) but we don't
+          // re-snap the surface normal. This prevents wall↔floor oscillation
+          // at junctions after knockback landings.
+          if (surf.transitionCooldown <= 0) {
+            // Genuine new surface — snap orientation to it
+            _prevN.copy(surf.normal);
+            const preContactDir = tangentVel.lengthSq() > 0.0001
+              ? _tmpDir.copy(tangentVel).normalize()
+              : _tmpDir.copy(surf.travelDir).normalize();
+            snapSpiderToSurface(enemy, contactNormal);
+            remapSpiderDirectionToSurface(preContactDir, _prevN, surf.normal, surf.travelDir);
+            surf.transitionCooldown = 0.15;
+            const transitionedToWall = Math.abs(_prevN.y) > 0.65 && Math.abs(surf.normal.y) < 0.35;
+            if (transitionedToWall || (Math.abs(surf.normal.y) < 0.35 && pushingIntoSurface)) {
+              surf.climbAssistTimer = SPIDER_CLIMB_ASSIST_TIME;
+            }
           }
+          surf.noContactTimer = 0;
           // Push spider slightly out from surface to avoid next-frame embed
           enemy.mesh.position.addScaledVector(contactNormal, surf.contactOffset);
         } else if (tangentVel.lengthSq() > 0.0001) {
@@ -456,6 +489,19 @@ export function createEnemyRuntime(world, player, options = {}) {
                 kb.velocity.copy(surf.travelDir).multiplyScalar(pathing.moveSpeed * 0.35);
               }
               // Start dropping immediately.
+              kb.velocity.y -= 0.8;
+            }
+          } else if (enemy.mesh.position.y > 0.08) {
+            // On a floor-like surface but elevated (e.g. walked off a table edge).
+            // No collider beneath us — apply gravity so the spider drops down
+            // instead of floating in mid-air.
+            surf.noContactTimer += dt;
+            if (surf.noContactTimer >= SPIDER_CONTACT_LOSS_TIME) {
+              surf.airborne = true;
+              surf.airborneTimer = 0;
+              surf.climbAssistTimer = 0;
+              kb.active = true;
+              kb.velocity.set(0, 0, 0);
               kb.velocity.y -= 0.8;
             }
           } else {

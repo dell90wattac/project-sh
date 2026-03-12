@@ -134,6 +134,10 @@ const NAV_MIN_CLEARANCE_RATIO = 0.12;
 const NAV_STEER_ANGLE_STEP = 0.35;
 const NAV_STEER_MAX_ANGLE = 1.4;
 
+// Temporary build toggle: disable enemy pursuit/tracking toward the player.
+// Set to true to restore normal chase behavior.
+const ENEMY_PURSUIT_ENABLED = false;
+
 // ── Main AI update ───────────────────────────────────────────────────────────
 
 /**
@@ -503,6 +507,13 @@ export function createEnemyAI(world, roomCulling) {
   // ── State evaluation (runs every DECISION_INTERVAL) ────────────────────────
 
   function evaluateState(enemy, ai, playerPosition) {
+    if (!ENEMY_PURSUIT_ENABLED) {
+      if (ai.state === AI_STATE.CHASE || ai.state === AI_STATE.RETURN) {
+        enterIdle(ai);
+      }
+      return;
+    }
+
     const playerRoomId = roomCulling.getCurrentRoomId();
     const playerInAggroZone = ai.aggroRooms.has(playerRoomId);
 
@@ -577,8 +588,17 @@ export function createEnemyAI(world, roomCulling) {
 
     getChaseSteerTarget(ai, playerPosition);
 
+    // Spiders use full 3D targeting so they can climb toward the player's height
+    if (isSpider) {
+      ai.steerTarget.y = playerPosition.y;
+    }
+
     const pos = enemy.mesh.position;
-    _v.set(ai.steerTarget.x - pos.x, 0, ai.steerTarget.z - pos.z);
+    if (isSpider) {
+      _v.set(ai.steerTarget.x - pos.x, ai.steerTarget.y - pos.y, ai.steerTarget.z - pos.z);
+    } else {
+      _v.set(ai.steerTarget.x - pos.x, 0, ai.steerTarget.z - pos.z);
+    }
     const dist = _v.length();
 
     // In attack range? Stop and face player.
@@ -598,11 +618,12 @@ export function createEnemyAI(world, roomCulling) {
       _v.divideScalar(dist);
       if (isSpider) {
         // Spiders must push directly into blockers so runtime collision can
-        // transition them onto walls/ceilings.
+        // transition them onto walls/ceilings. Full 3D velocity lets them
+        // climb toward the player's height.
         ai.recoveryDirection.copy(_v);
         pathing.desiredVelocity.set(
           ai.recoveryDirection.x * pathing.moveSpeed,
-          0,
+          ai.recoveryDirection.y * pathing.moveSpeed,
           ai.recoveryDirection.z * pathing.moveSpeed
         );
       } else {

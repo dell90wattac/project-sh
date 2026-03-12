@@ -54,6 +54,7 @@ const fog = createFog(scene);
 // ─── Inventory & Gun ───────────────────────────────────────────────────────
 const inventory = createInventory();
 inventory.setEquippedDirect('handgun', 1);
+inventory.addItem('ammoHeavy', 54);
 const gun = createGun(inventory, physicsWorld, camera);
 
 // ─── Health System ─────────────────────────────────────────────────────────
@@ -446,9 +447,18 @@ for (const enemy of worldEnemies) {
         if (enemy.components.health?.dead) return;
         const kb = enemy.components.knockback;
         const surf = enemy.components.surface;
-        // Full 3D launch — forward + slight upward lift for satisfying arc
-        kb.velocity.addScaledVector(forceDir, magnitude * 0.6);
-        kb.velocity.y += magnitude * 0.15; // small upward nudge ensures visible arc
+        // Full 3D launch — spiders are light so they fly far.
+        // magnitude already scales with distance falloff and ammo force.
+        kb.velocity.addScaledVector(forceDir, magnitude * 1.0);
+        // Floor spiders: muzzle-to-spider direction points downward, which
+        // can push the spider into the floor causing instant re-landing.
+        // Clamp Y to zero before adding lift so it always launches upward.
+        // Wall/ceiling spiders keep raw force direction for natural knockoff.
+        if (surf && surf.normal.y > 0.5) {
+          kb.velocity.y = Math.max(kb.velocity.y, 0) + magnitude * 0.3;
+        } else {
+          kb.velocity.y += magnitude * 0.3;
+        }
         kb.active = true;
         if (surf) {
           surf.airborne = true;
@@ -591,7 +601,7 @@ function updateStartupLoading(dt) {
     overlay.style.cursor = 'pointer';
     overlay.style.pointerEvents = 'all';
   }
-  setOverlayText('Project SH', 'click to begin');
+  setOverlayText('Project SH', 'click to begin\nQ to open and close inventory  R to reload weapon  F for flashlight');
 }
 
 // ─── Clock & Loop ──────────────────────────────────────────────────────────

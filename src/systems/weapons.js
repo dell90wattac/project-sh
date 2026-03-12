@@ -21,7 +21,7 @@ export function createGun(inventory, physicsWorld, camera) {
   let currentMag = MAG_CAPACITY; // Start with full magazine
   let fireRateCooldown = 0; // Current cooldown timer
   let reloadTimer = 0; // Current reload timer (0 = not reloading)
-  let selectedAmmoItemType = 'ammo'; // Ammo item selected for the next reload
+  let selectedAmmoItemType = 'ammoHeavy'; // Ammo item selected for the next reload
   let loadedMagAmmoItemType = selectedAmmoItemType; // Ammo type currently in magazine
 
   function isSupportedAmmoItemType(ammoItemType) {
