@@ -48,6 +48,8 @@ Rule: extend the existing owner system first; do not create parallel authority f
 - Current chase local avoidance uses continuous direction-sampling steering in `enemyAI`; treat this as the baseline local solver until waypoint/portal routing is layered in.
 - Each enemy's `pathing.homeZone` (room ID) and `pathing.aggroDepth` (hop count) define territorial behavior.
 - Post-knockback recovery: `enemyRuntime` notifies `enemyAI.notifyKnockbackEnd()` so enemies re-evaluate immediately after shockwave displacement.
+- Spider impact damage only fires on non-floor surfaces: `onSpiderSurfaceImpact(enemy, speed, normal)` skips damage when `normal.y > 0.58`. Always pass the resolved surface normal at all landing call sites.
+- Spider debug toggles: `?spiderGroundDebug=1` enables ring-buffer ground event logging; `?spiderInvincible=1` or `window.__SPIDER_INVINCIBLE__ = true` disables all spider damage at runtime.
 - `attachEnemyComponents()` in `entities/zombies.js` is the canonical way to equip bare archetype meshes with AI-ready component sets.
 - Each room must have a unique zone identifier (fog + overlay usage).
 - Camera is parented to player body; use `camera.getWorldPosition()` / `camera.getWorldDirection()` for world-space weapon math.

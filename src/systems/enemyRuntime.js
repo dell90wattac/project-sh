@@ -27,6 +27,55 @@ export function createEnemyRuntime(world, player, options = {}) {
       return false;
     }
   })();
+  const SPIDER_GROUND_DEBUG = (() => {
+    try {
+      if (typeof window === 'undefined') return false;
+      const params = new URLSearchParams(window.location.search);
+      const enabledByQuery = params.get('spiderGroundDebug') === '1';
+      const enabledByGlobal = window.__SPIDER_GROUND_DEBUG__ === true;
+      const enabled = enabledByQuery || enabledByGlobal;
+      window.__SPIDER_GROUND_DEBUG__ = enabled;
+
+      if (enabled) {
+        if (!Array.isArray(window.__SPIDER_GROUND_EVENTS__)) {
+          window.__SPIDER_GROUND_EVENTS__ = [];
+        }
+        if (typeof window.__clearSpiderGroundEvents !== 'function') {
+          window.__clearSpiderGroundEvents = function clearSpiderGroundEvents() {
+            if (Array.isArray(window.__SPIDER_GROUND_EVENTS__)) {
+              window.__SPIDER_GROUND_EVENTS__.length = 0;
+            }
+          };
+        }
+        if (typeof window.__getSpiderGroundEvents !== 'function') {
+          window.__getSpiderGroundEvents = function getSpiderGroundEvents(limit = 120) {
+            const events = Array.isArray(window.__SPIDER_GROUND_EVENTS__)
+              ? window.__SPIDER_GROUND_EVENTS__
+              : [];
+            const maxEvents = Number.isFinite(limit) ? Math.max(1, Math.floor(limit)) : 120;
+            return events.slice(-maxEvents);
+          };
+        }
+      }
+
+      return enabled;
+    } catch {
+      return false;
+    }
+  })();
+  const SPIDER_INVINCIBLE = (() => {
+    try {
+      if (typeof window === 'undefined') return false;
+      const params = new URLSearchParams(window.location.search);
+      const enabledByQuery = params.get('spiderInvincible') === '1';
+      const enabledByGlobal = window.__SPIDER_INVINCIBLE__ === true;
+      const enabled = enabledByQuery || enabledByGlobal;
+      window.__SPIDER_INVINCIBLE__ = enabled;
+      return enabled;
+    } catch {
+      return false;
+    }
+  })();
 
   // Max distance an enemy can move in a single sub-step (prevents wall tunneling).
   const MAX_STEP = 0.1;
@@ -39,11 +88,11 @@ export function createEnemyRuntime(world, player, options = {}) {
   const SPIDER_AIRBORNE_TIMEOUT = 5.0;
 
   // How far above the surface the spider hovers (raycast adhesion offset)
-  const SPIDER_HOVER_OFFSET = 0.05;
+  const SPIDER_HOVER_OFFSET = 0.08;
   // Max range for the surface-detect ray (into -normal)
-  const SPIDER_SURFACE_RAY_RANGE = 0.35;
+  const SPIDER_SURFACE_RAY_RANGE = 0.5;
   // Forward probe range for wall detection
-  const SPIDER_FORWARD_PROBE = 0.26;
+  const SPIDER_FORWARD_PROBE = 0.34;
   // Edge-wrap probe range (cast downward at edge to find next face)
   const SPIDER_EDGE_PROBE = 0.38;
   // Orientation slerp speed during surface transitions (radians-ish per sec)
@@ -53,7 +102,7 @@ export function createEnemyRuntime(world, player, options = {}) {
   const SPIDER_REPEL_STRENGTH = 1.2;
   // Max obstacle height (above current surface) that a spider can step over
   // instead of climbing the face. Roughly spider body height.
-  const SPIDER_STEP_OVER_HEIGHT = 0.28;
+  const SPIDER_STEP_OVER_HEIGHT = 0.4;
   // Landing detection ray range (longer than hover to catch fast impacts)
   const SPIDER_LAND_DETECT_RANGE = 0.24;
   // Landing lockout right after shockwave launch to avoid immediate re-adhesion
@@ -67,15 +116,55 @@ export function createEnemyRuntime(world, player, options = {}) {
   // Stuck detection: if a spider moves less than this per second for STUCK_TIME,
   // apply a random tangent-plane nudge to break it free.
   const SPIDER_STUCK_SPEED_THRESHOLD = 0.08; // m/s
-  const SPIDER_STUCK_TIME = 0.8;             // seconds of near-zero movement
-  const SPIDER_STUCK_NUDGE_SPEED = 0.45;     // gentle nudge speed (m/s)
+  const SPIDER_STUCK_TIME = 0.55;            // seconds of near-zero movement
+  const SPIDER_STUCK_NUDGE_SPEED = 0.68;     // gentle nudge speed (m/s)
   const SPIDER_STUCK_NUDGE_COOLDOWN = 0.9;   // prevent rapid left-right jitter
-  const SPIDER_CREST_PUSH = 0.08;            // push onto top face after wall->top
+  const SPIDER_CREST_PUSH = 0.12;            // push onto top face after wall->top
   const SPIDER_WALL_FLOOR_HANDOFF_RANGE = 0.95;
   const SPIDER_WALL_FLOOR_HANDOFF_MIN_DESCEND = 0.05;
   const SPIDER_RECOVER_FLOOR_EXTRA_RANGE = 0.75;
+  const SPIDER_WALL_TOP_CREST_HEIGHT = 0.56;
+  const SPIDER_WALL_TOP_CREST_RANGE = 0.84;
+  const SPIDER_FLOOR_REACQUIRE_RANGE = 1.2;
+  const SPIDER_WALL_TOP_CREST_LATERAL = 0.24;
+  const SPIDER_WALL_TOP_CREST_FORWARD = 0.16;
+  const SPIDER_LEDGE_VAULT_COOLDOWN = 0.48;
+  const SPIDER_LEDGE_VAULT_PROBE_HEIGHT = 0.86;
+  const SPIDER_LEDGE_VAULT_PROBE_RANGE = 1.8;
+  const SPIDER_LEDGE_VAULT_SPEED = 3.25;
+  const SPIDER_LEDGE_VAULT_UP_SPEED = 2.1;
+  const SPIDER_LEDGE_VAULT_OUTWARD_PUSH = 0.7;
+  const SPIDER_LEDGE_VAULT_WALL_HANG_TRIGGER = 0.44;
+  const SPIDER_LEDGE_VAULT_MIN_TARGET_RISE = 0.12;
+  const SPIDER_LEDGE_VAULT_MIN_CLIMB_BEFORE_VAULT = 0.52;
+  const SPIDER_LEDGE_VAULT_MIN_FORCED_CLIMB = 0.78;
+  const SPIDER_LEDGE_VAULT_FORCE_MIN_Y = 0.78;
+  const SPIDER_LEDGE_VAULT_STALL_TIME = 0.24;
+  const SPIDER_LEDGE_VAULT_FORCE_ASCEND_MAX = 0.08;
+  const SPIDER_LEDGE_VAULT_PEAK_WINDOW = 0.14;
+  const SPIDER_GLOBAL_FLOOR_RESCUE_MIN_Y = 0.04;
+  const SPIDER_EMERGENCY_FLOOR_LAND_Y = 0.42;
+  const SPIDER_EMERGENCY_FLOOR_PROBE_HEIGHT = 0.36;
+  const SPIDER_EMERGENCY_FLOOR_PROBE_RANGE = 0.9;
+  const SPIDER_FLOOR_STICK_PROBE_HEIGHT = 0.34;
+  const SPIDER_FLOOR_STICK_PROBE_RANGE = 1.05;
+  const SPIDER_FLOOR_SINK_TOLERANCE = 0.002;
+
+  // 2D broadphase grid for spider crawl raycasts. This keeps ray-AABB tests
+  // bounded when many spiders are active.
+  const SPIDER_RAY_GRID_SIZE = 1.5;
+  const SPIDER_RAY_GRID_PADDING = 0.25;
 
   let enemyAI = options.enemyAI || null;
+  let doorSystems = Array.isArray(options.doorSystems) ? options.doorSystems : [];
+
+  const SPIDER_IMPACT_MIN_SPEED = 1.5;
+  const SPIDER_IMPACT_MAX_SPEED = 6.75;
+  const SPIDER_IMPACT_MIN_DAMAGE = 3;
+  const SPIDER_IMPACT_MAX_DAMAGE = 10;
+  const SPIDER_DOOR_SWING_MIN_SPEED = 0.2;
+  const SPIDER_DOOR_DAMAGE_MAX = 5;
+  const SPIDER_DOOR_HIT_COOLDOWN = 0.22;
 
   // Scratch vectors for spider surface math (avoids per-frame allocation)
   const _up      = new THREE.Vector3();
@@ -93,6 +182,18 @@ export function createEnemyRuntime(world, player, options = {}) {
   const _qWorld  = new THREE.Quaternion(0, 0, 0, 1); // identity — world up
   const _qAlign  = new THREE.Quaternion();
   const _rotMat  = new THREE.Matrix4();
+  const _doorPivot = new THREE.Vector3();
+  const _doorLocalPos = new THREE.Vector3();
+  const _doorNormal = new THREE.Vector3();
+  const _doorQuat = new THREE.Quaternion();
+  const _doorInvQuat = new THREE.Quaternion();
+  const _rayEnd = new THREE.Vector3();
+
+  let spiderRayGrid = null;
+  let spiderRayGridSource = null;
+  let spiderRayGridColliderCount = -1;
+  const spiderRayCandidateSet = new Set();
+  const spiderRayCandidates = [];
 
   function dbgNum(n) {
     return Number.isFinite(n) ? Number(n.toFixed(3)) : n;
@@ -120,8 +221,156 @@ export function createEnemyRuntime(world, player, options = {}) {
     console.log(`[SpiderDBG][${event}]`, payload ? { ...base, ...payload } : base);
   }
 
+  function spiderGroundLog(enemy, event, payload = null, throttleSeconds = 0) {
+    if (!SPIDER_GROUND_DEBUG || enemy.type !== 'spider') return;
+    const now = (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+    if (!enemy.state) enemy.state = {};
+    const key = `__spiderGroundDbg_${event}`;
+    const last = enemy.state[key] ?? -Infinity;
+    if (throttleSeconds > 0 && now - last < throttleSeconds) return;
+    enemy.state[key] = now;
+
+    const surf = enemy.components.surface;
+    const base = {
+      t: dbgNum(now),
+      id: enemy.mesh.id,
+      pos: dbgVec3(enemy.mesh.position),
+      normal: dbgVec3(surf?.normal),
+      airborne: !!surf?.airborne,
+      recoverTimer: dbgNum(surf?._recoverToFloorTimer ?? 0),
+      landLock: dbgNum(surf?._landLockTimer ?? 0),
+      relandGuard: dbgNum(surf?._relandGuardTimer ?? 0),
+    };
+
+    const entry = payload
+      ? { event, ...base, ...payload }
+      : { event, ...base };
+
+    console.log(`[SpiderGroundDBG][${event}]`, entry);
+
+    try {
+      if (typeof window !== 'undefined' && Array.isArray(window.__SPIDER_GROUND_EVENTS__)) {
+        const events = window.__SPIDER_GROUND_EVENTS__;
+        events.push(entry);
+        if (events.length > 700) {
+          events.splice(0, events.length - 700);
+        }
+      }
+    } catch {
+      // Debug mode should never impact gameplay.
+    }
+  }
+
+  if (SPIDER_GROUND_DEBUG) {
+    console.log('[SpiderGroundDBG] enabled (?spiderGroundDebug=1). Use window.__getSpiderGroundEvents()');
+  }
+  if (SPIDER_INVINCIBLE) {
+    console.log('[SpiderInvincible] enabled (?spiderInvincible=1)');
+  }
+
+  function isSpiderInvincible() {
+    try {
+      if (typeof window === 'undefined') return SPIDER_INVINCIBLE;
+      return window.__SPIDER_INVINCIBLE__ === true;
+    } catch {
+      return SPIDER_INVINCIBLE;
+    }
+  }
+
   function setEnemyAI(ai) {
     enemyAI = ai;
+  }
+
+  function setDoorSystems(systems) {
+    doorSystems = Array.isArray(systems) ? systems : [];
+  }
+
+  function getNowSeconds() {
+    return (typeof performance !== 'undefined' ? performance.now() : Date.now()) / 1000;
+  }
+
+  function ensureSpiderCombat(enemy) {
+    if (!enemy.components.spiderCombat) {
+      enemy.components.spiderCombat = {
+        impactArmed: false,
+        launchStrength: 0,
+        lastImpactDamage: 0,
+        lastImpactSpeed: 0,
+        lastDamageSource: null,
+        lastDamageAt: -Infinity,
+        doorHits: Object.create(null),
+      };
+    }
+    return enemy.components.spiderCombat;
+  }
+
+  function applySpiderDamage(enemy, amount, source, extra = null) {
+    const health = enemy.components.health;
+    if (!health || health.dead) return 0;
+
+    const finalDamage = Math.max(0, amount);
+    if (finalDamage <= 0) return 0;
+
+    if (isSpiderInvincible()) {
+      spiderGroundLog(enemy, 'DamageBlockedInvincible', {
+        source,
+        amount: dbgNum(finalDamage),
+        hp: dbgNum(health.current),
+        extra,
+      }, 0.02);
+      return 0;
+    }
+
+    health.current = Math.max(0, health.current - finalDamage);
+
+    const combat = ensureSpiderCombat(enemy);
+    combat.lastDamageSource = source;
+    combat.lastDamageAt = getNowSeconds();
+    if (source === 'impact') {
+      combat.lastImpactDamage = finalDamage;
+      if (extra && Number.isFinite(extra.impactSpeed)) {
+        combat.lastImpactSpeed = extra.impactSpeed;
+      }
+    }
+
+    if (health.current <= 0) {
+      health.dead = true;
+      const kb = enemy.components.knockback;
+      if (kb) {
+        kb.active = false;
+        kb.velocity.set(0, 0, 0);
+      }
+      const surf = enemy.components.surface;
+      if (surf) {
+        surf.airborne = false;
+        surf.airborneTimer = 0;
+      }
+    }
+
+    spiderDebugLog(enemy, 'DamageTaken', {
+      source,
+      amount: dbgNum(finalDamage),
+      hp: dbgNum(health.current),
+      extra,
+    }, 0.05);
+
+    spiderGroundLog(enemy, 'DamageTaken', {
+      source,
+      amount: dbgNum(finalDamage),
+      hp: dbgNum(health.current),
+      dead: !!health.dead,
+      extra,
+    }, 0.03);
+
+    if (health.dead) {
+      spiderGroundLog(enemy, 'MarkedDead', {
+        source,
+        hp: dbgNum(health.current),
+        extra,
+      }, 0);
+    }
+
+    return finalDamage;
   }
 
   function getEnemies() {
@@ -196,26 +445,113 @@ export function createEnemyRuntime(world, player, options = {}) {
   const _hitPoint = new THREE.Vector3();
   const _hitNormal = new THREE.Vector3();
 
+  function spiderGridKey(x, z) {
+    return `${x},${z}`;
+  }
+
+  function addSpiderRayGridCell(grid, x, z, box) {
+    const key = spiderGridKey(x, z);
+    let list = grid.get(key);
+    if (!list) {
+      list = [];
+      grid.set(key, list);
+    }
+    list.push(box);
+  }
+
+  function rebuildSpiderRayGrid(colliders) {
+    const grid = new Map();
+    const inv = 1 / SPIDER_RAY_GRID_SIZE;
+
+    for (let i = 0; i < colliders.length; i++) {
+      const box = colliders[i];
+      if (box._enemyCollider) continue;
+
+      const minX = Math.floor((box.min.x - SPIDER_RAY_GRID_PADDING) * inv);
+      const maxX = Math.floor((box.max.x + SPIDER_RAY_GRID_PADDING) * inv);
+      const minZ = Math.floor((box.min.z - SPIDER_RAY_GRID_PADDING) * inv);
+      const maxZ = Math.floor((box.max.z + SPIDER_RAY_GRID_PADDING) * inv);
+
+      for (let gx = minX; gx <= maxX; gx++) {
+        for (let gz = minZ; gz <= maxZ; gz++) {
+          addSpiderRayGridCell(grid, gx, gz, box);
+        }
+      }
+    }
+
+    spiderRayGrid = grid;
+    spiderRayGridSource = colliders;
+    spiderRayGridColliderCount = colliders.length;
+  }
+
+  function getRaycastCandidates(colliders, origin, direction, maxDist) {
+    if (!colliders || colliders.length === 0) return colliders;
+    if (colliders.length < 48) return colliders;
+
+    if (
+      spiderRayGridSource !== colliders ||
+      spiderRayGridColliderCount !== colliders.length ||
+      !spiderRayGrid
+    ) {
+      rebuildSpiderRayGrid(colliders);
+    }
+
+    _rayEnd.copy(origin).addScaledVector(direction, maxDist);
+
+    const inv = 1 / SPIDER_RAY_GRID_SIZE;
+    const minX = Math.floor((Math.min(origin.x, _rayEnd.x) - SPIDER_RAY_GRID_PADDING) * inv);
+    const maxX = Math.floor((Math.max(origin.x, _rayEnd.x) + SPIDER_RAY_GRID_PADDING) * inv);
+    const minZ = Math.floor((Math.min(origin.z, _rayEnd.z) - SPIDER_RAY_GRID_PADDING) * inv);
+    const maxZ = Math.floor((Math.max(origin.z, _rayEnd.z) + SPIDER_RAY_GRID_PADDING) * inv);
+
+    spiderRayCandidateSet.clear();
+    spiderRayCandidates.length = 0;
+
+    for (let gx = minX; gx <= maxX; gx++) {
+      for (let gz = minZ; gz <= maxZ; gz++) {
+        const bucket = spiderRayGrid.get(spiderGridKey(gx, gz));
+        if (!bucket) continue;
+
+        for (let i = 0; i < bucket.length; i++) {
+          const box = bucket[i];
+          if (spiderRayCandidateSet.has(box)) continue;
+          spiderRayCandidateSet.add(box);
+          spiderRayCandidates.push(box);
+        }
+      }
+    }
+
+    return spiderRayCandidates.length > 0 ? spiderRayCandidates : colliders;
+  }
+
   function raycastWorldColliders(origin, direction, maxDist, selfBox) {
-    const colliders = world.colliders;
+    const colliders = world.getSpiderCrawlColliders
+      ? world.getSpiderCrawlColliders()
+      : world.colliders;
     if (!colliders || colliders.length === 0) return null;
+
+    const candidates = getRaycastCandidates(colliders, origin, direction, maxDist);
 
     let bestDist = maxDist;
     let hit = false;
 
-    for (let i = 0; i < colliders.length; i++) {
-      const box = colliders[i];
+    for (let i = 0; i < candidates.length; i++) {
+      const box = candidates[i];
       if (box === selfBox) continue;
       if (box._enemyCollider) continue; // skip all enemy colliders
 
       const bMin = box.min;
       const bMax = box.max;
 
-      // Slab method
-      let tMin = 0;
+      // Robust slab method with inside-box support.
+      // If the ray starts inside a box, we use the nearest exit face (tMax)
+      // and its normal instead of returning an invalid fallback axis.
+      let tMin = -Infinity;
       let tMax = bestDist;
       let enterAxis = -1;
       let enterSign = 1;
+      let exitAxis = -1;
+      let exitSign = 1;
 
       for (let a = 0; a < 3; a++) {
         const o = a === 0 ? origin.x : a === 1 ? origin.y : origin.z;
@@ -231,28 +567,137 @@ export function createEnemyRuntime(world, player, options = {}) {
 
         let t1 = (mn - o) / d;
         let t2 = (mx - o) / d;
-        let sign = -1; // normal points toward -axis at mn face
+        let nearSign = -1; // entering mn face
+        let farSign = 1;   // exiting mx face
         if (t1 > t2) {
           const tmp = t1; t1 = t2; t2 = tmp;
-          sign = 1; // swapped — normal points toward +axis at mx face
+          nearSign = 1; // entering mx face
+          farSign = -1; // exiting mn face
         }
 
-        if (t1 > tMin) { tMin = t1; enterAxis = a; enterSign = sign; }
-        if (t2 < tMax) { tMax = t2; }
+        if (t1 > tMin) {
+          tMin = t1;
+          enterAxis = a;
+          enterSign = nearSign;
+        }
+        if (t2 < tMax) {
+          tMax = t2;
+          exitAxis = a;
+          exitSign = farSign;
+        }
 
         if (tMin > tMax) { tMin = Infinity; break; }
       }
 
-      if (tMin < 0) continue; // box is behind ray
-      if (tMin >= bestDist) continue; // farther than current best
+      if (!Number.isFinite(tMin)) continue;
+      if (tMax < 0) continue; // box is behind ray
       if (tMin > tMax) continue; // miss
 
-      bestDist = tMin;
-      _hitPoint.copy(origin).addScaledVector(direction, tMin);
+      const startedInside = tMin < 0;
+      const hitDist = startedInside ? tMax : tMin;
+      const hitAxis = startedInside ? exitAxis : enterAxis;
+      const hitSign = startedInside ? exitSign : enterSign;
+
+      if (hitDist < 0) continue;
+      if (hitDist >= bestDist) continue; // farther than current best
+      if (hitAxis < 0) continue;
+
+      bestDist = hitDist;
+      _hitPoint.copy(origin).addScaledVector(direction, hitDist);
       _hitNormal.set(0, 0, 0);
-      if (enterAxis === 0) _hitNormal.x = enterSign;
-      else if (enterAxis === 1) _hitNormal.y = enterSign;
-      else _hitNormal.z = enterSign;
+      if (hitAxis === 0) _hitNormal.x = hitSign;
+      else if (hitAxis === 1) _hitNormal.y = hitSign;
+      else _hitNormal.z = hitSign;
+      hit = true;
+    }
+
+    if (!hit) return null;
+    return { distance: bestDist, normal: _hitNormal.clone(), point: _hitPoint.clone() };
+  }
+
+  function raycastWalkableSurface(origin, direction, maxDist, selfBox, minNormalY = 0.7) {
+    const colliders = world.getSpiderCrawlColliders
+      ? world.getSpiderCrawlColliders()
+      : world.colliders;
+    if (!colliders || colliders.length === 0) return null;
+
+    const candidates = getRaycastCandidates(colliders, origin, direction, maxDist);
+
+    let bestDist = maxDist;
+    let hit = false;
+
+    for (let i = 0; i < candidates.length; i++) {
+      const box = candidates[i];
+      if (box === selfBox) continue;
+      if (box._enemyCollider) continue;
+
+      const bMin = box.min;
+      const bMax = box.max;
+
+      let tMin = -Infinity;
+      let tMax = bestDist;
+      let enterAxis = -1;
+      let enterSign = 1;
+      let exitAxis = -1;
+      let exitSign = 1;
+
+      for (let a = 0; a < 3; a++) {
+        const o = a === 0 ? origin.x : a === 1 ? origin.y : origin.z;
+        const d = a === 0 ? direction.x : a === 1 ? direction.y : direction.z;
+        const mn = a === 0 ? bMin.x : a === 1 ? bMin.y : bMin.z;
+        const mx = a === 0 ? bMax.x : a === 1 ? bMax.y : bMax.z;
+
+        if (Math.abs(d) < 1e-8) {
+          if (o < mn || o > mx) { tMin = Infinity; break; }
+          continue;
+        }
+
+        let t1 = (mn - o) / d;
+        let t2 = (mx - o) / d;
+        let nearSign = -1;
+        let farSign = 1;
+        if (t1 > t2) {
+          const tmp = t1; t1 = t2; t2 = tmp;
+          nearSign = 1;
+          farSign = -1;
+        }
+
+        if (t1 > tMin) {
+          tMin = t1;
+          enterAxis = a;
+          enterSign = nearSign;
+        }
+        if (t2 < tMax) {
+          tMax = t2;
+          exitAxis = a;
+          exitSign = farSign;
+        }
+
+        if (tMin > tMax) { tMin = Infinity; break; }
+      }
+
+      if (!Number.isFinite(tMin)) continue;
+      if (tMax < 0) continue;
+      if (tMin > tMax) continue;
+
+      const startedInside = tMin < 0;
+      const hitDist = startedInside ? tMax : tMin;
+      const hitAxis = startedInside ? exitAxis : enterAxis;
+      const hitSign = startedInside ? exitSign : enterSign;
+
+      if (hitDist < 0) continue;
+      if (hitDist >= bestDist) continue;
+      if (hitAxis < 0) continue;
+
+      _hitNormal.set(0, 0, 0);
+      if (hitAxis === 0) _hitNormal.x = hitSign;
+      else if (hitAxis === 1) _hitNormal.y = hitSign;
+      else _hitNormal.z = hitSign;
+
+      if (_hitNormal.y < minNormalY) continue;
+
+      bestDist = hitDist;
+      _hitPoint.copy(origin).addScaledVector(direction, hitDist);
       hit = true;
     }
 
@@ -441,14 +886,15 @@ export function createEnemyRuntime(world, player, options = {}) {
     }
 
     const probeRange = SPIDER_WALL_FLOOR_HANDOFF_RANGE + (forceRecover ? SPIDER_RECOVER_FLOOR_EXTRA_RANGE : 0);
-    const floorHit = raycastWorldColliders(
+    const floorHit = raycastWalkableSurface(
       _rayOrig,
       _tmpDir.set(0, -1, 0),
       probeRange,
-      selfBox
+      selfBox,
+      0.7
     );
 
-    if (!floorHit || floorHit.normal.y < 0.7) return false;
+    if (!floorHit) return false;
 
     _prevN.copy(surf.normal);
     const preDir = _tmpDir.copy(tangentVel).normalize();
@@ -466,24 +912,450 @@ export function createEnemyRuntime(world, player, options = {}) {
     return true;
   }
 
-  // ── Impact damage stub ────────────────────────────────────────────────────
+  function trySpiderWallToTopCrest(enemy, surf, tangentVel, pos, selfBox) {
+    if (Math.abs(surf.normal.y) > 0.45) return false; // not wall-like
+    if (tangentVel.y < -0.18) return false; // hard descending, prefer floor handoff
 
-  /**
-   * Calculate (but do NOT apply) damage when a spider impacts a solid surface.
-   * Wire this up when spider damage becomes active.
-   * @param {object} enemy – the spider entity
-   * @param {number} impactSpeed – speed at moment of surface contact (m/s)
-   * @returns {number} computed damage (currently unused)
-   */
-  function onSpiderSurfaceImpact(enemy, impactSpeed) {
-    // Damage threshold: impacts below this speed deal no damage
-    const IMPACT_THRESHOLD = 3.0;
-    const DAMAGE_PER_MPS = 2.0; // damage per m/s above threshold
-    if (impactSpeed < IMPACT_THRESHOLD) return 0;
-    const damage = (impactSpeed - IMPACT_THRESHOLD) * DAMAGE_PER_MPS;
-    // TODO: wire to enemy.components.health when spider damage is enabled
-    // e.g. enemy.components.health.current -= damage;
-    return damage;
+    _tmpDir.copy(tangentVel);
+    if (_tmpDir.lengthSq() < 0.0001) return false;
+    _tmpDir.normalize();
+
+    _right2.crossVectors(_tmpDir, surf.normal);
+    if (_right2.lengthSq() < 0.0001) {
+      _right2.set(1, 0, 0).addScaledVector(surf.normal, -surf.normal.x);
+    }
+    if (_right2.lengthSq() < 0.0001) return false;
+    _right2.normalize();
+
+    let topHit = null;
+    let bestTopY = Infinity;
+    const lateralOffsets = [0, -SPIDER_WALL_TOP_CREST_LATERAL, SPIDER_WALL_TOP_CREST_LATERAL];
+    const forwardOffsets = [0.08, SPIDER_WALL_TOP_CREST_FORWARD, SPIDER_WALL_TOP_CREST_FORWARD * 1.6, SPIDER_WALL_TOP_CREST_FORWARD * 2.1];
+    const verticalOffsets = [SPIDER_WALL_TOP_CREST_HEIGHT, SPIDER_WALL_TOP_CREST_HEIGHT + 0.2];
+
+    for (let v = 0; v < verticalOffsets.length; v++) {
+      for (let f = 0; f < forwardOffsets.length; f++) {
+        for (let l = 0; l < lateralOffsets.length; l++) {
+          _rayOrig.copy(pos)
+            .addScaledVector(surf.normal, 0.10)
+            .addScaledVector(_tmpDir, forwardOffsets[f])
+            .addScaledVector(_right2, lateralOffsets[l]);
+          _rayOrig.y += verticalOffsets[v];
+
+          const candidate = raycastWalkableSurface(
+            _rayOrig,
+            _pushDir.set(0, -1, 0),
+            SPIDER_WALL_TOP_CREST_RANGE,
+            selfBox,
+            0.7
+          );
+
+          if (!candidate) continue;
+          const nearLip = candidate.distance <= 0.45;
+          if (candidate.point.y < pos.y - 0.14) continue;
+          if (!nearLip && candidate.point.y < pos.y - 0.03) continue;
+          if (candidate.point.y > pos.y + 1.25) continue;
+
+          // Prefer the lowest valid walkable top so we choose the desk/counter
+          // surface over decorative clutter sitting on top of it.
+          if (candidate.point.y < bestTopY) {
+            bestTopY = candidate.point.y;
+            topHit = candidate;
+          }
+        }
+      }
+    }
+
+    if (!topHit) return false;
+
+    _prevN.copy(surf.normal);
+    const preDir = _tmpDir.copy(tangentVel).normalize();
+    snapSpiderToSurface(enemy, topHit.normal);
+    remapSpiderDirectionToSurface(preDir, _prevN, surf.normal, surf.travelDir);
+    pos.copy(topHit.point).addScaledVector(topHit.normal, getSpiderAdhesionOffset(enemy, topHit.normal));
+    pos.addScaledVector(surf.travelDir, SPIDER_CREST_PUSH);
+
+    spiderDebugLog(enemy, 'WallTopCrest', {
+      topHitPoint: dbgVec3(topHit.point),
+      topHitNormal: dbgVec3(topHit.normal),
+      preDir: dbgVec3(preDir),
+      postDir: dbgVec3(surf.travelDir),
+    }, 0.1);
+
+    return true;
+  }
+
+  function trySpiderFloorReacquire(enemy, surf, pos, selfBox) {
+    _rayOrig.copy(pos);
+    _rayOrig.y += 0.22;
+
+    let floorHit = raycastWalkableSurface(
+      _rayOrig,
+      _tmpDir.set(0, -1, 0),
+      SPIDER_FLOOR_REACQUIRE_RANGE,
+      selfBox,
+      0.7
+    );
+
+    // If we're partially embedded in floor slabs, a downward ray can miss
+    // walkable faces (it exits through underside). Probe upward as fallback.
+    if (!floorHit) {
+      _rayOrig.copy(pos);
+      _rayOrig.y -= 0.08;
+      floorHit = raycastWalkableSurface(
+        _rayOrig,
+        _tmpDir.set(0, 1, 0),
+        0.95,
+        selfBox,
+        0.7
+      );
+    }
+
+    if (!floorHit) return false;
+
+    _prevN.copy(surf.normal);
+    snapSpiderToSurface(enemy, floorHit.normal);
+    remapSpiderDirectionToSurface(surf.travelDir, _prevN, surf.normal, surf.travelDir);
+    pos.copy(floorHit.point).addScaledVector(floorHit.normal, getSpiderAdhesionOffset(enemy, floorHit.normal));
+
+    spiderDebugLog(enemy, 'FloorReacquire', {
+      floorHitPoint: dbgVec3(floorHit.point),
+      floorHitNormal: dbgVec3(floorHit.normal),
+    }, 0.1);
+
+    return true;
+  }
+
+  function trySpiderLedgeVault(enemy, surf, tangentVel, pos, selfBox, pathing, kb, targetPos) {
+    if (Math.abs(surf.normal.y) > 0.68) return false; // only on wall-like surfaces
+    if ((surf._ledgeVaultCooldown || 0) > 0) return false;
+    if (tangentVel.lengthSq() < 0.0001) return false;
+
+    const climbGain = pos.y - (surf._wallStartY ?? pos.y);
+    if (climbGain < SPIDER_LEDGE_VAULT_MIN_CLIMB_BEFORE_VAULT) return false;
+
+    _tmpDir.copy(tangentVel).normalize();
+    _right2.crossVectors(_tmpDir, surf.normal);
+    if (_right2.lengthSq() < 0.0001) {
+      _right2.set(1, 0, 0).addScaledVector(surf.normal, -surf.normal.x);
+    }
+    if (_right2.lengthSq() < 0.0001) return false;
+    _right2.normalize();
+
+    const forwardOffsets = [0.08, 0.2, 0.34, 0.5, 0.7];
+    const lateralOffsets = [0, -0.24, 0.24, -0.38, 0.38];
+    const verticalOffsets = [
+      SPIDER_LEDGE_VAULT_PROBE_HEIGHT,
+      SPIDER_LEDGE_VAULT_PROBE_HEIGHT + 0.24,
+      SPIDER_LEDGE_VAULT_PROBE_HEIGHT + 0.5,
+    ];
+
+    let bestHit = null;
+    let bestScore = -Infinity;
+
+    for (let v = 0; v < verticalOffsets.length; v++) {
+      for (let f = 0; f < forwardOffsets.length; f++) {
+        for (let l = 0; l < lateralOffsets.length; l++) {
+          _rayOrig.copy(pos)
+            .addScaledVector(surf.normal, 0.12)
+            .addScaledVector(_tmpDir, forwardOffsets[f])
+            .addScaledVector(_right2, lateralOffsets[l]);
+          _rayOrig.y += verticalOffsets[v];
+
+          const candidate = raycastWorldColliders(
+            _rayOrig,
+            _pushDir.set(0, -1, 0),
+            SPIDER_LEDGE_VAULT_PROBE_RANGE,
+            selfBox
+          );
+
+          if (!candidate || candidate.normal.y < 0.6) continue;
+          if (candidate.point.y < pos.y + SPIDER_LEDGE_VAULT_MIN_TARGET_RISE) continue;
+          if (candidate.point.y > pos.y + 1.2) continue;
+
+          _pushDir.copy(candidate.point).sub(pos);
+          const ahead = _pushDir.dot(_tmpDir);
+          if (ahead < -0.08) continue;
+
+          const heightPenalty = Math.abs(candidate.point.y - pos.y) * 0.55;
+          const lipBonus = candidate.distance <= 0.55 ? 0.5 : 0;
+          let playerScore = 0;
+          if (targetPos) {
+            playerScore = -Math.sqrt(candidate.point.distanceToSquared(targetPos)) * 0.12;
+          }
+
+          const score = ahead * 1.8 - heightPenalty + lipBonus + playerScore;
+          if (score > bestScore) {
+            bestScore = score;
+            bestHit = candidate;
+          }
+        }
+      }
+    }
+
+    const forcedVault =
+      !bestHit &&
+      (surf._wallHangTimer || 0) >= SPIDER_LEDGE_VAULT_WALL_HANG_TRIGGER &&
+      climbGain >= SPIDER_LEDGE_VAULT_MIN_FORCED_CLIMB &&
+      pos.y >= SPIDER_LEDGE_VAULT_FORCE_MIN_Y &&
+      tangentVel.y <= SPIDER_LEDGE_VAULT_FORCE_ASCEND_MAX &&
+      (
+        (surf._wallStallTimer || 0) >= SPIDER_LEDGE_VAULT_STALL_TIME ||
+        ((surf._wallPeakY ?? pos.y) - pos.y) <= SPIDER_LEDGE_VAULT_PEAK_WINDOW
+      );
+
+    if (!bestHit && !forcedVault) return false;
+
+    if (bestHit) {
+      _pushDir.copy(bestHit.point).sub(pos);
+      if (_pushDir.lengthSq() < 0.0001) {
+        _pushDir.copy(_tmpDir);
+      }
+    } else {
+      _pushDir.copy(_tmpDir);
+    }
+
+    if (targetPos) {
+      _tmpN.copy(targetPos).sub(pos);
+      if (_tmpN.lengthSq() > 0.0001) {
+        _tmpN.normalize();
+        _pushDir.lerp(_tmpN, forcedVault ? 0.75 : 0.6);
+      }
+    }
+
+    // Push outward from the wall and add arc to force a lip clear.
+    _pushDir.addScaledVector(surf.normal, SPIDER_LEDGE_VAULT_OUTWARD_PUSH);
+    _pushDir.y = Math.max(_pushDir.y, forcedVault ? 0.4 : 0.14);
+    if (_pushDir.lengthSq() < 0.0001) return false;
+    _pushDir.normalize();
+
+    const launchSpeed = Math.max(SPIDER_LEDGE_VAULT_SPEED, (pathing?.moveSpeed || 1.2) * 1.85);
+    kb.velocity.copy(_pushDir).multiplyScalar(launchSpeed);
+    kb.velocity.y += SPIDER_LEDGE_VAULT_UP_SPEED;
+
+    const maxVaultSpeed = 6.2;
+    const speedSq = kb.velocity.lengthSq();
+    if (speedSq > maxVaultSpeed * maxVaultSpeed) {
+      kb.velocity.multiplyScalar(maxVaultSpeed / Math.sqrt(speedSq));
+    }
+
+    kb.active = true;
+    surf.airborne = true;
+    surf.airborneTimer = 0;
+    surf._airTravel = 0;
+    surf._landLockTimer = Math.max(surf._landLockTimer || 0, 0.08);
+    surf._recoverToFloorTimer = Math.max(surf._recoverToFloorTimer || 0, 0.45);
+    surf._ledgeVaultCooldown = SPIDER_LEDGE_VAULT_COOLDOWN;
+    surf._wallHangTimer = 0;
+    surf._wallStallTimer = 0;
+    if (surf._launchNormal) {
+      surf._launchNormal.copy(surf.normal).normalize();
+    }
+    if (surf._launchPos) {
+      surf._launchPos.copy(pos);
+    }
+
+    spiderDebugLog(enemy, 'LedgeVault', {
+      launchVel: dbgVec3(kb.velocity),
+      forced: forcedVault,
+      climbGain: dbgNum(climbGain),
+      wallStall: dbgNum(surf._wallStallTimer || 0),
+      topPoint: dbgVec3(bestHit?.point),
+      topNormal: dbgVec3(bestHit?.normal),
+      targetPos: dbgVec3(targetPos),
+    }, 0.08);
+
+    return true;
+  }
+
+  function trySpiderGlobalFloorRescue(enemy, surf, pos, selfBox) {
+    if (pos.y >= SPIDER_GLOBAL_FLOOR_RESCUE_MIN_Y) return false;
+
+    _rayOrig.copy(pos);
+    _rayOrig.y += 1.5;
+
+    const floorHit = raycastWalkableSurface(
+      _rayOrig,
+      _tmpDir.set(0, -1, 0),
+      3.2,
+      selfBox,
+      0.7
+    );
+
+    if (!floorHit) return false;
+
+    _prevN.copy(surf.normal);
+    snapSpiderToSurface(enemy, floorHit.normal);
+    remapSpiderDirectionToSurface(surf.travelDir, _prevN, surf.normal, surf.travelDir);
+    pos.copy(floorHit.point).addScaledVector(floorHit.normal, getSpiderAdhesionOffset(enemy, floorHit.normal));
+    surf.airborne = false;
+    surf.airborneTimer = 0;
+
+    spiderDebugLog(enemy, 'GlobalFloorRescue', {
+      floorHitPoint: dbgVec3(floorHit.point),
+      floorHitNormal: dbgVec3(floorHit.normal),
+    }, 0.1);
+
+    return true;
+  }
+
+  function trySpiderEmergencyFloorLanding(enemy, surf, pos, selfBox, kb, impactSpeed) {
+    if (kb.velocity.y > 0.05) return false;
+    if (pos.y > SPIDER_EMERGENCY_FLOOR_LAND_Y) return false;
+
+    _rayOrig.copy(pos);
+    _rayOrig.y += SPIDER_EMERGENCY_FLOOR_PROBE_HEIGHT;
+
+    const floorHit = raycastWalkableSurface(
+      _rayOrig,
+      _tmpDir.set(0, -1, 0),
+      SPIDER_EMERGENCY_FLOOR_PROBE_RANGE,
+      selfBox,
+      0.72
+    );
+
+    if (!floorHit) return false;
+
+    _prevN.copy(surf.normal);
+    enemy.mesh.position.copy(floorHit.point).addScaledVector(floorHit.normal, getSpiderAdhesionOffset(enemy, floorHit.normal));
+    snapSpiderToSurface(enemy, floorHit.normal);
+    if (kb.velocity.lengthSq() > 0.0001) {
+      remapSpiderDirectionToSurface(_tmpDir.copy(kb.velocity).normalize(), _prevN, surf.normal, surf.travelDir);
+    } else {
+      remapSpiderDirectionToSurface(surf.travelDir, _prevN, surf.normal, surf.travelDir);
+    }
+
+    onSpiderSurfaceImpact(enemy, impactSpeed, floorHit.normal);
+    surf.airborne = false;
+    surf.airborneTimer = 0;
+    surf._landLockTimer = 0;
+    surf._landLockMinTravel = SPIDER_LAND_LOCK_MIN_TRAVEL;
+    surf._relandGuardTimer = 0;
+    kb.velocity.set(0, 0, 0);
+    kb.active = false;
+    if (enemyAI) enemyAI.notifyKnockbackEnd(enemy);
+
+    spiderDebugLog(enemy, 'EmergencyFloorLanding', {
+      floorHitPoint: dbgVec3(floorHit.point),
+      floorHitNormal: dbgVec3(floorHit.normal),
+      impactSpeed: dbgNum(impactSpeed),
+    }, 0.08);
+    spiderGroundLog(enemy, 'EmergencyFloorLanding', {
+      floorHitPoint: dbgVec3(floorHit.point),
+      floorHitNormal: dbgVec3(floorHit.normal),
+      impactSpeed: dbgNum(impactSpeed),
+    }, 0.03);
+
+    return true;
+  }
+
+  // ── Spider combat damage handling ────────────────────────────────────────
+
+  function onSpiderSurfaceImpact(enemy, impactSpeed, impactNormal = null) {
+    const combat = ensureSpiderCombat(enemy);
+    if (!combat.impactArmed) return 0;
+
+    combat.impactArmed = false;
+    combat.launchStrength = 0;
+
+    // Design intent: wall/ceiling slams can hurt spiders, but ordinary floor
+    // landings from shockwave arcs should not kill them.
+    if (impactNormal && impactNormal.y > 0.58) {
+      spiderGroundLog(enemy, 'ImpactNoDamageFloor', {
+        impactSpeed: dbgNum(impactSpeed),
+        impactNormal: dbgVec3(impactNormal),
+      }, 0.03);
+      return 0;
+    }
+
+    if (impactSpeed < SPIDER_IMPACT_MIN_SPEED) {
+      spiderDebugLog(enemy, 'ImpactTooSoft', {
+        impactSpeed: dbgNum(impactSpeed),
+      }, 0.05);
+      return 0;
+    }
+
+    const clampedSpeed = Math.min(impactSpeed, SPIDER_IMPACT_MAX_SPEED);
+    const normalized = (clampedSpeed - SPIDER_IMPACT_MIN_SPEED)
+      / (SPIDER_IMPACT_MAX_SPEED - SPIDER_IMPACT_MIN_SPEED);
+    const damage = SPIDER_IMPACT_MIN_DAMAGE
+      + Math.max(0, Math.min(1, normalized)) * (SPIDER_IMPACT_MAX_DAMAGE - SPIDER_IMPACT_MIN_DAMAGE);
+
+    return applySpiderDamage(enemy, damage, 'impact', {
+      impactSpeed: dbgNum(impactSpeed),
+      impactNormal: dbgVec3(impactNormal),
+    });
+  }
+
+  function applySpiderDoorDamage(enemy) {
+    if (!doorSystems || doorSystems.length === 0) return;
+
+    const surf = enemy.components.surface;
+    const kb = enemy.components.knockback;
+    if (!surf || surf.airborne || kb?.active || surf.normal.y < 0.65) return;
+
+    const health = enemy.components.health;
+    if (!health || health.dead) return;
+
+    const col = enemy.components.collision;
+    const radius = col?.halfSize ? Math.max(col.halfSize.x, col.halfSize.z) : 0.16;
+    const combat = ensureSpiderCombat(enemy);
+    const now = getNowSeconds();
+
+    for (let i = 0; i < doorSystems.length; i++) {
+      const doorEntry = doorSystems[i];
+      const interaction = doorEntry?.system?.getInteraction ? doorEntry.system.getInteraction() : null;
+      if (!interaction || Math.abs(interaction.doorAngularVel) < SPIDER_DOOR_SWING_MIN_SPEED) continue;
+
+      const door = doorEntry.door;
+      door.pivot.getWorldPosition(_doorPivot);
+      door.pivot.getWorldQuaternion(_doorQuat);
+      _doorInvQuat.copy(_doorQuat).invert();
+      _doorLocalPos.copy(enemy.mesh.position).sub(_doorPivot).applyQuaternion(_doorInvQuat);
+
+      const touching =
+        _doorLocalPos.x >= -radius &&
+        _doorLocalPos.x <= door.thickness + radius &&
+        _doorLocalPos.z >= -radius &&
+        _doorLocalPos.z <= door.width + radius &&
+        _doorLocalPos.y >= -0.2 &&
+        _doorLocalPos.y <= door.height + 0.2;
+
+      const hitState = combat.doorHits[doorEntry.id] || {
+        touching: false,
+        lastHitAt: -Infinity,
+        lastSwingDir: 0,
+      };
+      combat.doorHits[doorEntry.id] = hitState;
+
+      if (!touching) {
+        hitState.touching = false;
+        continue;
+      }
+
+      const swingDir = Math.sign(interaction.doorAngularVel) || hitState.lastSwingDir || 1;
+      const leverArm = Math.max(0.12, Math.min(door.width, Math.max(0, _doorLocalPos.z)));
+      const panelSpeed = Math.abs(interaction.doorAngularVel) * leverArm;
+      const shouldDamage =
+        (!hitState.touching || hitState.lastSwingDir !== swingDir) &&
+        now - hitState.lastHitAt >= SPIDER_DOOR_HIT_COOLDOWN;
+
+      if (shouldDamage) {
+        const damage = Math.min(SPIDER_DOOR_DAMAGE_MAX, Math.max(1, panelSpeed * 5));
+        applySpiderDamage(enemy, damage, 'door', {
+          panelSpeed: dbgNum(panelSpeed),
+          doorId: doorEntry.id,
+        });
+
+        _doorNormal.set(1, 0, 0).applyQuaternion(_doorQuat);
+        enemy.mesh.position.addScaledVector(_doorNormal, swingDir * 0.03);
+
+        hitState.lastHitAt = now;
+        hitState.lastSwingDir = swingDir;
+      }
+
+      hitState.touching = true;
+    }
   }
 
   // ── Spider-spider soft repulsion ──────────────────────────────────────────
@@ -548,15 +1420,56 @@ export function createEnemyRuntime(world, player, options = {}) {
       surf._prevPos = new THREE.Vector3().copy(enemy.mesh.position);
     }
     if (surf._landLockTimer === undefined) surf._landLockTimer = 0;
+    if (surf._landLockMinTravel === undefined) surf._landLockMinTravel = SPIDER_LAND_LOCK_MIN_TRAVEL;
     if (surf._airTravel === undefined) surf._airTravel = 0;
     if (surf._relandGuardTimer === undefined) surf._relandGuardTimer = 0;
     if (surf._recoverToFloorTimer === undefined) surf._recoverToFloorTimer = 0;
+    if (surf._ledgeVaultCooldown === undefined) surf._ledgeVaultCooldown = 0;
+    if (surf._wallHangTimer === undefined) surf._wallHangTimer = 0;
+    if (surf._wallStartY === undefined) surf._wallStartY = enemy.mesh.position.y;
+    if (surf._wallPeakY === undefined) surf._wallPeakY = enemy.mesh.position.y;
+    if (surf._wallPrevY === undefined) surf._wallPrevY = enemy.mesh.position.y;
+    if (surf._wallStallTimer === undefined) surf._wallStallTimer = 0;
+    if (surf._wasWallLike === undefined) surf._wasWallLike = false;
     if (surf._recoverToFloorTimer > 0) {
       surf._recoverToFloorTimer = Math.max(0, surf._recoverToFloorTimer - dt);
+    }
+    if (surf._ledgeVaultCooldown > 0) {
+      surf._ledgeVaultCooldown = Math.max(0, surf._ledgeVaultCooldown - dt);
+    }
+    if (!surf.airborne && Math.abs(surf.normal.y) < 0.68) {
+      if (!surf._wasWallLike) {
+        surf._wallStartY = enemy.mesh.position.y;
+        surf._wallPeakY = enemy.mesh.position.y;
+        surf._wallPrevY = enemy.mesh.position.y;
+        surf._wallStallTimer = 0;
+        surf._wallHangTimer = 0;
+      }
+      surf._wallHangTimer += dt;
+
+      const deltaY = enemy.mesh.position.y - surf._wallPrevY;
+      surf._wallPrevY = enemy.mesh.position.y;
+      if (enemy.mesh.position.y > surf._wallPeakY) {
+        surf._wallPeakY = enemy.mesh.position.y;
+      }
+
+      if (deltaY < 0.015) {
+        surf._wallStallTimer += dt;
+      } else {
+        surf._wallStallTimer = Math.max(0, surf._wallStallTimer - dt * 0.5);
+      }
+      surf._wasWallLike = true;
+    } else {
+      surf._wallHangTimer = 0;
+      surf._wallStallTimer = 0;
+      surf._wasWallLike = false;
     }
 
     if (isKnockedBack) {
       // ══ AIRBORNE ARC PHASE (shockwave knockback) ═══════════════════════
+      if (SPIDER_GROUND_DEBUG) {
+        surf._groundDbgPrevY = enemy.mesh.position.y;
+      }
       kb.velocity.y -= SPIDER_GRAVITY * dt;
 
       const speed = kb.velocity.length();
@@ -581,13 +1494,42 @@ export function createEnemyRuntime(world, player, options = {}) {
 
         const canAttemptLanding =
           surf._landLockTimer <= 0 &&
-          surf._airTravel >= SPIDER_LAND_LOCK_MIN_TRAVEL;
+          surf._airTravel >= (surf._landLockMinTravel ?? SPIDER_LAND_LOCK_MIN_TRAVEL);
+
+        if (trySpiderEmergencyFloorLanding(enemy, surf, enemy.mesh.position, selfBox, kb, impactSpeed)) {
+          landed = true;
+          break;
+        }
 
         // Raycast in velocity direction to detect approaching surface
         if (canAttemptLanding && kb.velocity.lengthSq() > 0.0001) {
           _rayDir.copy(kb.velocity).normalize();
           _rayOrig.copy(enemy.mesh.position);
-          const hit = raycastWorldColliders(_rayOrig, _rayDir, SPIDER_LAND_DETECT_RANGE, selfBox);
+          let hit = raycastWorldColliders(_rayOrig, _rayDir, SPIDER_LAND_DETECT_RANGE, selfBox);
+          if (hit && hit.normal.y < 0.7 && kb.velocity.y <= 0) {
+            _rayOrig.copy(enemy.mesh.position);
+            _rayOrig.y += 0.2;
+            const floorHit = raycastWalkableSurface(_rayOrig, _tmpDir.set(0, -1, 0), SPIDER_FLOOR_REACQUIRE_RANGE, selfBox, 0.7);
+            if (floorHit) {
+              hit = floorHit;
+            }
+          }
+
+          if (hit && hit.normal.y < -0.25 && (surf._recoverToFloorTimer > 0 || enemy.mesh.position.y < 0.55)) {
+            _rayOrig.copy(enemy.mesh.position);
+            _rayOrig.y += 0.5;
+            const floorHit = raycastWalkableSurface(_rayOrig, _tmpDir.set(0, -1, 0), 1.4, selfBox, 0.7);
+            if (floorHit) {
+              hit = floorHit;
+            } else {
+              spiderDebugLog(enemy, 'AirLandRejectUnderside', {
+                hitNormal: dbgVec3(hit.normal),
+                pos: dbgVec3(enemy.mesh.position),
+              }, 0.08);
+              continue;
+            }
+          }
+
           if (hit) {
             const sameLaunchFace =
               surf._launchNormal &&
@@ -640,6 +1582,13 @@ export function createEnemyRuntime(world, player, options = {}) {
               hitPoint: dbgVec3(hit.point),
               kbVel: dbgVec3(kb.velocity),
             });
+            spiderGroundLog(enemy, 'AirLandHit', {
+              impactSpeed: dbgNum(impactSpeed),
+              hitNormal: dbgVec3(hit.normal),
+              hitPoint: dbgVec3(hit.point),
+              kbVel: dbgVec3(kb.velocity),
+              airTravel: dbgNum(surf._airTravel),
+            }, 0.03);
             // Place spider at hit point, offset by hover distance along normal
             enemy.mesh.position.copy(hit.point).addScaledVector(hit.normal, getSpiderAdhesionOffset(enemy, hit.normal));
 
@@ -675,6 +1624,17 @@ export function createEnemyRuntime(world, player, options = {}) {
             if (!postHit) postHit = raycastWorldColliders(_rayOrig, _tmpDir.set(0, -1, 0), 0.55, selfBox);
             if (!postHit) postHit = raycastWorldColliders(_rayOrig, _tmpDir.set(0, 1, 0), 0.55, selfBox);
 
+            if (postHit && postHit.normal.y < -0.25 && (surf._recoverToFloorTimer > 0 || enemy.mesh.position.y < 0.55)) {
+              _rayOrig.copy(enemy.mesh.position);
+              _rayOrig.y += 0.45;
+              const floorPostHit = raycastWalkableSurface(_rayOrig, _tmpDir.set(0, -1, 0), 1.2, selfBox, 0.7);
+              if (floorPostHit) {
+                postHit = floorPostHit;
+              } else {
+                postHit = null;
+              }
+            }
+
             if (postHit) {
               enemy.mesh.position.copy(postHit.point).addScaledVector(postHit.normal, getSpiderAdhesionOffset(enemy, postHit.normal));
               _prevN.copy(surf.normal);
@@ -688,17 +1648,28 @@ export function createEnemyRuntime(world, player, options = {}) {
                 postHitPoint: dbgVec3(postHit.point),
                 travelDir: dbgVec3(surf.travelDir),
               });
+              spiderGroundLog(enemy, 'AirLandPostSnap', {
+                postHitNormal: dbgVec3(postHit.normal),
+                postHitPoint: dbgVec3(postHit.point),
+                travelDir: dbgVec3(surf.travelDir),
+              }, 0.03);
             }
 
             // Compute impact damage (not applied yet)
-            onSpiderSurfaceImpact(enemy, impactSpeed);
+            onSpiderSurfaceImpact(enemy, impactSpeed, hit.normal);
 
             surf.airborne = false;
             surf.airborneTimer = 0;
+            surf._landLockMinTravel = SPIDER_LAND_LOCK_MIN_TRAVEL;
             surf._relandGuardTimer = 0;
             kb.velocity.set(0, 0, 0);
             kb.active = false;
             if (enemyAI) enemyAI.notifyKnockbackEnd(enemy);
+            spiderGroundLog(enemy, 'AirLandingComplete', {
+              impactSpeed: dbgNum(impactSpeed),
+              landedNormal: dbgVec3(surf.normal),
+              travelDir: dbgVec3(surf.travelDir),
+            }, 0.03);
             landed = true;
             break;
           }
@@ -732,8 +1703,8 @@ export function createEnemyRuntime(world, player, options = {}) {
           // Probe multiple directions to find the best landing surface
           _rayOrig.copy(enemy.mesh.position);
           let landHit = null;
-          // 1) Down
-          landHit = raycastWorldColliders(_rayOrig, _tmpDir.set(0, -1, 0), 0.6, selfBox);
+          // 1) Prefer walkable floor-like face first.
+          landHit = raycastWalkableSurface(_rayOrig, _tmpDir.set(0, -1, 0), 0.95, selfBox, 0.7);
           // 2) Back along velocity (surface we hit)
           if (!landHit && kb.velocity.lengthSq() > 0.0001) {
             _rayDir.copy(kb.velocity).normalize().negate();
@@ -746,6 +1717,15 @@ export function createEnemyRuntime(world, player, options = {}) {
           if (!landHit) landHit = raycastWorldColliders(_rayOrig, _tmpDir.set(0, 0, -1), 0.6, selfBox);
           // 4) Up (ceiling)
           if (!landHit) landHit = raycastWorldColliders(_rayOrig, _tmpDir.set(0, 1, 0), 0.6, selfBox);
+
+          if (!landHit || (landHit.normal.y < -0.25 && (surf._recoverToFloorTimer > 0 || enemy.mesh.position.y < 0.55))) {
+            _rayOrig.copy(enemy.mesh.position);
+            _rayOrig.y += 0.8;
+            const fallbackFloorHit = raycastWalkableSurface(_rayOrig, _tmpDir.set(0, -1, 0), 1.8, selfBox, 0.7);
+            if (fallbackFloorHit) {
+              landHit = fallbackFloorHit;
+            }
+          }
 
           if (landHit) {
             enemy.mesh.position.copy(landHit.point).addScaledVector(landHit.normal, getSpiderAdhesionOffset(enemy, landHit.normal));
@@ -761,15 +1741,17 @@ export function createEnemyRuntime(world, player, options = {}) {
               travelDir: dbgVec3(surf.travelDir),
             });
           } else {
-            surf.normal.set(0, 1, 0);
-            enemy.mesh.quaternion.copy(_qWorld);
-            spiderDebugLog(enemy, 'AirOverlapFallbackFloor', {
-              reason: 'no landHit found',
-            });
+            kb.velocity.multiplyScalar(0.68);
+            spiderDebugLog(enemy, 'AirOverlapNoLanding', {
+              reason: 'no valid landHit found',
+              pos: dbgVec3(enemy.mesh.position),
+            }, 0.08);
+            continue;
           }
-          onSpiderSurfaceImpact(enemy, impactSpeed);
+          onSpiderSurfaceImpact(enemy, impactSpeed, landHit.normal);
           surf.airborne = false;
           surf.airborneTimer = 0;
+          surf._landLockMinTravel = SPIDER_LAND_LOCK_MIN_TRAVEL;
           kb.velocity.set(0, 0, 0);
           kb.active = false;
           if (enemyAI) enemyAI.notifyKnockbackEnd(enemy);
@@ -787,21 +1769,28 @@ export function createEnemyRuntime(world, player, options = {}) {
 
         if (surf.airborneTimer >= SPIDER_AIRBORNE_TIMEOUT) {
           // Safety reset — out of world recovery
+          const combat = ensureSpiderCombat(enemy);
+          combat.impactArmed = false;
+          combat.launchStrength = 0;
           surf.normal.set(0, 1, 0);
           surf.airborne = false;
           surf.airborneTimer = 0;
+          surf._landLockMinTravel = SPIDER_LAND_LOCK_MIN_TRAVEL;
           enemy.mesh.position.y = Math.max(0, enemy.mesh.position.y);
           enemy.mesh.quaternion.copy(_qWorld);
           kb.velocity.set(0, 0, 0);
           kb.active = false;
           if (enemyAI) enemyAI.notifyKnockbackEnd(enemy);
         }
+
+        trySpiderGlobalFloorRescue(enemy, surf, enemy.mesh.position, selfBox);
       }
 
     } else if (pathing && !enemy.components.health?.dead) {
       // ══ SURFACE-WALK PHASE (raycast-based adhesion) ════════════════════
       const vel = pathing.desiredVelocity;
       const pos = enemy.mesh.position;
+      let floorClampedThisFrame = false;
 
       if (vel.lengthSq() > 0.0001) {
         const desiredSpeed = vel.length();
@@ -839,6 +1828,14 @@ export function createEnemyRuntime(world, player, options = {}) {
 
         if (trySpiderWallToFloorHandoff(enemy, surf, tangentVel, pos, selfBox)) {
           // Transitioned from wall to floor; continue with new adhered state.
+        } else if (trySpiderWallToTopCrest(enemy, surf, tangentVel, pos, selfBox)) {
+          // Transitioned from wall face to a top surface; continue with new adhered state.
+        } else if (trySpiderLedgeVault(enemy, surf, tangentVel, pos, selfBox, pathing, kb, scratchPlayerPos)) {
+          // Crest fallback: force a short ballistic vault over the lip.
+          if (collision && typeof collision.syncFromEntity === 'function') {
+            collision.syncFromEntity(enemy);
+          }
+          return;
         } else {
 
           // ── Ray 2: Forward probe for wall detection ──────────────────────
@@ -906,6 +1903,9 @@ export function createEnemyRuntime(world, player, options = {}) {
             surf.travelDir.copy(tangentVel).normalize();
           }
           } else {
+          if (trySpiderFloorReacquire(enemy, surf, pos, selfBox)) {
+            // Reacquired a floor-like surface after a missed adhesion ray.
+          } else {
           // ── Ray 3: Edge-wrap probe ────────────────────────────────────
           // No surface below and no wall ahead — spider walked off an edge.
           // Probe downward (in original travel direction, then offset) to
@@ -947,6 +1947,7 @@ export function createEnemyRuntime(world, player, options = {}) {
             }
           }
           }
+          }
         }
 
         // Safety: resolve any remaining overlaps from the move
@@ -978,6 +1979,47 @@ export function createEnemyRuntime(world, player, options = {}) {
           if (!snapHit && !descendingOnWall) snapHit = raycastWorldColliders(_rayOrig, _tmpDir.set(0, -1, 0), 0.45, selfBox);
           if (!snapHit) snapHit = raycastWorldColliders(_rayOrig, _tmpDir.set(0, 1, 0), 0.45, selfBox);
 
+          if (snapHit && snapHit.normal.y < -0.25) {
+            // Never keep grounded spiders adhered to underside contacts after
+            // overlap recovery; reacquire a walkable floor face instead.
+            spiderGroundLog(enemy, 'GroundSnapRejectUnderside', {
+              snapHitNormal: dbgVec3(snapHit.normal),
+              descendingOnWall,
+              forceRecoverFloor,
+            }, 0.05);
+            _rayOrig.copy(pos);
+            _rayOrig.y += 0.45;
+            const floorSnapHit = raycastWalkableSurface(
+              _rayOrig,
+              _tmpDir.set(0, -1, 0),
+              1.35,
+              selfBox,
+              0.7
+            );
+
+            if (floorSnapHit) {
+              snapHit = floorSnapHit;
+            } else {
+              _rayOrig.copy(pos);
+              _rayOrig.y -= 0.1;
+              const floorUpHit = raycastWalkableSurface(
+                _rayOrig,
+                _tmpDir.set(0, 1, 0),
+                1.0,
+                selfBox,
+                0.7
+              );
+              snapHit = floorUpHit || null;
+            }
+
+            if (!snapHit) {
+              spiderGroundLog(enemy, 'GroundSnapFloorFallbackMiss', {
+                posY: dbgNum(pos.y),
+                normalY: dbgNum(surf.normal.y),
+              }, 0.08);
+            }
+          }
+
           if (snapHit) {
             _prevN.copy(surf.normal);
             snapSpiderToSurface(enemy, snapHit.normal);
@@ -988,6 +2030,11 @@ export function createEnemyRuntime(world, player, options = {}) {
               snapHitPoint: dbgVec3(snapHit.point),
               travelDir: dbgVec3(surf.travelDir),
             }, 0.25);
+            spiderGroundLog(enemy, 'SurfaceOverlapSnap', {
+              snapHitNormal: dbgVec3(snapHit.normal),
+              snapHitPoint: dbgVec3(snapHit.point),
+              travelDir: dbgVec3(surf.travelDir),
+            }, 0.08);
           }
         }
 
@@ -1077,6 +2124,101 @@ export function createEnemyRuntime(world, player, options = {}) {
           animation.state = 'idle';
         }
       }
+
+      const recoveringToFloor = surf._recoverToFloorTimer > 0;
+      if (!surf.airborne && (surf.normal.y > 0.65 || pos.y < 0.95 || recoveringToFloor)) {
+        _rayOrig.copy(pos);
+        _rayOrig.y += SPIDER_FLOOR_STICK_PROBE_HEIGHT;
+        const floorStickProbeRange = recoveringToFloor
+          ? SPIDER_FLOOR_STICK_PROBE_RANGE + 0.55
+          : SPIDER_FLOOR_STICK_PROBE_RANGE;
+        let floorHoldHit = raycastWalkableSurface(
+          _rayOrig,
+          _tmpDir.set(0, -1, 0),
+          floorStickProbeRange,
+          selfBox,
+          0.72
+        );
+
+        if (!floorHoldHit) {
+          _rayOrig.copy(pos);
+          _rayOrig.y -= 0.08;
+          floorHoldHit = raycastWalkableSurface(
+            _rayOrig,
+            _tmpDir.set(0, 1, 0),
+            0.95,
+            selfBox,
+            0.72
+          );
+        }
+
+        if (!floorHoldHit) {
+          spiderGroundLog(enemy, 'FloorStickMiss', {
+            recoveringToFloor,
+            probeRange: dbgNum(floorStickProbeRange),
+            posY: dbgNum(pos.y),
+          }, 0.2);
+        }
+
+        if (floorHoldHit) {
+          const targetY = floorHoldHit.point.y + getSpiderAdhesionOffset(enemy, floorHoldHit.normal);
+          if (recoveringToFloor || pos.y < targetY - SPIDER_FLOOR_SINK_TOLERANCE) {
+            _prevN.copy(surf.normal);
+            snapSpiderToSurface(enemy, floorHoldHit.normal);
+            remapSpiderDirectionToSurface(surf.travelDir, _prevN, surf.normal, surf.travelDir);
+            pos.copy(floorHoldHit.point).addScaledVector(floorHoldHit.normal, getSpiderAdhesionOffset(enemy, floorHoldHit.normal));
+            floorClampedThisFrame = true;
+            if (recoveringToFloor && floorHoldHit.normal.y > 0.72) {
+              surf._recoverToFloorTimer = Math.min(surf._recoverToFloorTimer, 0.18);
+            }
+            spiderDebugLog(enemy, 'FloorStickClamp', {
+              targetY: dbgNum(targetY),
+              posY: dbgNum(pos.y),
+            }, 0.15);
+            spiderGroundLog(enemy, 'FloorStickClamp', {
+              recoveringToFloor,
+              targetY: dbgNum(targetY),
+              posY: dbgNum(pos.y),
+              floorNormal: dbgVec3(floorHoldHit.normal),
+            }, 0.08);
+          }
+        }
+      }
+
+      if (SPIDER_GROUND_DEBUG && !surf.airborne) {
+        const prevY = surf._groundDbgPrevY;
+        if (Number.isFinite(prevY)) {
+          const deltaY = pos.y - prevY;
+          if (deltaY < -0.004 && !floorClampedThisFrame) {
+            _rayOrig.copy(pos);
+            _rayOrig.y += SPIDER_FLOOR_STICK_PROBE_HEIGHT;
+            const descentFloorHit = raycastWalkableSurface(
+              _rayOrig,
+              _tmpDir.set(0, -1, 0),
+              SPIDER_FLOOR_STICK_PROBE_RANGE + 0.35,
+              selfBox,
+              0.72
+            );
+
+            const targetY = descentFloorHit
+              ? descentFloorHit.point.y + getSpiderAdhesionOffset(enemy, descentFloorHit.normal)
+              : NaN;
+
+            spiderGroundLog(enemy, 'GroundedDescent', {
+              deltaY: dbgNum(deltaY),
+              prevY: dbgNum(prevY),
+              posY: dbgNum(pos.y),
+              hasFloor: !!descentFloorHit,
+              floorTargetY: dbgNum(targetY),
+              floorNormal: dbgVec3(descentFloorHit?.normal),
+              travelDir: dbgVec3(surf.travelDir),
+            }, 0.08);
+          }
+        }
+        surf._groundDbgPrevY = pos.y;
+      }
+
+      trySpiderGlobalFloorRescue(enemy, surf, pos, selfBox);
     }
 
     // Collider sync
@@ -1091,8 +2233,10 @@ export function createEnemyRuntime(world, player, options = {}) {
     const enemies = getEnemies();
     if (!enemies || enemies.length === 0) return;
 
-    if (player && player.getPosition) {
-      scratchPlayerPos.copy(player.getPosition());
+    if (player && (player.getEnemyTargetPosition || player.getPosition)) {
+      scratchPlayerPos.copy(
+        player.getEnemyTargetPosition ? player.getEnemyTargetPosition() : player.getPosition()
+      );
     }
 
     // AI decision pass
@@ -1135,6 +2279,9 @@ export function createEnemyRuntime(world, player, options = {}) {
       // ── Spider ──────────────────────────────────────────────────────────
       if (enemy.type === 'spider') {
         updateSpider(enemy, dt, kb, isKnockedBack, pathing, animation, collision);
+        if (!enemy.components.health?.dead) {
+          applySpiderDoorDamage(enemy);
+        }
         continue;
       }
 
@@ -1194,5 +2341,6 @@ export function createEnemyRuntime(world, player, options = {}) {
   return {
     update,
     setEnemyAI,
+    setDoorSystems,
   };
 }

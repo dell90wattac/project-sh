@@ -957,7 +957,7 @@ export function createSpider() {
 
   const entity = createEnemyContainer({
     type: 'spider',
-    hp: 8,
+    hp: 11,
     name: 'Spider',
   });
   entity.mesh = group;
@@ -1005,6 +1005,16 @@ export function createSpider() {
     current: entity.hp,
     max: entity.hp,
     dead: false,
+  };
+
+  entity.components.spiderCombat = {
+    impactArmed: false,
+    launchStrength: 0,
+    lastImpactDamage: 0,
+    lastImpactSpeed: 0,
+    lastDamageSource: null,
+    lastDamageAt: -Infinity,
+    doorHits: Object.create(null),
   };
 
   entity.components.knockback = {

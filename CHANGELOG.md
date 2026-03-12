@@ -4,6 +4,85 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 26] — 2026-03-12
+### Fixed
+- **Spider floor-through-floor bug resolved** (`src/systems/enemyRuntime.js`)
+  - Root cause identified: wall/solid-surface impact damage was triggering the spider death animation on floor landings, causing the visual sink. The death animation drives `mesh.position.y` downward each frame.
+  - Impact damage now skips floor landings: `onSpiderSurfaceImpact` accepts an `impactNormal` parameter and returns early if `impactNormal.y > 0.58` (floor-like surface).
+  - All four landing call sites (GlobalFloorRescue, EmergencyFloorLanding, AirLandHit, AirOverlapLand) updated to pass the resolved surface normal.
+
+### Changed
+- **Removed post-landing floor lock system** (`src/systems/enemyRuntime.js`)
+  - Removed `SPIDER_POST_LAND_FLOOR_LOCK_TIME` constant and all `_postLandFloorLock` timer logic — this was a workaround for the now-fixed death animation bug and would have suppressed wall climbing for 0.65s after any landing.
+  - Removed the `lockToFloor` gate from the grounded overlap snap block.
+  - Floor-stick clamp and probe range expansion now gate only on `_recoverToFloorTimer` (post-shockwave recovery), not post-landing lock.
+
+- **Spider shockwave force restored and scaled up** (`src/systems/ammoTypes.js`)
+  - Standard and heavy `knockbackMult`, `launchScalar`, `upwardScalar*`, `magnitudeCap`, and `maxLaunchSpeed` were all reduced during prior debugging sessions; now restored and increased.
+  - Standard ammo: `knockbackMult` raised to `6.0` to compensate for its smaller radius (5.75m vs heavy's 17.25m) — without this the inverse-square falloff meant standard hits were ~6× weaker than heavy at any given range despite identical `knockbackMult`.
+  - Heavy ammo spider force set to ~3× standard: `magnitudeCap 42.0`, `maxLaunchSpeed 28.5`, `upwardScalarFloor 0.78`, `upwardScalarWall 0.72`.
+
+### Added
+- **Spider invincibility debug toggle** (`src/systems/enemyRuntime.js`)
+  - `?spiderInvincible=1` URL flag or `window.__SPIDER_INVINCIBLE__ = true` at runtime disables all spider damage (logs `DamageBlockedInvincible` event via debug ring buffer).
+  - `isSpiderInvincible()` helper checks runtime flag so it can be toggled without reload.
+
+- **Spider ground debug mode** (`src/systems/enemyRuntime.js`)
+  - `?spiderGroundDebug=1` enables a ring-buffer event log for spider ground/landing diagnostics.
+  - `window.__getSpiderGroundEvents(n)` / `window.__clearSpiderGroundEvents()` for in-browser inspection.
+  - Events: `EmergencyFloorLanding`, `AirLandHit`, `AirLandPostSnap`, `FloorStickClamp`, `FloorStickMiss`, `GroundedDescent`, `GroundSnapRejectUnderside`, `DamageTaken`, `MarkedDead`, `DamageBlockedInvincible`, `ImpactNoDamageFloor`.
+
+---
+
+## [Session 25] — 2026-03-12
+### Added
+- **Spider stress-test spawn density update** (`src/world/world.js`)
+  - Increased lobby spider stress-test population from `10` to `50` using deterministic staggered grid spawning for repeatable repro/testing.
+
+- **Ammo-scoped spider shock response tuning path** (`src/systems/ammoTypes.js`, `src/systems/shockwave.js`, `src/main.js`)
+  - Added per-ammo `spiderShock` tuning blocks to ammo profiles.
+  - Shockwave target callbacks now receive ammo context metadata so enemy reactions can be profile-specific.
+
+### Changed
+- **Spider crest fallback behavior** (`src/systems/enemyRuntime.js`)
+  - Added ballistic ledge-vault fallback (`trySpiderLedgeVault`) so spiders can force over lips when adhesion crest transitions fail.
+  - Added vault gating/cooldown and wall-climb progress tracking to reduce premature mid-wall jumps.
+
+- **Spider shockwave landing/reacquire pipeline revisions** (`src/systems/enemyRuntime.js`, `src/main.js`, `src/systems/ammoTypes.js`)
+  - Reworked knockback detachment rules for low-magnitude hits and added multiple floor reacquire/fallback passes.
+  - Replaced spider world raycast core with robust inside-collider slab handling.
+  - Added walkable-surface query path for floor/top reacquire probes.
+  - Added overlap/landing guardrails to avoid finalizing on invalid underside contacts near floor.
+
+### Known Issues
+- **Unresolved (critical): spiders can still fall through floor after shockwave impacts**
+  - Current landing/reconnection revisions improved several edge cases but did **not** eliminate the core defect.
+  - Repro still observed after repeated heavy-ammo mid-distance hits.
+  - This remains a top-priority runtime bug and must be treated as open.
+
+## [Session 24] — 2026-03-12
+### Added
+- **Baseline spider damage implementation** (`src/entities/zombies.js`, `src/systems/enemyRuntime.js`, `src/main.js`)
+  - Increased spider HP from `8` to `11`
+  - Added spider combat state for shockwave-launched impact damage and per-door sweep hit tracking
+  - Shockwaves now arm spider impact damage without dealing direct damage
+  - Wall and solid-surface impacts after shockwave launch now apply spider damage using impact speed, clamped to `3..10`
+  - Swinging doors can now damage grounded spiders, capped at `5` damage per swing contact window
+
+### Changed
+- **Spider surface-transition stability pass** (`src/systems/enemyRuntime.js`)
+  - Added explicit wall-to-top crest probing so spiders can promote from climbed faces onto top surfaces more reliably
+  - Added floor reacquisition after missed adhesion or shallow knockback landings to stop spiders detaching and dropping through floors after small shockwave hits
+  - Airborne landing now prefers a valid floor-like hit below the spider over shallow side hits when descending
+- **Debug noclip chase-lock mode** (`src/player/player.js`, `src/systems/enemyRuntime.js`, `src/systems/enemyAI.js`, `src/systems/door.js`, `src/main.js`)
+  - Added `N` toggle for noclip free-flight movement
+  - Enemy pursuit target now locks to the player position where noclip was enabled, so spider AI keeps chasing the last known location during debug observation
+  - Noclip movement no longer pushes doors or receives door pushback
+  - Startup overlay and action label now expose noclip debug state
+- **Spider crawl proxy groundwork** (`src/world/world.js`, `src/systems/enemyRuntime.js`)
+  - Added separate spider crawl colliders so spider adhesion raycasts can use simplified crawl topology without changing normal player/world collision
+  - Replaced the front desk spider crawl surface with simplified front-face and countertop proxies to avoid composite desk seam failures during cresting
+
 ## [Session 23] — 2026-03-11
 ### Added
 - **Reusable furniture factory system** (`src/world/world.js`)
@@ -245,6 +324,15 @@ All notable changes to Project SH are documented here.
 ## [Session 19] — 2026-03-11
 ### Changed
 - **Room culling disabled — all rooms always visible** (`src/systems/roomCulling.js`)
+## [Session 24] — 2026-03-12
+### Added
+- **Baseline spider damage implementation** (`src/entities/zombies.js`, `src/systems/enemyRuntime.js`, `src/main.js`)
+  - Increased spider HP from `8` to `11`
+  - Added spider combat state for shockwave-launched impact damage and per-door sweep hit tracking
+  - Shockwaves now arm spider impact damage without dealing direct damage
+  - Wall and solid-surface impacts after shockwave launch now apply spider damage using impact speed, clamped to `3..10`
+  - Swinging doors can now damage grounded spiders, capped at `5` damage per swing contact window
+
   - Stripped visibility toggling, BFS graph walking, progressive mesh reveal, transition cursors, adaptive budgeting, and prewarm phases
   - System retained as a lightweight room tracker: resolves the player's current room each frame for HUD zone display and perf overlay
   - API surface preserved as no-op stubs (`setVisibilityDepth`, `setMeshOpsPerFrame`, etc.) so callers don't need guards
