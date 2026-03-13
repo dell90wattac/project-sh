@@ -149,6 +149,13 @@ export function createEnemyRuntime(world, player, options = {}) {
   const SPIDER_FLOOR_STICK_PROBE_HEIGHT = 0.34;
   const SPIDER_FLOOR_STICK_PROBE_RANGE = 1.05;
   const SPIDER_FLOOR_SINK_TOLERANCE = 0.002;
+  // Spider distance-based update throttling (performance).
+  const SPIDER_LOD_NEAR = 12;
+  const SPIDER_LOD_MID = 22;
+  const SPIDER_LOD_SKIP_MID = 3;
+  const SPIDER_LOD_SKIP_FAR = 6;
+  const SPIDER_LOD_NEAR_SQ = SPIDER_LOD_NEAR * SPIDER_LOD_NEAR;
+  const SPIDER_LOD_MID_SQ = SPIDER_LOD_MID * SPIDER_LOD_MID;
 
   // 2D broadphase grid for spider crawl raycasts. This keeps ray-AABB tests
   // bounded when many spiders are active.
@@ -158,10 +165,10 @@ export function createEnemyRuntime(world, player, options = {}) {
   let enemyAI = options.enemyAI || null;
   let doorSystems = Array.isArray(options.doorSystems) ? options.doorSystems : [];
 
-  const SPIDER_IMPACT_MIN_SPEED = 1.5;
-  const SPIDER_IMPACT_MAX_SPEED = 6.75;
-  const SPIDER_IMPACT_MIN_DAMAGE = 3;
-  const SPIDER_IMPACT_MAX_DAMAGE = 10;
+  const SPIDER_IMPACT_MIN_SPEED = 1.2;
+  const SPIDER_IMPACT_MAX_SPEED = 8.0;
+  const SPIDER_IMPACT_MIN_DAMAGE = 4;
+  const SPIDER_IMPACT_MAX_DAMAGE = 12;
   const SPIDER_DOOR_SWING_MIN_SPEED = 0.2;
   const SPIDER_DOOR_DAMAGE_MAX = 5;
   const SPIDER_DOOR_HIT_COOLDOWN = 0.22;
@@ -1258,16 +1265,6 @@ export function createEnemyRuntime(world, player, options = {}) {
     combat.impactArmed = false;
     combat.launchStrength = 0;
 
-    // Design intent: wall/ceiling slams can hurt spiders, but ordinary floor
-    // landings from shockwave arcs should not kill them.
-    if (impactNormal && impactNormal.y > 0.58) {
-      spiderGroundLog(enemy, 'ImpactNoDamageFloor', {
-        impactSpeed: dbgNum(impactSpeed),
-        impactNormal: dbgVec3(impactNormal),
-      }, 0.03);
-      return 0;
-    }
-
     if (impactSpeed < SPIDER_IMPACT_MIN_SPEED) {
       spiderDebugLog(enemy, 'ImpactTooSoft', {
         impactSpeed: dbgNum(impactSpeed),
@@ -2256,25 +2253,75 @@ export function createEnemyRuntime(world, player, options = {}) {
         if (animation && animation.state !== 'death') {
           animation.state = 'death';
         }
-        if (!enemy.state._deathTimer) enemy.state._deathTimer = 0;
-        enemy.state._deathTimer += dt;
-        const t = Math.min(enemy.state._deathTimer / 0.6, 1);
-        enemy.mesh.rotation.x = t * (Math.PI / 2) * 0.85;
-        enemy.mesh.position.y = -t * 0.4;
-        if (t >= 1) {
-          const kb2 = enemy.components.knockback;
-          if (kb2) kb2.active = false;
+
+        // Initialise death state on first frame
+        if (enemy.state._deathTimer === undefined) {
+          enemy.state._deathTimer = 0;
+          enemy.state._deathStartY = enemy.mesh.position.y;
+          // Reset surface orientation so the flip plays from a clean pose
+          enemy.mesh.rotation.x = 0;
+          enemy.mesh.rotation.z = 0;
+          const _dkb = enemy.components.knockback;
+          if (_dkb) { _dkb.active = false; _dkb.velocity.set(0, 0, 0); }
+          const _dsurf = enemy.components.surface;
+          if (_dsurf) { _dsurf.airborne = false; _dsurf.airborneTimer = 0; }
         }
+
+        enemy.state._deathTimer += dt;
+
+        if (enemy.type === 'spider') {
+          // Spiders flip 180° onto their back then drop to the floor.
+          // Duration 0.75 s: fast flip ease-out + gravity-accelerated fall.
+          const t = Math.min(enemy.state._deathTimer / 0.75, 1);
+          const flipEase = 1 - (1 - t) * (1 - t); // ease-out: snappy at start
+          enemy.mesh.rotation.z = flipEase * Math.PI;
+          const startY = enemy.state._deathStartY ?? 0;
+          enemy.mesh.position.y = Math.max(0.06, startY * (1 - t * t)); // keep carcass slightly above floor
+        } else {
+          // Zombies: tilt forward and sink into floor
+          const t = Math.min(enemy.state._deathTimer / 0.6, 1);
+          enemy.mesh.rotation.x = t * (Math.PI / 2) * 0.85;
+          enemy.mesh.position.y = -t * 0.4;
+        }
+
         continue; // skip movement for dead enemies
+      }
+
+      const kb = enemy.components.knockback;
+      const surf = enemy.components.surface;
+      const isKnockedBack = kb && kb.active;
+
+      // Spider distance LOD: throttle far-away updates unless airborne/knocked back.
+      if (enemy.type === 'spider') {
+        const dx = enemy.mesh.position.x - scratchPlayerPos.x;
+        const dy = enemy.mesh.position.y - scratchPlayerPos.y;
+        const dz = enemy.mesh.position.z - scratchPlayerPos.z;
+        const distSq = dx * dx + dy * dy + dz * dz;
+        let skipFactor = 1;
+
+        if (distSq > SPIDER_LOD_NEAR_SQ) {
+          skipFactor = distSq > SPIDER_LOD_MID_SQ ? SPIDER_LOD_SKIP_FAR : SPIDER_LOD_SKIP_MID;
+        }
+
+        if (skipFactor > 1 && !isKnockedBack && !surf?.airborne) {
+          const state = enemy.state || (enemy.state = {});
+          if (state._spiderLodSkip !== skipFactor) {
+            state._spiderLodSkip = skipFactor;
+            state._spiderLodOffset = Math.floor(Math.random() * skipFactor);
+            state._spiderLodFrame = 0;
+          }
+          state._spiderLodFrame = (state._spiderLodFrame ?? 0) + 1;
+          const offset = state._spiderLodOffset ?? 0;
+          if ((state._spiderLodFrame + offset) % skipFactor !== 0) {
+            continue;
+          }
+        }
       }
 
       // Controller hook (idle bob, etc.)
       if (controller && typeof controller.update === 'function') {
         controller.update(dt, { enemy, playerPosition: scratchPlayerPos, world });
       }
-
-      const kb = enemy.components.knockback;
-      const isKnockedBack = kb && kb.active;
 
       // ── Spider ──────────────────────────────────────────────────────────
       if (enemy.type === 'spider') {

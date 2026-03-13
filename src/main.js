@@ -297,14 +297,6 @@ for (const enemy of worldEnemiesForAI) {
   enemyAI.register(enemy);
 }
 
-function getWorldRoomCount() {
-  if (!world.getRoomIds) return 0;
-  const roomIds = world.getRoomIds();
-  return Array.isArray(roomIds) && roomIds.length > 0
-    ? roomIds.length
-    : 0;
-}
-
 // ─── HUD ───────────────────────────────────────────────────────────────────
 const hud = createHUD(gun, playerHealth);
 const perfOverlay = createPerfOverlay({ buildVersion: BUILD_VERSION });
@@ -959,7 +951,7 @@ function loop() {
     visibleRooms: roomStats.visibleRooms,
     totalRooms: roomStats.totalRooms,
     pendingVisibilityChanges: roomStats.pendingVisibilityChanges,
-      meshOpsPerFrame: roomStats.meshOpsPerFrame,
+    meshOpsPerFrame: roomStats.meshOpsPerFrame,
     drawCalls: renderer.info.render.calls,
     triangles: renderer.info.render.triangles,
   });

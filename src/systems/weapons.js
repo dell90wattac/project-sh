@@ -78,14 +78,11 @@ export function createGun(inventory, physicsWorld, camera) {
       }
 
       // Discard current magazine contents
-      const discarded = currentMag;
       currentMag = 0;
       loadedMagAmmoItemType = null;
 
       // Start reload timer
       reloadTimer = RELOAD_DURATION;
-
-      console.log(`[Gun] Reloading ${selectedAmmoItemType}... (discarded ${discarded} bullets)`);
       return true;
     },
 
@@ -109,8 +106,6 @@ export function createGun(inventory, physicsWorld, camera) {
           inventory.removeItem(selectedAmmoItemType, ammoToPull);
           currentMag += ammoToPull;
           loadedMagAmmoItemType = ammoToPull > 0 ? selectedAmmoItemType : loadedMagAmmoItemType;
-
-          console.log(`[Gun] Reload complete (${loadedMagAmmoItemType || 'unknown'}). Magazine: ${currentMag}/${MAG_CAPACITY}, Reserve: ${inventory.getItemCount(selectedAmmoItemType)}`);
           reloadTimer = 0;
         }
       }

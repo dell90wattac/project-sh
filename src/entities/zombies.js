@@ -17,11 +17,11 @@ function getEnemyTexture(path) {
   return texture;
 }
 
-function setShadowFlags(root) {
+function setShadowFlags(root, enabled = true) {
   root.traverse((child) => {
     if (child.isMesh) {
-      child.castShadow = true;
-      child.receiveShadow = true;
+      child.castShadow = enabled;
+      child.receiveShadow = enabled;
     }
   });
 }
@@ -953,11 +953,11 @@ export function createSpider() {
     group.add(lower);
   });
 
-  setShadowFlags(group);
+  setShadowFlags(group, false);
 
   const entity = createEnemyContainer({
     type: 'spider',
-    hp: 11,
+    hp: 14,
     name: 'Spider',
   });
   entity.mesh = group;

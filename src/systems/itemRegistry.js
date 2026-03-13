@@ -92,9 +92,8 @@ const ITEMS = {
 const KEY_ITEM_PREFIX = 'key:';
 const KEY_MODEL_CONFIG = { color: 0xd4b24f, size: [0.28, 0.08, 0.1], shape: 'box' };
 
-export const HANDGUN_ITEM_ID = 'handgun';
-export const STANDARD_AMMO_ITEM_ID = 'ammo';
-export const HEAVY_HANDGUN_AMMO_ITEM_ID = 'ammoHeavy';
+const STANDARD_AMMO_ITEM_ID = 'ammo';
+const HEAVY_HANDGUN_AMMO_ITEM_ID = 'ammoHeavy';
 export const HANDGUN_AMMO_ITEM_IDS = Object.freeze([
   STANDARD_AMMO_ITEM_ID,
   HEAVY_HANDGUN_AMMO_ITEM_ID,
@@ -172,6 +171,3 @@ export function getMaxStack(itemId) {
   return def ? def.maxStack : 1;
 }
 
-export function isHandgunAmmoItem(itemType) {
-  return HANDGUN_AMMO_ITEM_IDS.includes(itemType);
-}
