@@ -1015,6 +1015,7 @@ export function createSpider() {
     lastDamageSource: null,
     lastDamageAt: -Infinity,
     doorHits: Object.create(null),
+    lastPlayerHitTime: -Infinity,
   };
 
   entity.components.knockback = {

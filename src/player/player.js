@@ -204,6 +204,7 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
   function resolveCollisions(pos) {
     buildPlayerBox(pos);
     for (const box of world.colliders) {
+      if (box._enemyCollider) continue;
       if (!playerBox.intersectsBox(box)) continue;
 
       const ox = Math.min(playerBox.max.x - box.min.x, box.max.x - playerBox.min.x);

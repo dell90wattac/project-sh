@@ -17,7 +17,10 @@ import * as THREE from 'three';
  *   - Spiders ignore all non-world colliders (enemies, items, other spiders).
  */
 export function createEnemyRuntime(world, player, options = {}) {
+  const { playerHealth } = options;
   const scratchPlayerPos = new THREE.Vector3();
+  const scratchNudge = new THREE.Vector3();
+  let lastPlayerDamageTime = -Infinity;
   const SPIDER_DEBUG = (() => {
     try {
       if (typeof window === 'undefined') return false;
@@ -1355,6 +1358,49 @@ export function createEnemyRuntime(world, player, options = {}) {
     }
   }
 
+  // ── Spider melee: damage + nudge-back on player contact ───────────────────
+  function applySpiderMeleeCheck(enemy) {
+    const ATTACK_RANGE    = 0.9;  // metres — just inside the 1.2 m chase-arrive threshold
+    const SPIDER_COOLDOWN = 2.0;  // seconds — per individual spider
+    const GLOBAL_COOLDOWN = 0.5;  // seconds — across all spiders combined
+    const NUDGE_SPEED     = 1.4;  // m/s — gentle push-away on contact
+
+    const pos = enemy.mesh.position;
+    const dx = pos.x - scratchPlayerPos.x;
+    const dz = pos.z - scratchPlayerPos.z;
+    // Use XZ-only distance — the player's body.position.y is at eye/head level
+    // (~1.7 m) while spiders hover near the floor (~0.08 m), so a full 3D distance
+    // would always exceed any reasonable attack range.
+    const distSq = dx * dx + dz * dz;
+
+    if (distSq > ATTACK_RANGE * ATTACK_RANGE) return;
+
+    // Per-spider cooldown gates both the nudge and damage.
+    // Without this, the nudge would fire every frame and permanently repel spiders.
+    const now = performance.now() * 0.001;
+    const combat = enemy.components.spiderCombat;
+    if (!combat || now - combat.lastPlayerHitTime < SPIDER_COOLDOWN) return;
+
+    // Nudge spider away on bite (one-shot per cooldown cycle, not every frame).
+    // Push horizontally only so the nudge projects cleanly onto the floor surface.
+    const pathing = enemy.components.pathing;
+    if (pathing) {
+      const len = Math.sqrt(distSq) || 1;
+      scratchNudge.set(dx / len, 0, dz / len).multiplyScalar(NUDGE_SPEED);
+      pathing.desiredVelocity.copy(scratchNudge);
+    }
+
+    // Mark per-spider cooldown regardless of whether damage lands.
+    combat.lastPlayerHitTime = now;
+
+    // Damage additionally gated by global cooldown.
+    if (now - lastPlayerDamageTime < GLOBAL_COOLDOWN) return;
+    if (!playerHealth) return;
+
+    playerHealth.takeDamage(1, 'spider');
+    lastPlayerDamageTime = now;
+  }
+
   // ── Spider-spider soft repulsion ──────────────────────────────────────────
 
   /**
@@ -2328,6 +2374,7 @@ export function createEnemyRuntime(world, player, options = {}) {
         updateSpider(enemy, dt, kb, isKnockedBack, pathing, animation, collision);
         if (!enemy.components.health?.dead) {
           applySpiderDoorDamage(enemy);
+          applySpiderMeleeCheck(enemy);
         }
         continue;
       }
@@ -2385,9 +2432,14 @@ export function createEnemyRuntime(world, player, options = {}) {
     }
   }
 
+  function reset() {
+    lastPlayerDamageTime = -Infinity;
+  }
+
   return {
     update,
     setEnemyAI,
     setDoorSystems,
+    reset,
   };
 }

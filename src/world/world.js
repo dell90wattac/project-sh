@@ -1141,8 +1141,8 @@ export function createWorld(scene, physicsWorld) {
   }
 
   const spiderSpawnPositions = [];
-  const spiderSpawnCols = 10;
-  const spiderSpawnRows = 10;
+  const spiderSpawnCols = 5;
+  const spiderSpawnRows = 8;
   const spiderSpawnXStart = -2.7;
   const spiderSpawnZStart = -11.8;
   const spiderSpawnXStep = 0.6;
@@ -1161,6 +1161,7 @@ export function createWorld(scene, physicsWorld) {
     const spider = createSpider();
     spider.mesh.position.copy(spawnPos);
     spider.mesh.rotation.y = Math.PI; // face toward player start
+    spider._spawnPos = spawnPos.clone();
 
     const spiderCollider = makeSpiderColliderAt(spawnPos.x, spawnPos.y, spawnPos.z);
     spiderCollider._enemyCollider = true;
@@ -1191,47 +1192,6 @@ export function createWorld(scene, physicsWorld) {
     enemies.push(spider);
   }
 
-  // Add 40 extra spiders nearby the stress-test pack (non-colliding, ground spawn)
-  const EXTRA_SPIDERS = 40;
-  for (let i = 0; i < EXTRA_SPIDERS; i++) {
-    const spider = createSpider();
-    // pick a base position near the existing spawn grid and add a small random jitter
-    const baseX = spiderSpawnXStart + (Math.random() * spiderSpawnCols) * spiderSpawnXStep;
-    const baseZ = spiderSpawnZStart - Math.random() * spiderSpawnRows * spiderSpawnZStep;
-    const jitterX = (Math.random() - 0.5) * 1.2; // +/-0.6m
-    const jitterZ = (Math.random() - 0.5) * 1.6; // +/-0.8m
-    const spawnX = baseX + jitterX;
-    const spawnZ = baseZ + jitterZ;
-    spider.mesh.position.set(spawnX, 0, spawnZ);
-    spider.mesh.rotation.y = Math.PI;
-
-    const spiderCollider = makeSpiderColliderAt(spawnX, 0, spawnZ);
-    spiderCollider._enemyCollider = true;
-    spiderCollider._enemyEntity = spider;
-    spider.components.collision = {
-      shape: 'aabb',
-      box: spiderCollider,
-      halfSize: spiderHalfSize.clone(),
-      footOffsetY: spiderFootOffsetY,
-      syncFromEntity(enemyEntity) {
-        const p = enemyEntity.mesh.position;
-        this.box.min.set(
-          p.x - this.halfSize.x,
-          p.y + this.footOffsetY,
-          p.z - this.halfSize.z
-        );
-        this.box.max.set(
-          p.x + this.halfSize.x,
-          p.y + this.footOffsetY + this.halfSize.y * 2,
-          p.z + this.halfSize.z
-        );
-      },
-    };
-
-    registerObject(spider.mesh);
-    registerCollider(spiderCollider);
-    enemies.push(spider);
-  }
 
   // --- Door: lobby <-> offshoot east ---
   const primaryDoorRef = addLinkedDoor({

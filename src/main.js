@@ -182,7 +182,7 @@ const inventoryUI = createInventoryUI(inventory, playerHealth, {
 
 // ─── Player ────────────────────────────────────────────────────────────────
 const player = createPlayer(camera, scene, world, physicsWorld, inventoryUI, playerHealth);
-const enemyRuntime = createEnemyRuntime(world, player);
+const enemyRuntime = createEnemyRuntime(world, player, { playerHealth });
 const worldDoors = Array.isArray(world.doors) && world.doors.length > 0
   ? world.doors
   : (world.door ? [{ id: 'doorPrimary', roomIds: ['lobby'], door: world.door }] : []);
@@ -688,6 +688,38 @@ function resetGame() {
   shockwaveFx.clear();
   player.resetPosition();
   for (const key in hazardTimers) hazardTimers[key] = 0;
+  enemyRuntime.reset();
+
+  for (const enemy of world.getEnemies()) {
+    // Restore spawn position
+    if (enemy._spawnPos) {
+      enemy.mesh.position.copy(enemy._spawnPos);
+      enemy.mesh.rotation.set(0, Math.PI, 0);
+    }
+    // Restore health
+    const health = enemy.components.health;
+    if (health) {
+      health.current = health.max;
+      health.dead = false;
+    }
+    // Clear death animation state
+    if (enemy.state) {
+      enemy.state._deathTimer = undefined;
+      enemy.state._deathStartY = undefined;
+    }
+    // Clear knockback
+    const kb = enemy.components.knockback;
+    if (kb) { kb.active = false; kb.velocity.set(0, 0, 0); }
+    // Reset surface adhesion (spiders)
+    const surf = enemy.components.surface;
+    if (surf) { surf.airborne = false; surf.airborneTimer = 0; surf.normal.set(0, 1, 0); }
+    // Reset spider bite cooldowns
+    const combat = enemy.components.spiderCombat;
+    if (combat) { combat.lastPlayerHitTime = -Infinity; combat.impactArmed = false; }
+    // Clear AI velocity
+    const pathing = enemy.components.pathing;
+    if (pathing) pathing.desiredVelocity.set(0, 0, 0);
+  }
 }
 
 // ─── Start overlay ─────────────────────────────────────────────────────────
