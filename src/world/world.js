@@ -1065,71 +1065,7 @@ export function createWorld(scene, physicsWorld) {
     damageType: 'generic',
   });
 
-  // First enemy visual prototype: static zombie parked behind the desk.
-  // Add a dedicated world collider so the player cannot walk through it.
-  const zombieSentry = createLobbyZombieSentry();
-  zombieSentry.mesh.rotation.y = 2.75;
-
-  const zombieHalfSize = new THREE.Vector3(0.18, 0.85, 0.16);
-  const zombieFootOffsetY = 0.02;
-
-  function makeZombieColliderAt(x, z) {
-    return new THREE.Box3(
-      new THREE.Vector3(x - zombieHalfSize.x, zombieFootOffsetY, z - zombieHalfSize.z),
-      new THREE.Vector3(x + zombieHalfSize.x, zombieFootOffsetY + zombieHalfSize.y * 2, z + zombieHalfSize.z)
-    );
-  }
-
-  function intersectsExistingWorld(collider) {
-    for (const existing of colliders) {
-      // Ignore floor slabs so feet can rest on ground.
-      if (existing.max.y <= 0.05) continue;
-      if (collider.intersectsBox(existing)) return true;
-    }
-    return false;
-  }
-
-  const zombieSpawnCandidates = [
-    new THREE.Vector3(1.8, 0, -2.6),
-    new THREE.Vector3(2.3, 0, -2.6),
-    new THREE.Vector3(1.2, 0, -2.6),
-    new THREE.Vector3(2.0, 0, -2.1),
-    new THREE.Vector3(2.0, 0, -3.0),
-  ];
-
-  let chosenZombiePos = zombieSpawnCandidates[0];
-  let zombieCollider = makeZombieColliderAt(chosenZombiePos.x, chosenZombiePos.z);
-  for (const candidate of zombieSpawnCandidates) {
-    const testCollider = makeZombieColliderAt(candidate.x, candidate.z);
-    if (!intersectsExistingWorld(testCollider)) {
-      chosenZombiePos = candidate;
-      zombieCollider = testCollider;
-      break;
-    }
-  }
-
-  // Tag as an enemy-owned collider so spider logic can ignore other enemies.
-  zombieCollider._enemyCollider = true;
-  zombieCollider._enemyEntity = zombieSentry;
-
-  zombieSentry.mesh.position.copy(chosenZombiePos);
-  zombieSentry.components.collision = {
-    shape: 'aabb',
-    box: zombieCollider,
-    halfSize: zombieHalfSize.clone(),
-    footOffsetY: zombieFootOffsetY,
-    syncFromEntity(enemyEntity) {
-      const p = enemyEntity.mesh.position;
-      this.box.min.set(p.x - this.halfSize.x, this.footOffsetY, p.z - this.halfSize.z);
-      this.box.max.set(p.x + this.halfSize.x, this.footOffsetY + this.halfSize.y * 2, p.z + this.halfSize.z);
-    },
-  };
-
-  registerObject(zombieSentry.mesh);
-  registerCollider(zombieCollider);
-  enemies.push(zombieSentry);
-
-  // ─── Spider enemies — stress test pack from the back room area ───────────
+  // ─── Spider enemies — wall-crawl spawn ───────────────────────────────────
   const spiderHalfSize = new THREE.Vector3(0.13, 0.12, 0.13);
   const spiderFootOffsetY = 0.03;
 
@@ -1140,30 +1076,19 @@ export function createWorld(scene, physicsWorld) {
     );
   }
 
-  const spiderSpawnPositions = [];
-  const spiderSpawnCols = 5;
-  const spiderSpawnRows = 8;
-  const spiderSpawnXStart = -2.7;
-  const spiderSpawnZStart = -11.8;
-  const spiderSpawnXStep = 0.6;
-  const spiderSpawnZStep = 0.72;
-
-  for (let row = 0; row < spiderSpawnRows; row++) {
-    const stagger = row % 2 === 0 ? 0 : spiderSpawnXStep * 0.5;
-    for (let col = 0; col < spiderSpawnCols; col++) {
-      const x = spiderSpawnXStart + col * spiderSpawnXStep + stagger;
-      const z = spiderSpawnZStart - row * spiderSpawnZStep;
-      spiderSpawnPositions.push(new THREE.Vector3(x, 0, z));
-    }
-  }
-
-  for (const spawnPos of spiderSpawnPositions) {
+  // Spiders start high on the left/right lobby walls and crawl down toward the
+  // player. wallNormalX: +1 = left wall (normal points right), -1 = right wall.
+  function spawnWallSpider(x, y, z, wallNormalX) {
     const spider = createSpider();
+    const spawnPos = new THREE.Vector3(x, y, z);
     spider.mesh.position.copy(spawnPos);
-    spider.mesh.rotation.y = Math.PI; // face toward player start
     spider._spawnPos = spawnPos.clone();
+    spider._spawnNormal = new THREE.Vector3(wallNormalX, 0, 0);
 
-    const spiderCollider = makeSpiderColliderAt(spawnPos.x, spawnPos.y, spawnPos.z);
+    // Tell the surface-adhesion system which wall this spider is on.
+    spider.components.surface.normal.set(wallNormalX, 0, 0);
+
+    const spiderCollider = makeSpiderColliderAt(x, y, z);
     spiderCollider._enemyCollider = true;
     spiderCollider._enemyEntity = spider;
     spider.components.collision = {
@@ -1173,23 +1098,24 @@ export function createWorld(scene, physicsWorld) {
       footOffsetY: spiderFootOffsetY,
       syncFromEntity(enemyEntity) {
         const p = enemyEntity.mesh.position;
-        // Full 3D collider update — spiders can be on any surface
-        this.box.min.set(
-          p.x - this.halfSize.x,
-          p.y + this.footOffsetY,
-          p.z - this.halfSize.z
-        );
-        this.box.max.set(
-          p.x + this.halfSize.x,
-          p.y + this.footOffsetY + this.halfSize.y * 2,
-          p.z + this.halfSize.z
-        );
+        this.box.min.set(p.x - this.halfSize.x, p.y + this.footOffsetY, p.z - this.halfSize.z);
+        this.box.max.set(p.x + this.halfSize.x, p.y + this.footOffsetY + this.halfSize.y * 2, p.z + this.halfSize.z);
       },
     };
 
     registerObject(spider.mesh);
     registerCollider(spiderCollider);
     enemies.push(spider);
+  }
+
+  // 0.08 m off the inner wall face (surface hover distance)
+  const LEFT_SPIDER_X  = LEFT_WALL_X  + WALL_THICK / 2 + 0.08;  // ≈ -6.82
+  const RIGHT_SPIDER_X = RIGHT_WALL_X - WALL_THICK / 2 - 0.08;  // ≈  6.82
+  const WALL_SPIDER_Y  = 4.0; // height on the wall (out of 5.5 m ceiling)
+
+  for (const z of [2.0, 4.0, 6.0]) {
+    spawnWallSpider(LEFT_SPIDER_X,  WALL_SPIDER_Y, z,  1);  // left wall
+    spawnWallSpider(RIGHT_SPIDER_X, WALL_SPIDER_Y, z, -1);  // right wall
   }
 
 
@@ -2088,5 +2014,33 @@ export function createWorld(scene, physicsWorld) {
     getRoomObjectCount,
     registerExternalRoomObject,
     registerExternalStaticRoomObject,
+
+    // Dynamically add an enemy at runtime (used by spawnTriggers).
+    // Creates AABB collider, registers with scene and colliders array, pushes to
+    // enemies — enemyRuntime picks it up automatically on the next frame.
+    addEnemy(entity, halfExtents, footOffsetY = 0) {
+      const p  = entity.mesh.position;
+      const hx = halfExtents.x, hy = halfExtents.y, hz = halfExtents.z;
+      const collider = new THREE.Box3(
+        new THREE.Vector3(p.x - hx, p.y + footOffsetY,          p.z - hz),
+        new THREE.Vector3(p.x + hx, p.y + footOffsetY + hy * 2, p.z + hz)
+      );
+      collider._enemyCollider = true;
+      collider._enemyEntity   = entity;
+      entity.components.collision = {
+        shape: 'aabb',
+        box:   collider,
+        halfSize:    halfExtents.clone(),
+        footOffsetY,
+        syncFromEntity(e) {
+          const ep = e.mesh.position;
+          this.box.min.set(ep.x - this.halfSize.x, ep.y + this.footOffsetY, ep.z - this.halfSize.z);
+          this.box.max.set(ep.x + this.halfSize.x, ep.y + this.footOffsetY + this.halfSize.y * 2, ep.z + this.halfSize.z);
+        },
+      };
+      registerObject(entity.mesh);
+      registerCollider(collider);
+      enemies.push(entity);
+    },
   };
 }

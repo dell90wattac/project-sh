@@ -27,6 +27,7 @@ Goal: preserve one coherent system architecture as content scales.
 - Enemy archetype contract: `src/entities/zombies.js`
 - Enemy AI decision-making (state machine, pathing): `src/systems/enemyAI.js`
 - Enemy runtime orchestration and collider sync: `src/systems/enemyRuntime.js`
+- Spawn trigger definitions and runtime: `src/systems/spawnTriggers.js`
 - Fog presentation: `src/systems/fog.js`
 - UI is presentation-only: `src/ui/*`
 
@@ -41,6 +42,10 @@ Rule: extend the existing owner system first; do not create parallel authority f
 - Ammo profiles are data-driven; tune shockwave behavior in `ammoTypes.js` only.
 - Weapons enforce one ammo type per loaded magazine.
 - Enemy component keys remain stable: `visual`, `animation`, `pathing`, `controller`, `collision`, `health`, `knockback`.
+- Dynamically spawned enemies must go through `world.addEnemy(entity, halfExtents, footOffsetY)` — this registers the mesh, creates the AABB collider with `_enemyCollider = true`, and pushes to the live `enemies` array. `enemyRuntime` picks them up automatically the next frame.
+- After `world.addEnemy`, call `enemyAI.register(enemy)` and `registerEnemyWithShockwave(enemy)` (helper in `main.js`) to fully integrate the enemy.
+- Spider player-damage contracts: XZ-only distance check (player `body.position.y` is eye-level, not feet); per-spider 2s cooldown (`spiderCombat.lastPlayerHitTime`); global 0.5s cooldown (`lastPlayerDamageTime` closure in `enemyRuntime`). Knockback is a one-shot `pathing.desiredVelocity` override on bite, not a continuous force.
+- Player collision skips all `_enemyCollider`-tagged boxes (`player.js` `resolveCollisions`). Spider colliders do not physically impede the player.
 - Reserved enemy runtime states: `idle`, `walk`, `attack`, `hit`, `death`.
 - Enemy collision uses `components.collision.syncFromEntity` after controller/knockback updates.
 - Enemy AI decision-making lives in `src/systems/enemyAI.js`; runtime orchestration (movement application, knockback, collision) stays in `src/systems/enemyRuntime.js`.
@@ -78,6 +83,13 @@ Rule: extend the existing owner system first; do not create parallel authority f
   2. Call `attachEnemyComponents(entity, { homeZone, aggroDepth, moveSpeed })` for AI-ready setup.
   3. Runtime/state/collision integration in `systems/enemyRuntime.js`.
   4. Register with `enemyAI.register(entity)` in `main.js`.
+- Add a spawn trigger:
+  1. Call `spawnTriggers.addTrigger({ id, type, ... })` in `main.js` after the `spawnTriggers` declaration.
+  2. `type: 'playerZone'` — fires when player enters `roomId`; use `enabled` flag to gate on other events.
+  3. `type: 'doorOpen'` — fires once when door `doorId` opens past 0.3 rad.
+  4. `type: 'enemyDeath'` — fires once when `watchEnemy.components.health.dead` becomes true.
+  5. `oneShot: true` (default) — re-arms on `resetGame()` only. `oneShot: false` — re-fires each time condition transitions false→true.
+  6. Each trigger's `spawns` array holds `{ x, y, z, wallNormal, homeZone, aggroDepth }` entries. `wallNormal: null` = floor spawn.
 
 ## Static Prop Shake Contract (Keep Consistent)
 - Static props built through `box`/`decor` in `world.js` are auto-classified for canned shake.
@@ -109,9 +121,9 @@ Rule: extend the existing owner system first; do not create parallel authority f
 - Update this bible only for architecture/ownership/contract changes (not balance tuning).
 
 ## Current Priorities
-1. Shockwave Phase 2: lightweight debris (cap around 30 active objects).
-2. Shockwave Phase 3 follow-up: camera shake + stronger per-ammo recoil identity.
-3. Enemy pathing follow-up: room-transition portal waypoints + richer local route generation for dense furniture layouts.
-4. Offscreen enemy simulation using room-graph distance tiers.
+1. Expand spawn trigger encounters — wire up `playerZone`, `doorOpen`, and `enemyDeath` triggers for the lobby.
+2. Zombie reintroduction — zombie sentry removed this session; reintroduce when AI + damage pipeline is ready.
+3. Shockwave Phase 2: lightweight debris (cap around 30 active objects).
+4. Enemy pathing follow-up: room-transition portal waypoints + richer local route generation for dense furniture layouts.
 5. Event-driven audio system (subscribed to gameplay events).
 6. If scaling to large room counts, evaluate `THREE.Layers` culling or static-merge strategies before `visible` toggling.

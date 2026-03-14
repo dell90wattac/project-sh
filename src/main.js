@@ -22,6 +22,7 @@ import { attachEnemyComponents } from './entities/zombies.js';
 import { createShockwaveSystem } from './systems/shockwave.js';
 import { createShockwaveFx } from './systems/shockwaveFx.js';
 import { getAmmoConfigForItem } from './systems/ammoTypes.js';
+import { createSpawnTriggers } from './systems/spawnTriggers.js';
 
 const BUILD_VERSION = '22.7';
 
@@ -454,9 +455,9 @@ for (let i = 0; i < lobbyChandeliers.length; i++) {
   });
 }
 
-// Register enemies as shockwave targets
-const worldEnemies = world.getEnemies();
-for (const enemy of worldEnemies) {
+// ─── Shockwave registration helper ─────────────────────────────────────────
+// Called at startup for existing enemies, and by spawnTriggers for new ones.
+function registerEnemyWithShockwave(enemy) {
   if (!enemy.components.knockback) {
     enemy.components.knockback = { velocity: new THREE.Vector3(), active: false };
   }
@@ -641,6 +642,20 @@ for (const enemy of worldEnemies) {
   }
 }
 
+// Register all existing enemies with the shockwave system at startup
+for (const enemy of world.getEnemies()) {
+  registerEnemyWithShockwave(enemy);
+}
+
+// ─── Spawn Triggers ────────────────────────────────────────────────────────
+const spawnTriggers = createSpawnTriggers({
+  world,
+  enemyAI,
+  player,
+  doorSystems,
+  onEnemySpawned: (spider) => registerEnemyWithShockwave(spider),
+});
+
 // Register shakeable furniture
 const worldShakeables = world.getShakeables();
 for (const mesh of worldShakeables) {
@@ -689,6 +704,7 @@ function resetGame() {
   player.resetPosition();
   for (const key in hazardTimers) hazardTimers[key] = 0;
   enemyRuntime.reset();
+  spawnTriggers.reset();
 
   for (const enemy of world.getEnemies()) {
     // Restore spawn position
@@ -710,9 +726,14 @@ function resetGame() {
     // Clear knockback
     const kb = enemy.components.knockback;
     if (kb) { kb.active = false; kb.velocity.set(0, 0, 0); }
-    // Reset surface adhesion (spiders)
+    // Reset surface adhesion (spiders) — restore spawn normal (wall or floor)
     const surf = enemy.components.surface;
-    if (surf) { surf.airborne = false; surf.airborneTimer = 0; surf.normal.set(0, 1, 0); }
+    if (surf) {
+      surf.airborne = false;
+      surf.airborneTimer = 0;
+      if (enemy._spawnNormal) surf.normal.copy(enemy._spawnNormal);
+      else surf.normal.set(0, 1, 0);
+    }
     // Reset spider bite cooldowns
     const combat = enemy.components.spiderCombat;
     if (combat) { combat.lastPlayerHitTime = -Infinity; combat.impactArmed = false; }
@@ -913,6 +934,7 @@ function loop() {
       doorEntry.system.applyPlayerPushback(player);
     }
     enemyRuntime.update(dt);
+    spawnTriggers.update();
     worldItems.update(dt);
   }
 

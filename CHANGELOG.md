@@ -4,6 +4,43 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 27] — 2026-03-14
+
+### Added
+- **Spider-to-player melee damage** (`src/systems/enemyRuntime.js`, `src/entities/zombies.js`, `src/main.js`)
+  - Spiders deal 1 HP per bite when within 0.9 m (XZ-only distance — player `body.position.y` is eye-level, not feet).
+  - Per-spider cooldown: 2 s (`spiderCombat.lastPlayerHitTime`). Global cooldown: 0.5 s (`lastPlayerDamageTime` closure).
+  - Knockback is a one-shot `pathing.desiredVelocity` override on bite; not a continuous force, so spiders can freely approach between attacks.
+  - Damage flash and death screen fire automatically via the existing `playerHealth.onDamage` → `damageEffects.flashDamage()` hook.
+  - Player collision updated to skip `_enemyCollider`-tagged boxes so spiders no longer physically lift or block the player.
+
+- **Spawn trigger system** (`src/systems/spawnTriggers.js`, `src/world/world.js`, `src/main.js`)
+  - New `createSpawnTriggers({ world, enemyAI, player, doorSystems, onEnemySpawned })` factory in `src/systems/spawnTriggers.js`.
+  - Three trigger types: `playerZone` (player enters a room), `doorOpen` (door angle > 0.3 rad), `enemyDeath` (enemy `health.dead` flips true). All use edge detection — fire on transition, not while condition holds.
+  - `oneShot: true` (default): fires once per session, re-arms on `resetGame()`. `oneShot: false`: re-fires each time condition transitions false→true (e.g. player re-enters zone).
+  - `enabled` flag: `playerZone` triggers can be toggled on/off by other triggers via `onFire(triggers)` callback.
+  - `world.addEnemy(entity, halfExtents, footOffsetY)` added to world exports — creates AABB collider, registers with scene and colliders array, pushes to live `enemies` array. `enemyRuntime` picks up new enemies automatically next frame.
+  - `registerEnemyWithShockwave(enemy)` extracted as a named helper in `main.js` (was inline in the startup loop); called for both startup enemies and dynamically spawned ones.
+  - `spawnTriggers.update()` called each frame after `enemyRuntime.update()`. `spawnTriggers.reset()` called in `resetGame()`.
+
+- **Full game reset on death** (`src/main.js`)
+  - `resetGame()` now resets all enemies: spawn position, health, death animation state, knockback, surface adhesion normal, spider bite cooldowns, and AI desired velocity.
+  - Wall-spawned spiders restore their wall surface normal (stored as `enemy._spawnNormal`) rather than defaulting to floor normal.
+
+### Changed
+- **Spider spawn overhaul** (`src/world/world.js`)
+  - Removed 140-spider stress-test grid and zombie sentry from the lobby.
+  - 6 spiders now spawn on lobby walls: 3 on the left wall, 3 on the right, at height 4 m, spread at Z = 2 / 4 / 6. Surface normal pre-set so they crawl down toward the player.
+  - `spawnWallSpider(x, y, z, wallNormalX)` helper encapsulates wall-spider creation with correct surface normal, collider, and spawn-position storage.
+  - Spider count can now be controlled entirely through spawn triggers rather than hardcoded grid arrays.
+
+### Fixed
+- **Spider damage never fired** — distance check was 3D; `scratchPlayerPos.y` ≈ 1.7 m (eye level) vs spider at ≈ 0.08 m made distance always > 0.9 m. Fixed to XZ-only.
+- **Continuous nudge repelled spiders permanently** — original nudge fired every frame within range, acting as an invisible wall. Tied nudge to per-spider cooldown so it fires once per bite cycle.
+- **Player stepping onto spiders** — `resolveCollisions()` in `player.js` now skips boxes with `_enemyCollider = true`.
+
+---
+
 ## [Session 26] — 2026-03-12
 ### Fixed
 - **Spider floor-through-floor bug resolved** (`src/systems/enemyRuntime.js`)
