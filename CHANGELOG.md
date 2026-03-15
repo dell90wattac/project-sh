@@ -4,6 +4,88 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 28] — 2026-03-14
+
+### Added
+- **10-minute gameplay loop** (`src/main.js`, `src/world/world.js`, `src/systems/spawnTriggers.js`)
+  - Full progression slice: empty handgun start → lobby ammo scavenge → east wing key chain → 100-spider finale → escape door victory. See `GAMEPLAY_LOOP.md` for design details.
+
+- **3-key progression chain** (`src/main.js`)
+  - Admin Key (Reception) → unlocks Admin Office → Director's Key (Admin) → unlocks Director's Office → Escape Key (Director's) → unlocks Escape Door.
+  - West Wing Key placed in lobby for optional side-area detour.
+  - `createDoorLock(doorId, keyId, label, { consumeKey })` helper centralizes lock creation with rotation-aware positioning.
+
+- **Escape door** (`src/world/world.js`, `src/main.js`)
+  - Dark red door at back wall (Z=-14, centered at X=0) with decorative frame trim.
+  - `hingeRotY: Math.PI / 2` for correct flush orientation on the X-running wall.
+  - Hinge positioned at `BACK_Z + WALL_THICK / 2` so door face is flush with inner wall surface.
+
+- **Item placement across all rooms** (`src/main.js`)
+  - Lobby: 27 regular ammo + healing + west wing key.
+  - Reception: 18 regular ammo + healing + Admin Key.
+  - Manager: 9 regular ammo + healing.
+  - Admin: 18 regular ammo + healing + Director's Key.
+  - Kitchen: healing items.
+  - Director: 54 heavy ammo + major healing + Escape Key.
+  - West wing: 18 regular ammo + healing (optional detour).
+
+- **6 spawn trigger groups** (`src/main.js`, `src/systems/spawnTriggers.js`)
+  - D1: 4 ceiling spiders on entering east hallway (`playerZone`).
+  - D2: 6 hallway spiders on opening Admin door (`doorOpen`), 2 marked for death-cascade.
+  - D3: 8 hallway spiders on entering Director's Office (`playerZone`), 2 marked for death-cascade, enables finale trigger.
+  - D4: 100-spider lobby finale (`playerZone`, initially disabled), staggered in batches of 15 every 0.5s.
+  - D5: 12 death-cascade spiders (4 `enemyDeath` triggers from D2/D3 marked enemies, 3 spawns each).
+  - D6: 3 spiders in south offshoot rooms (`playerZone`, optional).
+
+- **Staggered spawn system** (`src/systems/spawnTriggers.js`)
+  - `batchSize` and `staggerDelay` trigger options for spreading large spawns across multiple frames.
+  - Internal `pendingBatches` queue drained each frame using actual delta time.
+  - `update(dt)` now accepts frame delta for accurate batch timing.
+
+- **Victory system** (`src/main.js`)
+  - `checkVictory()` detects escape door angle > 0.3 rad → shows "YOU ESCAPED" overlay, exits pointer lock.
+  - `gameWon` flag gates the game loop to freeze gameplay on victory.
+
+- **Bridge floor planes at all 9 doorways** (`src/world/world.js`)
+  - 0.6m wide × door-width strips at Y=-0.1 spanning wall-thickness gaps at every doorway threshold.
+  - Registered as colliders for both adjacent rooms so spider surface raycasts maintain contact during room transitions.
+
+- **Key consumption on unlock** (`src/main.js`)
+  - Per-lock `consumeKey` flag: when true, `onUnlock` calls `inventory.removeItem(requiredItemType, 1)`.
+  - Admin Key, Director's Key, and Escape Key all set to `consumeKey: true`.
+
+### Changed
+- **Gun starts empty** (`src/systems/weapons.js`)
+  - `currentMag` set to `0` (was `MAG_CAPACITY`); `selectedAmmoItemType` changed from `'ammoHeavy'` to `'ammo'`.
+  - Player must find ammo and reload before first shot.
+
+- **Pre-placed wall spiders removed** (`src/world/world.js`)
+  - Deleted 6 hardcoded wall spider spawns from lobby; all enemies are now trigger-spawned for pacing control.
+
+- **Death and victory reset uses page reload** (`src/main.js`)
+  - `damageEffects.onReset()` and victory overlay click both call `location.reload()` instead of `resetGame()`.
+  - Avoids incomplete state reset (gun magazine, door angles, collected pickups, dynamically spawned enemies).
+
+- **Victory overlay uses `pointerdown` with `stopPropagation`** (`src/main.js`)
+  - Prevents the document-level `mousedown` handler in `player.js` from re-acquiring pointer lock before the reload triggers.
+
+- **Lock position respects door rotation** (`src/main.js`)
+  - `createDoorLock` offsets lock position by rotating a local vector through the door's world quaternion, not hardcoded Z offset.
+
+- **`spawnTriggers.update()` accepts `dt` parameter** (`src/systems/spawnTriggers.js`, `src/main.js`)
+  - Replaced hardcoded `1/60` frame time with actual delta for stagger batch timing.
+
+### Fixed
+- **Floor gaps at doorways prevented spider traversal** — bridge floor planes now span all 9 doorway thresholds.
+- **Escape door was 90° off and not flush with wall** — added `hingeRotY: Math.PI / 2` and positioned hinge at inner wall face.
+- **Escape door invisible (recessed behind wall)** — moved `hingeZ` from `BACK_Z` to `BACK_Z + WALL_THICK / 2`.
+- **Gun started with full magazine of heavy ammo** — changed to empty magazine with standard ammo selected.
+- **Victory click-to-restart didn't work** — pointer lock re-acquisition intercepted the click; switched to `pointerdown` + `stopPropagation`.
+- **`inventory.clear()` called in resetGame but didn't exist** — replaced with slot-by-slot `removeItem` loop.
+- **`lock.relock()` called in resetGame but API uses `lock.lock()`** — corrected method name.
+
+---
+
 ## [Session 27] — 2026-03-14
 
 ### Added

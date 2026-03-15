@@ -53,6 +53,22 @@ if (SPIDER_DEBUG) {
   console.log('[SpiderDBG] enabled (?spiderDebug=1)');
 }
 
+// ─── Loading Progress ──────────────────────────────────────────────────────
+const _loadBarFill = document.getElementById('loading-bar-fill');
+const _loadStatus  = document.getElementById('loading-status');
+
+function setLoadProgress(pct, status) {
+  if (_loadBarFill) _loadBarFill.style.width = pct + '%';
+  if (_loadStatus)  _loadStatus.textContent = status;
+}
+
+function yieldToUI(pct, status) {
+  setLoadProgress(pct, status);
+  return new Promise(resolve => requestAnimationFrame(resolve));
+}
+
+setLoadProgress(0, 'initializing');
+
 // ─── Renderer ──────────────────────────────────────────────────────────────
 const renderer = new THREE.WebGLRenderer({ antialias: false });
 renderer.setSize(window.innerWidth, window.innerHeight);
@@ -63,6 +79,8 @@ renderer.shadowMap.autoUpdate = false;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
 document.body.insertBefore(renderer.domElement, document.getElementById('ui-root'));
+
+await yieldToUI(5, 'creating scene');
 
 // ─── Scene ─────────────────────────────────────────────────────────────────
 const scene = new THREE.Scene();
@@ -75,9 +93,13 @@ const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerH
 // ─── Physics ────────────────────────────────────────────────────────────────
 const physicsWorld = createPhysicsWorld();
 
+await yieldToUI(10, 'building world');
+
 // ─── World ──────────────────────────────────────────────────────────────────
 const world = createWorld(scene, physicsWorld);
 const fog = createFog(scene);
+
+await yieldToUI(40, 'baking shadows');
 
 // ─── Static Shadow Bake ─────────────────────────────────────────────────────
 // Architectural lights (sconces, wall washers) are static — trigger one shadow
@@ -85,10 +107,12 @@ const fog = createFog(scene);
 // The flashlight system (updateFlashlightShadowRefresh) handles dynamic updates.
 renderer.shadowMap.needsUpdate = true;
 
+await yieldToUI(45, 'loading systems');
+
 // ─── Inventory & Gun ───────────────────────────────────────────────────────
 const inventory = createInventory();
 inventory.setEquippedDirect('handgun', 1);
-inventory.addItem('ammoHeavy', 54);
+// Player starts with gun but no ammo — must find regular ammo in the lobby.
 const gun = createGun(inventory, physicsWorld, camera);
 
 // ─── Health System ─────────────────────────────────────────────────────────
@@ -106,8 +130,10 @@ playerHealth.onDeath(() => {
 });
 
 damageEffects.onReset(() => {
-  resetGame();
+  location.reload();
 });
+
+await yieldToUI(55, 'placing items');
 
 // ─── World Items / Pickups ─────────────────────────────────────────────────
 const worldItems = createWorldItems(scene, camera, inventory, {
@@ -143,25 +169,57 @@ function showActionLabel(text, duration = 1.4) {
   actionLabelTimer = duration;
 }
 
-// Three full stacks of handgun ammo (27 each) in front of desk
-worldItems.spawnPickup('ammo', 27, new THREE.Vector3(-1.5, 0.3, 1.5));
-worldItems.spawnPickup('ammo', 27, new THREE.Vector3(0, 0.3, 1.5));
-worldItems.spawnPickup('ammo', 27, new THREE.Vector3(1.5, 0.3, 1.5));
+// ─── Lobby Items (starting supplies — regular ammo only) ────────────────
+worldItems.spawnPickup('ammo', 18, new THREE.Vector3(-1.5, 0.3, 1.5));
+worldItems.spawnPickup('ammo', 9, new THREE.Vector3(1.5, 0.3, 1.5));
 
-// Heavy handgun ammo test stacks
-worldItems.spawnPickup('ammoHeavy', 18, new THREE.Vector3(-1.2, 0.3, 2.7));
-worldItems.spawnPickup('ammoHeavy', 18, new THREE.Vector3(0.3, 0.3, 2.7));
-worldItems.spawnPickup('ammoHeavy', 18, new THREE.Vector3(1.8, 0.3, 2.7));
-
+// ─── West Wing Key (optional detour) — unusual spot near the damage pillar ──
 const lobbyEastDoorKeyId = 'doorLobbyEast';
 const lobbyEastDoorKeyItemType = makeKeyItemId(lobbyEastDoorKeyId);
 if (lobbyEastDoorKeyItemType) {
-  worldItems.spawnPickup(lobbyEastDoorKeyItemType, 1, new THREE.Vector3(2.25, 0.3, 1.5));
+  worldItems.spawnPickup(lobbyEastDoorKeyItemType, 1, new THREE.Vector3(0.3, 0.3, -3.5));
 }
 
-// Healing items behind the desk
-worldItems.spawnPickup('healingA', 1, new THREE.Vector3(-1, 0.3, -1.0));
-worldItems.spawnPickup('healingB', 1, new THREE.Vector3(1, 0.3, -1.0));
+// ─── East Wing: Reception Office (unlocked, first room explored) ────────
+const adminKeyItemType = makeKeyItemId('doorHallAdmin');
+if (adminKeyItemType) {
+  worldItems.spawnPickup(adminKeyItemType, 1, new THREE.Vector3(10.0, 0.3, 6.0));
+}
+worldItems.spawnPickup('ammo', 18, new THREE.Vector3(8.5, 0.3, 6.5));
+worldItems.spawnPickup('healingA', 1, new THREE.Vector3(11.5, 0.3, 5.5));
+
+// ─── East Wing: Manager's Office (unlocked) ─────────────────────────────
+worldItems.spawnPickup('ammo', 9, new THREE.Vector3(10.0, 0.3, -1.5));
+worldItems.spawnPickup('healingA', 1, new THREE.Vector3(8.5, 0.3, -1.0));
+
+// ─── East Wing: Admin Office (locked — contains Director's Key) ─────────
+const directorKeyItemType = makeKeyItemId('doorHallDirector');
+if (directorKeyItemType) {
+  worldItems.spawnPickup(directorKeyItemType, 1, new THREE.Vector3(16.0, 0.3, 6.0));
+}
+worldItems.spawnPickup('ammo', 18, new THREE.Vector3(14.5, 0.3, 6.5));
+worldItems.spawnPickup('healingB', 1, new THREE.Vector3(17.5, 0.3, 5.5));
+
+// ─── East Wing: Kitchen (unlocked — healing station) ────────────────────
+worldItems.spawnPickup('healingB', 1, new THREE.Vector3(16.0, 0.3, -1.5));
+worldItems.spawnPickup('healingA', 1, new THREE.Vector3(14.5, 0.3, -1.0));
+
+// ─── East Wing: Director's Office (locked — THE payoff room) ───────────
+const escapeKeyItemType = makeKeyItemId('escape');
+if (escapeKeyItemType) {
+  worldItems.spawnPickup(escapeKeyItemType, 1, new THREE.Vector3(21.8, 0.3, 2.5));
+}
+worldItems.spawnPickup('ammoHeavy', 27, new THREE.Vector3(21.0, 0.3, 4.0));
+worldItems.spawnPickup('ammoHeavy', 27, new THREE.Vector3(22.5, 0.3, 1.0));
+worldItems.spawnPickup('healingC', 1, new THREE.Vector3(23.0, 0.3, 3.5));
+
+// ─── West Wing Offshoot Rooms (optional detour) ────────────────────────
+worldItems.spawnPickup('ammo', 9, new THREE.Vector3(-9.2, 0.3, 2.5));
+worldItems.spawnPickup('healingB', 1, new THREE.Vector3(-13.2, 0.3, 2.5));
+worldItems.spawnPickup('ammo', 9, new THREE.Vector3(-17.2, 0.3, 2.3));
+worldItems.spawnPickup('healingA', 1, new THREE.Vector3(-17.2, 0.3, 2.8));
+
+await yieldToUI(65, 'creating player');
 
 // ─── Inventory UI (needs health + drop callback) ──────────────────────────
 const inventoryUI = createInventoryUI(inventory, playerHealth, {
@@ -230,7 +288,7 @@ if (lobbyEastDoorRef) {
     position: lockPosition,
     unlockRadius: 1.5,
     verticalTolerance: 1.8,
-    onUnlock() {
+    onUnlock({ requiredItemType }) {
       const doorSystem = doorSystemById.get('doorLobbyEast');
       if (doorSystem && doorSystem.setInteractionEnabled) {
         doorSystem.setInteractionEnabled(true);
@@ -241,6 +299,38 @@ if (lobbyEastDoorRef) {
 
   locksByDoorId.set(lobbyEastDoorRef.id, lobbyEastLock);
 }
+
+// ─── Admin Office Lock ─────────────────────────────────────────────────────
+function createDoorLock(doorId, keyId, label, { consumeKey = false } = {}) {
+  const doorRef = worldDoors.find(d => d.id === doorId);
+  if (!doorRef) return;
+  const lockPos = new THREE.Vector3();
+  doorRef.door.pivot.updateWorldMatrix(true, false);
+  doorRef.door.pivot.getWorldPosition(lockPos);
+  lockPos.y = 1.0;
+  // Offset toward the door face side, respecting hinge rotation
+  const localOff = new THREE.Vector3(0, 0, doorRef.door.width * 0.75);
+  localOff.applyQuaternion(doorRef.door.pivot.getWorldQuaternion(new THREE.Quaternion()));
+  lockPos.add(localOff);
+  const lock = createLock({
+    id: 'lock_' + doorId,
+    requiredKeyId: keyId,
+    position: lockPos,
+    unlockRadius: 1.5,
+    verticalTolerance: 1.8,
+    onUnlock({ requiredItemType }) {
+      const ds = doorSystemById.get(doorId);
+      if (ds && ds.setInteractionEnabled) ds.setInteractionEnabled(true);
+      showActionLabel('UNLOCKED: ' + label);
+      if (consumeKey) inventory.removeItem(requiredItemType, 1);
+    },
+  });
+  locksByDoorId.set(doorId, lock);
+}
+
+createDoorLock('doorHallAdmin', 'doorHallAdmin', 'ADMIN OFFICE', { consumeKey: true });
+createDoorLock('doorHallDirector', 'doorHallDirector', "DIRECTOR'S OFFICE", { consumeKey: true });
+createDoorLock('doorEscape', 'escape', 'ESCAPE DOOR', { consumeKey: true });
 
 const doorSystems = worldDoors.map(doorRef => ({
   ...doorRef,
@@ -310,6 +400,8 @@ const roomCulling = createRoomCulling(world, player, worldItems, {
   boundaryPadding: 0.2,
 });
 
+await yieldToUI(80, 'waking enemies');
+
 // ─── Enemy AI ─────────────────────────────────────────────────────────────
 const enemyAI = createEnemyAI(world, roomCulling);
 enemyRuntime.setEnemyAI(enemyAI);
@@ -323,6 +415,8 @@ for (const enemy of worldEnemiesForAI) {
   }
   enemyAI.register(enemy);
 }
+
+await yieldToUI(88, 'building hud');
 
 // ─── HUD ───────────────────────────────────────────────────────────────────
 const hud = createHUD(gun, playerHealth);
@@ -694,6 +788,200 @@ const spawnTriggers = createSpawnTriggers({
   onEnemySpawned: (spider) => registerEnemyWithShockwave(spider),
 });
 
+// ─── Gameplay Loop: Spawn Trigger Definitions ──────────────────────────────
+
+// D1: First Encounter — enter east hallway (4 ceiling spiders)
+spawnTriggers.addTrigger({
+  type: 'playerZone',
+  roomId: 'eastHallway',
+  oneShot: true,
+  spawns: [
+    { x: 9.0, y: 2.8, z: 2.5, wallNormal: new THREE.Vector3(0, -1, 0), aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+    { x: 12.0, y: 2.8, z: 1.5, wallNormal: new THREE.Vector3(0, -1, 0), aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+    { x: 15.0, y: 2.8, z: 2.5, wallNormal: new THREE.Vector3(0, -1, 0), aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+    { x: 17.0, y: 2.8, z: 1.5, wallNormal: new THREE.Vector3(0, -1, 0), aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+  ],
+});
+
+// D2: Admin Ambush — opening the Admin Office door (6 spiders in hallway)
+// 2 of these are marked for death-cascade (D5)
+const adminAmbushMarked = [];
+spawnTriggers.addTrigger({
+  type: 'doorOpen',
+  doorId: 'doorHallAdmin',
+  oneShot: true,
+  spawns: [
+    { x: 8.5, y: 0.1, z: 2.5, aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+    { x: 10.5, y: 0.1, z: 1.5, aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+    { x: 12.5, y: 2.8, z: 3.5, wallNormal: new THREE.Vector3(0, -1, 0), aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+    { x: 14.0, y: 0.1, z: 2.0, aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+    { x: 16.5, y: 0.1, z: 1.5, aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+    { x: 18.0, y: 2.8, z: 2.5, wallNormal: new THREE.Vector3(0, -1, 0), aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+  ],
+  onSpawn(spiders) {
+    // Mark first two for death-cascade
+    if (spiders[0]) adminAmbushMarked.push(spiders[0]);
+    if (spiders[1]) adminAmbushMarked.push(spiders[1]);
+    // Register death-cascade triggers for marked enemies
+    for (const marked of adminAmbushMarked) {
+      spawnTriggers.addTrigger({
+        type: 'enemyDeath',
+        watchEnemy: marked,
+        oneShot: true,
+        spawns: [
+          { x: 16.0, y: 0.1, z: -1.5, aiOptions: { homeZone: 'eastKitchen', aggroDepth: 99 } },
+          { x: 10.0, y: 0.1, z: -1.0, aiOptions: { homeZone: 'eastManager', aggroDepth: 99 } },
+          { x: 14.5, y: 0.1, z: 2.5, aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+        ],
+      });
+    }
+  },
+});
+
+// D3: Director's Trap — entering Director's Office (8 spiders behind player in hallway)
+// 2 of these are marked for death-cascade; also enables the finale trigger
+const directorTrapMarked = [];
+spawnTriggers.addTrigger({
+  type: 'playerZone',
+  roomId: 'eastDirector',
+  oneShot: true,
+  spawns: [
+    { x: 8.0, y: 0.1, z: 2.5, aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+    { x: 9.5, y: 0.1, z: 1.5, aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+    { x: 11.0, y: 2.8, z: 3.5, wallNormal: new THREE.Vector3(0, -1, 0), aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+    { x: 12.5, y: 0.1, z: 2.0, aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+    { x: 14.0, y: 0.1, z: 1.5, aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+    { x: 15.5, y: 2.8, z: 2.5, wallNormal: new THREE.Vector3(0, -1, 0), aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+    { x: 17.0, y: 0.1, z: 2.5, aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+    { x: 18.5, y: 0.1, z: 1.5, aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+  ],
+  onSpawn(spiders) {
+    if (spiders[0]) directorTrapMarked.push(spiders[0]);
+    if (spiders[1]) directorTrapMarked.push(spiders[1]);
+    for (const marked of directorTrapMarked) {
+      spawnTriggers.addTrigger({
+        type: 'enemyDeath',
+        watchEnemy: marked,
+        oneShot: true,
+        spawns: [
+          { x: 8.5, y: 0.1, z: 6.0, aiOptions: { homeZone: 'eastReception', aggroDepth: 99 } },
+          { x: 17.0, y: 0.1, z: -2.0, aiOptions: { homeZone: 'eastKitchen', aggroDepth: 99 } },
+          { x: 13.0, y: 2.8, z: 2.5, wallNormal: new THREE.Vector3(0, -1, 0), aiOptions: { homeZone: 'eastHallway', aggroDepth: 99 } },
+        ],
+      });
+    }
+  },
+  onFire(allTriggers) {
+    // Enable the lobby finale trigger
+    const finaleTrigger = allTriggers.find(t => t._finaleTag);
+    if (finaleTrigger) finaleTrigger.enabled = true;
+  },
+});
+
+// D4: THE FINALE — re-enter lobby after Director's Office (100 spiders, staggered)
+// Builds spawn array: ~30 left wall + ~30 right wall + ~20 ceiling + ~20 floor
+const finaleSpawns = [];
+const lobbyAI = { homeZone: 'lobby', aggroDepth: 99 };
+
+// Left wall spiders (X ≈ -6.82, various Y and Z)
+for (let i = 0; i < 30; i++) {
+  finaleSpawns.push({
+    x: -6.82,
+    y: 0.5 + Math.random() * 4.5,
+    z: -12 + Math.random() * 24,
+    wallNormal: new THREE.Vector3(1, 0, 0),
+    aiOptions: lobbyAI,
+  });
+}
+// Right wall spiders (X ≈ 6.82)
+for (let i = 0; i < 30; i++) {
+  finaleSpawns.push({
+    x: 6.82,
+    y: 0.5 + Math.random() * 4.5,
+    z: -12 + Math.random() * 24,
+    wallNormal: new THREE.Vector3(-1, 0, 0),
+    aiOptions: lobbyAI,
+  });
+}
+// Ceiling spiders (Y ≈ 5.3)
+for (let i = 0; i < 20; i++) {
+  finaleSpawns.push({
+    x: -5 + Math.random() * 10,
+    y: 5.3,
+    z: -10 + Math.random() * 20,
+    wallNormal: new THREE.Vector3(0, -1, 0),
+    aiOptions: lobbyAI,
+  });
+}
+// Floor spiders between player entry area and escape door
+for (let i = 0; i < 20; i++) {
+  finaleSpawns.push({
+    x: -5 + Math.random() * 10,
+    y: 0.1,
+    z: -12 + Math.random() * 16,
+    aiOptions: lobbyAI,
+  });
+}
+
+spawnTriggers.addTrigger({
+  _finaleTag: true,
+  type: 'playerZone',
+  roomId: 'lobby',
+  oneShot: true,
+  enabled: false, // enabled by D3 onFire
+  staggerDelay: 0.5,  // 0.5 seconds between batches
+  batchSize: 15,       // 15 spiders per batch
+  spawns: finaleSpawns,
+});
+
+// D6: South Offshoot Rooms Mini-Encounter (optional)
+spawnTriggers.addTrigger({
+  type: 'playerZone',
+  roomId: 'sideRoomEast',
+  oneShot: true,
+  spawns: [
+    { x: -9.2, y: 0.1, z: 1.5, aiOptions: { homeZone: 'sideRoomEast', aggroDepth: 99 } },
+    { x: -13.2, y: 0.1, z: 3.0, aiOptions: { homeZone: 'sideRoomMid', aggroDepth: 99 } },
+    { x: -17.2, y: 0.1, z: 2.5, aiOptions: { homeZone: 'sideRoomWest', aggroDepth: 99 } },
+  ],
+});
+
+// ─── Victory & Game State ──────────────────────────────────────────────────
+let gameWon = false;
+const victoryOverlay = document.createElement('div');
+victoryOverlay.style.cssText = `
+  position: fixed; inset: 0;
+  display: none;
+  background: rgba(0, 0, 0, 0.85);
+  z-index: 9999;
+  justify-content: center; align-items: center;
+  flex-direction: column;
+  cursor: pointer;
+`;
+victoryOverlay.innerHTML = `
+  <div style="color: #9be5ff; font-family: monospace; font-size: 48px; font-weight: bold; letter-spacing: 0.15em; text-shadow: 0 0 20px rgba(155,229,255,0.5);">YOU ESCAPED</div>
+  <div style="color: #ddd; font-family: monospace; font-size: 16px; margin-top: 24px;">click to restart</div>
+`;
+document.body.appendChild(victoryOverlay);
+
+victoryOverlay.addEventListener('pointerdown', (e) => {
+  e.stopPropagation();
+  location.reload();
+});
+
+function checkVictory() {
+  if (gameWon) return;
+  // Check if escape door is open past threshold
+  const escapeDoorEntry = doorSystems.find(d => d.id === 'doorEscape');
+  if (!escapeDoorEntry) return;
+  const angle = Math.abs(escapeDoorEntry.system.getInteraction().doorAngle ?? 0);
+  if (angle > 0.3) {
+    gameWon = true;
+    victoryOverlay.style.display = 'flex';
+    try { document.exitPointerLock(); } catch {}
+  }
+}
+
 // Register shakeable furniture
 const worldShakeables = world.getShakeables();
 for (const mesh of worldShakeables) {
@@ -736,6 +1024,8 @@ function updateHazards(dt) {
 
 // ─── Game Reset ────────────────────────────────────────────────────────────
 function resetGame() {
+  gameWon = false;
+  victoryOverlay.style.display = 'none';
   playerHealth.reset();
   damageEffects.reset();
   shockwaveFx.clear();
@@ -743,6 +1033,13 @@ function resetGame() {
   for (const key in hazardTimers) hazardTimers[key] = 0;
   enemyRuntime.reset();
   spawnTriggers.reset();
+
+  // Reset inventory to starting loadout
+  for (let i = 0; i < 9; i++) {
+    const s = inventory.getSlot(i);
+    if (s.itemType) inventory.removeItem(s.itemType, s.quantity);
+  }
+  inventory.setEquippedDirect('handgun', 1);
 
   for (const enemy of world.getEnemies()) {
     // Restore spawn position
@@ -779,33 +1076,100 @@ function resetGame() {
     const pathing = enemy.components.pathing;
     if (pathing) pathing.desiredVelocity.set(0, 0, 0);
   }
+
+  // Re-lock all locked doors
+  for (const [doorId, lock] of locksByDoorId) {
+    lock.lock();
+    const ds = doorSystemById.get(doorId);
+    if (ds && ds.setInteractionEnabled) ds.setInteractionEnabled(false);
+  }
 }
 
 // ─── Start overlay ─────────────────────────────────────────────────────────
 const overlay = document.getElementById('overlay');
-const overlayTitle = overlay ? overlay.querySelector('h1') : null;
-const overlaySubtitle = overlay ? overlay.querySelector('p') : null;
+const startPrompt = document.getElementById('start-prompt');
+const loadingBarTrack = document.getElementById('loading-bar-track');
 
 let isStartupLoading = true;
-let canStartGameplay = false;
-let loadingElapsed = 0;
 
-if (overlay) {
-  overlay.style.display = 'flex';
-  overlay.style.opacity = '1';
-  overlay.style.cursor = 'wait';
-  overlay.style.pointerEvents = 'none';
+// ─── Warm-up: run full simulation frames so first gameplay frame is instant ─
+// The goal is to exercise every code path the real loop uses: player update,
+// physics, enemy AI, lazy spider init, shader compilation, shadow maps, etc.
+// We yield between passes so the loading bar stays animated.
+
+const WARMUP_FRAMES = 8;
+const WARMUP_DT = 1 / 60;
+
+for (let i = 0; i < WARMUP_FRAMES; i++) {
+  const pct = 90 + Math.round((i / WARMUP_FRAMES) * 10);
+  const labels = [
+    'warming up physics',
+    'ticking simulation',
+    'initializing enemies',
+    'building visibility',
+    'compiling shaders',
+    'rendering shadows',
+    'finalizing',
+    'almost ready',
+  ];
+  await yieldToUI(pct, labels[i] || 'warming up');
+
+  // Full simulation tick (mirrors the gameplay branch of the main loop)
+  gun.update(WARMUP_DT);
+  const gunState = gun.getAmmoState();
+  stepPhysics(physicsWorld, WARMUP_DT);
+
+  for (const doorEntry of doorSystems) {
+    doorEntry.system.update(WARMUP_DT);
+  }
+  const doorInteraction = getBestDoorInteraction();
+  player.update(WARMUP_DT, gunState, doorInteraction);
+  for (const doorEntry of doorSystems) {
+    doorEntry.system.applyPlayerPushback(player);
+  }
+  enemyRuntime.update(WARMUP_DT);
+  spawnTriggers.update(WARMUP_DT);
+  worldItems.update(WARMUP_DT);
+  roomCulling.update();
+
+  updateHazards(WARMUP_DT);
+  shockwave.update(WARMUP_DT);
+  shockwaveFx.update(WARMUP_DT);
+  chandelierMotion.update(WARMUP_DT);
+
+  inventoryUI.update(WARMUP_DT);
+  debugMenuUI.update(WARMUP_DT);
+  hud.update(WARMUP_DT);
+  damageEffects.update(WARMUP_DT);
+  fog.update(WARMUP_DT);
+
+  // Force shadow maps to compile on the first couple of passes
+  if (i < 2) {
+    renderer.shadowMap.needsUpdate = true;
+  }
+  renderer.render(scene, camera);
 }
 
-function setOverlayText(title, subtitle) {
-  if (overlayTitle) overlayTitle.textContent = title;
-  if (overlaySubtitle) overlaySubtitle.textContent = subtitle;
+// One last yield at 100% then transition to ready
+await yieldToUI(100, 'ready');
+
+// Loading complete — show start prompt
+if (loadingBarTrack) loadingBarTrack.style.display = 'none';
+if (startPrompt) startPrompt.style.display = '';
+if (_loadStatus) _loadStatus.style.display = 'none';
+
+if (overlay) {
+  overlay.style.cursor = 'pointer';
+  overlay.style.pointerEvents = 'all';
 }
 
 function beginGameplay() {
-  if (!canStartGameplay || !overlay) return;
+  if (!overlay) return;
 
   isStartupLoading = false;
+
+  // Drain accumulated clock time so the first real frame gets a clean dt.
+  clock.getDelta();
 
   try {
     player.lock();
@@ -826,25 +1190,6 @@ function beginGameplay() {
 
 if (overlay) {
   overlay.addEventListener('click', beginGameplay);
-}
-
-setOverlayText('Loading', 'preparing...');
-
-function updateStartupLoading(dt) {
-  loadingElapsed += dt;
-
-  const progressPct = Math.round(Math.min(1, loadingElapsed / 0.9) * 100);
-  setOverlayText('Loading', `preparing ${progressPct}%`);
-
-  if (loadingElapsed < 0.9) return;
-
-  canStartGameplay = true;
-
-  if (overlay) {
-    overlay.style.cursor = 'pointer';
-    overlay.style.pointerEvents = 'all';
-  }
-  setOverlayText('Project SH', 'click to begin\nQ inventory  R reload  F flashlight  N debug menu\n\n⚠ mild arachnophobia warning');
 }
 
 // ─── Clock & Loop ──────────────────────────────────────────────────────────
@@ -946,7 +1291,6 @@ function loop() {
 
   if (isStartupLoading) {
     updateFlashlightShadowRefresh(dt, false);
-    updateStartupLoading(dt);
     chandelierMotion.update(dt);
     fog.update(dt);
     renderer.render(scene, camera);
@@ -990,8 +1334,14 @@ function loop() {
       doorEntry.system.applyPlayerPushback(player);
     }
     enemyRuntime.update(dt);
-    spawnTriggers.update();
+    spawnTriggers.update(dt);
     worldItems.update(dt);
+    checkVictory();
+  }
+
+  if (gameWon) {
+    renderer.render(scene, camera);
+    return;
   }
 
   roomCulling.update();

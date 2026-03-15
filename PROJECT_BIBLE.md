@@ -36,8 +36,8 @@ Rule: extend the existing owner system first; do not create parallel authority f
 ## Critical Contracts
 - Room-ID agnostic design: avoid hardcoded room lists in systems.
 - Visibility culling is currently disabled (all rooms visible); room tracking still resolves current room every frame.
-- Locks are key-driven (`key:<id>`) and entity-agnostic.
-- Doors support world-rotated placement and expose `applyExternalTorque(...)` for non-player forces.
+- Locks are key-driven (`key:<id>`) and entity-agnostic. Per-lock `consumeKey` flag controls whether the key item is removed from inventory on unlock.
+- Doors support world-rotated placement and expose `applyExternalTorque(...)` for non-player forces. Doors on X-running walls require `hingeRotY: Math.PI / 2` (or `-Math.PI / 2`); doors on Z-running walls use default `hingeRotY: 0`.
 - Shockwave uses decoupled target registration (`registerTarget`); target systems own their response behavior.
 - Ammo profiles are data-driven; tune shockwave behavior in `ammoTypes.js` only.
 - Weapons enforce one ammo type per loaded magazine.
@@ -92,7 +92,11 @@ Rule: extend the existing owner system first; do not create parallel authority f
   3. `type: 'doorOpen'` — fires once when door `doorId` opens past 0.3 rad.
   4. `type: 'enemyDeath'` — fires once when `watchEnemy.components.health.dead` becomes true.
   5. `oneShot: true` (default) — re-arms on `resetGame()` only. `oneShot: false` — re-fires each time condition transitions false→true.
-  6. Each trigger's `spawns` array holds `{ x, y, z, wallNormal, homeZone, aggroDepth }` entries. `wallNormal: null` = floor spawn.
+- Each trigger's `spawns` array holds `{ x, y, z, wallNormal, aiOptions: { homeZone, aggroDepth } }` entries. `wallNormal: null` = floor spawn.
+- Staggered spawning: triggers with `batchSize` and `staggerDelay` options spread large spawn waves across frames. `update(dt)` drains the internal `pendingBatches` queue.
+- Triggers support `onFire(triggers)` callback to enable/disable other triggers (e.g., finale gating); use custom tag fields (e.g., `_finaleTag`) for cross-trigger lookup.
+- Victory system: `checkVictory()` fires when escape door angle > 0.3 rad; `gameWon` flag halts the game loop. Both death and victory reset via `location.reload()`.
+- `createDoorLock(doorId, keyId, label, { consumeKey })` helper in `main.js` centralizes lock creation with rotation-aware position offset; always use this for new door locks.
 
 ## Static Prop Shake Contract (Keep Consistent)
 - Static props built through `box`/`decor` in `world.js` are auto-classified for canned shake.
@@ -124,8 +128,8 @@ Rule: extend the existing owner system first; do not create parallel authority f
 - Update this bible only for architecture/ownership/contract changes (not balance tuning).
 
 ## Current Priorities
-1. Expand spawn trigger encounters — wire up `playerZone`, `doorOpen`, and `enemyDeath` triggers for the lobby.
-2. Zombie reintroduction — zombie sentry removed this session; reintroduce when AI + damage pipeline is ready.
+1. Playtest and balance the 10-minute gameplay loop — ammo economy, healing distribution, spider counts, difficulty curve.
+2. Zombie reintroduction — zombie sentry removed; reintroduce when AI + damage pipeline is ready.
 3. Shockwave Phase 2: lightweight debris (cap around 30 active objects).
 4. Enemy pathing follow-up: room-transition portal waypoints + richer local route generation for dense furniture layouts.
 5. Event-driven audio system (subscribed to gameplay events).

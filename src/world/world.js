@@ -744,7 +744,19 @@ export function createWorld(scene, physicsWorld) {
     const centerZ = (DOOR_OPENING_MAX_Z + FRONT_Z) / 2;
     box(WALL_THICK, CEIL, rightWallBackDepth, RIGHT_WALL_X, CEIL / 2, centerZ, M.wall);
   }
-  box(W,   CEIL, 0.2,   0, CEIL / 2, BACK_Z,  M.wall);
+  // Back wall split to create escape door opening (centered at X=0)
+  const ESCAPE_DOOR_MIN_X = -DOOR_WIDTH / 2; // -0.5
+  const ESCAPE_DOOR_MAX_X =  DOOR_WIDTH / 2; //  0.5
+  const backWallLeftW = ESCAPE_DOOR_MIN_X - LEFT_WALL_X;   // 6.5
+  const backWallRightW = RIGHT_WALL_X - ESCAPE_DOOR_MAX_X; // 6.5
+  if (backWallLeftW > 0) {
+    box(backWallLeftW, CEIL, 0.2, (LEFT_WALL_X + ESCAPE_DOOR_MIN_X) / 2, CEIL / 2, BACK_Z, M.wall);
+  }
+  if (backWallRightW > 0) {
+    box(backWallRightW, CEIL, 0.2, (ESCAPE_DOOR_MAX_X + RIGHT_WALL_X) / 2, CEIL / 2, BACK_Z, M.wall);
+  }
+  // Lintel above escape door opening
+  box(DOOR_WIDTH + 0.04, CEIL - DOOR_HEIGHT, 0.2, 0, DOOR_HEIGHT + (CEIL - DOOR_HEIGHT) / 2, BACK_Z, M.wall);
   box(W,   CEIL, 0.2,   0, CEIL / 2, FRONT_Z, M.wall);
   box(W,   0.2,  DEPTH, 0, CEIL + 0.1, 0,     M.ceiling);
 
@@ -786,7 +798,13 @@ export function createWorld(scene, physicsWorld) {
   if (rightWallBackDepth > 0) {
     decor(0.18, 0.20, rightWallBackDepth, 6.91, CEIL - 0.10, (DOOR_OPENING_MAX_Z + FRONT_Z) / 2, M.wainscot);
   }
-  decor(14,   0.20, 0.18,  0, CEIL - 0.10, BACK_Z  + 0.09, M.wainscot); // back
+  // Back crown molding split for escape door opening
+  if (backWallLeftW > 0) {
+    decor(backWallLeftW, 0.20, 0.18, (LEFT_WALL_X + ESCAPE_DOOR_MIN_X) / 2, CEIL - 0.10, BACK_Z + 0.09, M.wainscot);
+  }
+  if (backWallRightW > 0) {
+    decor(backWallRightW, 0.20, 0.18, (ESCAPE_DOOR_MAX_X + RIGHT_WALL_X) / 2, CEIL - 0.10, BACK_Z + 0.09, M.wainscot);
+  }
   decor(14,   0.20, 0.18,  0, CEIL - 0.10, FRONT_Z - 0.09, M.wainscot); // front
 
   // ─── Picture Rail Trim (mid-wall band above sconces) ─────────────────────
@@ -803,7 +821,13 @@ export function createWorld(scene, physicsWorld) {
   if (rightWallBackDepth > 0) {
     decor(0.14, 0.10, rightWallBackDepth, 6.93, PICTURE_RAIL_Y, (DOOR_OPENING_MAX_Z + FRONT_Z) / 2, M.wainscot);
   }
-  decor(14, 0.10, 0.14, 0, PICTURE_RAIL_Y, BACK_Z + 0.07, M.wainscot);
+  // Back picture rail split for escape door opening
+  if (backWallLeftW > 0) {
+    decor(backWallLeftW, 0.10, 0.14, (LEFT_WALL_X + ESCAPE_DOOR_MIN_X) / 2, PICTURE_RAIL_Y, BACK_Z + 0.07, M.wainscot);
+  }
+  if (backWallRightW > 0) {
+    decor(backWallRightW, 0.10, 0.14, (ESCAPE_DOOR_MAX_X + RIGHT_WALL_X) / 2, PICTURE_RAIL_Y, BACK_Z + 0.07, M.wainscot);
+  }
   decor(14, 0.10, 0.14, 0, PICTURE_RAIL_Y, FRONT_Z - 0.07, M.wainscot);
 
   // ─── Down Staircase (entry platform → main floor) ────────────────────────
@@ -1188,16 +1212,7 @@ export function createWorld(scene, physicsWorld) {
     enemies.push(spider);
   }
 
-  // 0.08 m off the inner wall face (surface hover distance)
-  const LEFT_SPIDER_X  = LEFT_WALL_X  + WALL_THICK / 2 + 0.08;  // ≈ -6.82
-  const RIGHT_SPIDER_X = RIGHT_WALL_X - WALL_THICK / 2 - 0.08;  // ≈  6.82
-  const WALL_SPIDER_Y  = 4.0; // height on the wall (out of 5.5 m ceiling)
-
-  for (const z of [2.0, 4.0, 6.0]) {
-    spawnWallSpider(LEFT_SPIDER_X,  WALL_SPIDER_Y, z,  1);  // left wall
-    spawnWallSpider(RIGHT_SPIDER_X, WALL_SPIDER_Y, z, -1);  // right wall
-  }
-
+  // (Wall spiders removed — all enemies are now trigger-spawned for pacing)
 
   // --- Door: lobby <-> offshoot east ---
   const primaryDoorRef = addLinkedDoor({
@@ -1889,6 +1904,49 @@ export function createWorld(scene, physicsWorld) {
     hingeZ: DOOR_HINGE_Z,
     color: 0x5D3A22,
   });
+
+  // ─── Escape Door (back wall, ground level under balcony) ──────────────────
+  // Distinct red-brown color so players notice it's special.
+  addLinkedDoor({
+    id: 'doorEscape',
+    roomA: 'lobby',
+    roomB: 'lobby',          // exits the level — same room for culling purposes
+    hingeX: ESCAPE_DOOR_MIN_X,
+    hingeZ: BACK_Z + WALL_THICK / 2,  // flush with inner wall face
+    hingeRotY: Math.PI / 2,  // back wall runs along X — rotate so door is flush
+    color: 0x8B1A1A,
+  });
+  // Escape door frame trim — sits on the inner wall face
+  const ESCAPE_TRIM_Z = BACK_Z + WALL_THICK / 2 + 0.04;
+  decor(0.06, DOOR_HEIGHT + 0.1, 0.08, 0, DOOR_HEIGHT / 2, ESCAPE_TRIM_Z, M.wainscot);
+  decor(0.08, DOOR_HEIGHT + 0.1, 0.06, ESCAPE_DOOR_MIN_X - 0.02, DOOR_HEIGHT / 2, ESCAPE_TRIM_Z, M.wainscot);
+  decor(0.08, DOOR_HEIGHT + 0.1, 0.06, ESCAPE_DOOR_MAX_X + 0.02, DOOR_HEIGHT / 2, ESCAPE_TRIM_Z, M.wainscot);
+  decor(DOOR_WIDTH + 0.2, 0.08, 0.06, 0, DOOR_HEIGHT + 0.04, ESCAPE_TRIM_Z, M.wainscot);
+
+  // ─── Doorway Bridge Floors ────────────────────────────────────────────────
+  // Thin floor strips that span wall-thickness gaps at every doorway so spider
+  // surface raycasts maintain contact during room-to-room transitions.
+  const BRIDGE_THICK = 0.2;  // match standard floor thickness
+  const BRIDGE_Y     = -0.1; // match floor Y
+
+  // Lobby ↔ SideRoomEast (left wall, Z=2.0–3.0)
+  box(WALL_THICK + 0.3, BRIDGE_THICK, DOOR_WIDTH, LEFT_WALL_X, BRIDGE_Y, DOOR_OPENING_CENTER_Z, M.floor);
+  // Lobby ↔ EastHallway (right wall, Z=2.0–3.0)
+  box(WALL_THICK + 0.3, BRIDGE_THICK, DOOR_WIDTH, RIGHT_WALL_X, BRIDGE_Y, DOOR_OPENING_CENTER_Z, M.floor);
+  // SideRoomEast ↔ SideRoomMid
+  box(WALL_THICK + 0.3, BRIDGE_THICK, DOOR_WIDTH, EAST_MID_PARTITION_X, BRIDGE_Y, DOOR_OPENING_CENTER_Z, M.floor);
+  // SideRoomMid ↔ SideRoomWest
+  box(WALL_THICK + 0.3, BRIDGE_THICK, DOOR_WIDTH, MID_WEST_PARTITION_X, BRIDGE_Y, DOOR_OPENING_CENTER_Z, M.floor);
+  // EastHallway ↔ Reception (north wall at Z=EAST_HALL_MAX_Z)
+  box(DOOR_WIDTH, BRIDGE_THICK, WALL_THICK + 0.3, EAST_DOOR_RECEPTION_X, BRIDGE_Y, EAST_HALL_MAX_Z, M.floor);
+  // EastHallway ↔ Admin (north wall)
+  box(DOOR_WIDTH, BRIDGE_THICK, WALL_THICK + 0.3, EAST_DOOR_ADMIN_X, BRIDGE_Y, EAST_HALL_MAX_Z, M.floor);
+  // EastHallway ↔ Manager (south wall at Z=EAST_HALL_MIN_Z)
+  box(DOOR_WIDTH, BRIDGE_THICK, WALL_THICK + 0.3, EAST_DOOR_MANAGER_X, BRIDGE_Y, EAST_HALL_MIN_Z, M.floor);
+  // EastHallway ↔ Kitchen (south wall)
+  box(DOOR_WIDTH, BRIDGE_THICK, WALL_THICK + 0.3, EAST_DOOR_KITCHEN_X, BRIDGE_Y, EAST_HALL_MIN_Z, M.floor);
+  // EastHallway ↔ Director (east end wall)
+  box(WALL_THICK + 0.3, BRIDGE_THICK, DOOR_WIDTH, EAST_HALL_MAX_X + WALL_THICK / 2, BRIDGE_Y, DOOR_OPENING_CENTER_Z, M.floor);
 
   function setRoomVisibility(roomId, visible) {
     const room = roomMap.get(roomId);

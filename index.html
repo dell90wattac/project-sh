@@ -35,32 +35,89 @@
       font-family: monospace;
       font-size: 18px;
       letter-spacing: 0.2em;
-      cursor: pointer;
-      pointer-events: all;
+      pointer-events: none;
       transition: opacity 1s;
+      z-index: 1000;
     }
     #overlay h1 {
       font-size: 36px;
       color: #fff;
       letter-spacing: 0.5em;
-      margin-bottom: 20px;
+      margin-bottom: 10px;
       text-transform: uppercase;
     }
-    #overlay p {
-      opacity: 0.6;
+    #loading-bar-track {
+      width: min(80vw, 420px);
+      height: 3px;
+      background: rgba(255,255,255,0.07);
+      border-radius: 2px;
+      margin: 28px 0 18px;
+      overflow: hidden;
+      position: relative;
+    }
+    #loading-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: rgba(200,200,200,0.55);
+      border-radius: 2px;
+      transition: width 0.35s ease-out;
+      position: relative;
+    }
+    #loading-bar-fill::after {
+      content: '';
+      position: absolute;
+      top: 0; left: -50%;
+      width: 50%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.45), transparent);
+      animation: bar-shimmer 1.2s ease-in-out infinite;
+    }
+    @keyframes bar-shimmer {
+      0%   { left: -50%; }
+      100% { left: 100%; }
+    }
+    #loading-status {
+      opacity: 0.4;
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+    }
+    #loading-controls {
+      opacity: 0.3;
+      font-size: 12px;
+      letter-spacing: 0.06em;
+      margin-top: 36px;
       text-align: center;
-      line-height: 1.7;
-      letter-spacing: 0.08em;
-      white-space: pre-line;
-      max-width: min(90vw, 760px);
-      padding: 0 14px;
+      line-height: 2.2;
+    }
+    #loading-warning {
+      opacity: 0.25;
+      font-size: 11px;
+      margin-top: 14px;
+    }
+    #start-prompt {
+      font-size: 15px;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      margin-top: 28px;
+      cursor: pointer;
+      animation: prompt-pulse 2s ease-in-out infinite;
+    }
+    @keyframes prompt-pulse {
+      0%, 100% { opacity: 0.35; }
+      50% { opacity: 0.85; }
     }
   </style>
 </head>
 <body>
   <div id="overlay">
     <h1>Project SH</h1>
-    <p>click to begin</p>
+    <div id="loading-bar-track">
+      <div id="loading-bar-fill"></div>
+    </div>
+    <p id="loading-status">initializing</p>
+    <p id="loading-controls">Q inventory · R reload · F flashlight · N debug menu</p>
+    <p id="loading-warning">⚠ mild arachnophobia warning</p>
+    <p id="start-prompt" style="display:none">click to begin</p>
   </div>
   <div id="ui-root">
     <div id="crosshair"></div>

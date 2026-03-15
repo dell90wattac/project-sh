@@ -18,11 +18,11 @@ const SHOCKWAVE_MUZZLE_OFFSET = new THREE.Vector3(0.07, -0.055, -0.33);
 const SUPPORTED_AMMO_TYPES = new Set(HANDGUN_AMMO_ITEM_IDS);
 
 export function createGun(inventory, physicsWorld, camera) {
-  let currentMag = MAG_CAPACITY; // Start with full magazine
+  let currentMag = 0; // Start empty — player must find ammo
   let fireRateCooldown = 0; // Current cooldown timer
   let reloadTimer = 0; // Current reload timer (0 = not reloading)
-  let selectedAmmoItemType = 'ammoHeavy'; // Ammo item selected for the next reload
-  let loadedMagAmmoItemType = selectedAmmoItemType; // Ammo type currently in magazine
+  let selectedAmmoItemType = 'ammo'; // Ammo item selected for the next reload
+  let loadedMagAmmoItemType = 'ammo'; // Ammo type currently in magazine
 
   function isSupportedAmmoItemType(ammoItemType) {
     return SUPPORTED_AMMO_TYPES.has(ammoItemType);
