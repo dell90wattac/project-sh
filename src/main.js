@@ -79,6 +79,12 @@ const physicsWorld = createPhysicsWorld();
 const world = createWorld(scene, physicsWorld);
 const fog = createFog(scene);
 
+// ─── Static Shadow Bake ─────────────────────────────────────────────────────
+// Architectural lights (sconces, wall washers) are static — trigger one shadow
+// render pass so wainscoting/trim shadows are baked at no per-frame cost.
+// The flashlight system (updateFlashlightShadowRefresh) handles dynamic updates.
+renderer.shadowMap.needsUpdate = true;
+
 // ─── Inventory & Gun ───────────────────────────────────────────────────────
 const inventory = createInventory();
 inventory.setEquippedDirect('handgun', 1);
