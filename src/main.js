@@ -23,9 +23,23 @@ import { attachEnemyComponents } from './entities/zombies.js';
 import { createShockwaveSystem } from './systems/shockwave.js';
 import { createShockwaveFx } from './systems/shockwaveFx.js';
 import { getAmmoConfigForItem } from './systems/ammoTypes.js';
+import { createGunshotAudio } from './systems/gunshotAudio.js';
+import { createItemClackAudio } from './systems/itemClackAudio.js';
 import { createSpawnTriggers } from './systems/spawnTriggers.js';
 
 const BUILD_VERSION = '22.7';
+const AUDIO_DEBUG = (() => {
+  try {
+    if (typeof window === 'undefined') return false;
+    const enabledByQuery = new URLSearchParams(window.location.search).get('audioDebug') === '1';
+    const enabledByGlobal = window.__AUDIO_DEBUG__ === true;
+    const enabled = enabledByQuery || enabledByGlobal;
+    window.__AUDIO_DEBUG__ = enabled;
+    return enabled;
+  } catch {
+    return false;
+  }
+})();
 
 const SPIDER_DEBUG = (() => {
   try {
@@ -534,6 +548,18 @@ const chandelierMotion = createChandelierMotionSystem(lobbyChandeliers, {
 // ─── Shockwave System ──────────────────────────────────────────────────────
 const shockwave = createShockwaveSystem();
 const shockwaveFx = createShockwaveFx(scene);
+const gunshotAudio = createGunshotAudio();
+const itemClackAudio = createItemClackAudio(() => camera.position, {
+  debug: AUDIO_DEBUG,
+});
+
+if (AUDIO_DEBUG && typeof window !== 'undefined') {
+  window.__CLACK_DEBUG__ = {
+    ping: (reason = 'manual') => itemClackAudio.playDebugPing(reason),
+    snapshot: () => itemClackAudio.getDebugSnapshot(),
+  };
+  console.log('[ClackDBG] enabled (?audioDebug=1). Use __CLACK_DEBUG__.ping() and __CLACK_DEBUG__.snapshot()');
+}
 
 // Register doors as shockwave targets
 const _doorPivotPos = new THREE.Vector3();
@@ -788,6 +814,132 @@ const spawnTriggers = createSpawnTriggers({
   onEnemySpawned: (spider) => registerEnemyWithShockwave(spider),
 });
 
+const DEBUG_LOBBY_BACK_SPAWNS = [
+  { x: -4.8, y: 0.1, z: -11.4, aiOptions: { homeZone: 'lobby', aggroDepth: 99 } },
+  { x: -3.2, y: 0.1, z: -11.8, aiOptions: { homeZone: 'lobby', aggroDepth: 99 } },
+  { x: -1.6, y: 0.1, z: -10.9, aiOptions: { homeZone: 'lobby', aggroDepth: 99 } },
+  { x: 1.6, y: 0.1, z: -10.9, aiOptions: { homeZone: 'lobby', aggroDepth: 99 } },
+  { x: 3.2, y: 0.1, z: -11.8, aiOptions: { homeZone: 'lobby', aggroDepth: 99 } },
+  { x: 4.8, y: 0.1, z: -11.4, aiOptions: { homeZone: 'lobby', aggroDepth: 99 } },
+  { x: -4.2, y: 0.1, z: -9.8, aiOptions: { homeZone: 'lobby', aggroDepth: 99 } },
+  { x: -2.1, y: 0.1, z: -9.4, aiOptions: { homeZone: 'lobby', aggroDepth: 99 } },
+  { x: 2.1, y: 0.1, z: -9.4, aiOptions: { homeZone: 'lobby', aggroDepth: 99 } },
+  { x: 4.2, y: 0.1, z: -9.8, aiOptions: { homeZone: 'lobby', aggroDepth: 99 } },
+];
+
+function debugSpawnLobbySpiders() {
+  const spawned = spawnTriggers.spawnSpiders(DEBUG_LOBBY_BACK_SPAWNS);
+  showActionLabel(`SPAWNED ${spawned.length} SPIDERS`);
+}
+
+function debugAddAmmoStacks() {
+  const regularBefore = inventory.getItemCount('ammo');
+  const heavyBefore = inventory.getItemCount('ammoHeavy');
+
+  inventory.addItem('ammo', 27);
+  inventory.addItem('ammoHeavy', 27);
+
+  const regularAdded = inventory.getItemCount('ammo') - regularBefore;
+  const heavyAdded = inventory.getItemCount('ammoHeavy') - heavyBefore;
+
+  if (regularAdded <= 0 && heavyAdded <= 0) {
+    showActionLabel('NO INVENTORY SPACE');
+    return;
+  }
+
+  showActionLabel(`AMMO +${regularAdded} / HEAVY +${heavyAdded}`);
+}
+
+function debugUnlockAllDoors() {
+  let unlockedCount = 0;
+
+  for (const doorEntry of doorSystems) {
+    if (doorEntry.system?.setInteractionEnabled) {
+      doorEntry.system.setInteractionEnabled(true);
+    }
+
+    const lock = doorEntry.lock;
+    if (!lock || !lock.isLocked || !lock.isLocked()) continue;
+    if (lock.unlock({ notify: false })) {
+      unlockedCount += 1;
+    }
+  }
+
+  showActionLabel(unlockedCount > 0 ? `UNLOCKED ${unlockedCount} DOORS` : 'ALL DOORS ALREADY UNLOCKED');
+}
+
+function debugKillAllSpiders() {
+  const livingSpiders = world.getEnemies().filter(enemy => (
+    enemy?.type === 'spider' && enemy.components?.health && !enemy.components.health.dead
+  ));
+
+  if (livingSpiders.length === 0) {
+    showActionLabel('NO SPIDERS ACTIVE');
+    return;
+  }
+
+  const livingSpiderSet = new Set(livingSpiders);
+  for (const trigger of spawnTriggers.getTriggers()) {
+    if (trigger.type === 'enemyDeath' && livingSpiderSet.has(trigger.watchEnemy)) {
+      trigger.enabled = false;
+      trigger._fired = true;
+      trigger._prevEnemyDead = true;
+    }
+  }
+
+  for (const spider of livingSpiders) {
+    const health = spider.components.health;
+    health.current = 0;
+    health.dead = true;
+
+    const knockback = spider.components.knockback;
+    if (knockback) {
+      knockback.active = false;
+      knockback.velocity.set(0, 0, 0);
+    }
+
+    const surface = spider.components.surface;
+    if (surface) {
+      surface.airborne = false;
+      surface.airborneTimer = 0;
+    }
+
+    const combat = spider.components.spiderCombat;
+    if (combat) {
+      combat.impactArmed = false;
+      combat.lastPlayerHitTime = -Infinity;
+    }
+
+    const pathing = spider.components.pathing;
+    if (pathing?.desiredVelocity) {
+      pathing.desiredVelocity.set(0, 0, 0);
+    }
+
+    if (spider.state) {
+      spider.state._deathTimer = undefined;
+      spider.state._deathStartY = undefined;
+    }
+  }
+
+  showActionLabel(`KILLED ${livingSpiders.length} SPIDERS`);
+}
+
+function debugSet60FpsCapEnabled(enabled) {
+  debug60FpsCapEnabled = !!enabled;
+  cappedFrameAccumulatorMs = 0;
+  lastFrameSampleMs = performance.now();
+  showActionLabel(debug60FpsCapEnabled ? '60 FPS CAP ON' : '60 FPS CAP OFF');
+}
+
+debugMenuUI.setBindings({
+  spawnLobbySpiders: debugSpawnLobbySpiders,
+  addAmmoStacks: debugAddAmmoStacks,
+  unlockAllDoors: debugUnlockAllDoors,
+  killAllSpiders: debugKillAllSpiders,
+  get60FpsCapEnabled: () => debug60FpsCapEnabled,
+  set60FpsCapEnabled: debugSet60FpsCapEnabled,
+});
+
 // ─── Gameplay Loop: Spawn Trigger Definitions ──────────────────────────────
 
 // D1: First Encounter — enter east hallway (4 ceiling spiders)
@@ -1029,6 +1181,8 @@ function resetGame() {
   playerHealth.reset();
   damageEffects.reset();
   shockwaveFx.clear();
+  gunshotAudio.clear();
+  itemClackAudio.clear();
   player.resetPosition();
   for (const key in hazardTimers) hazardTimers[key] = 0;
   enemyRuntime.reset();
@@ -1167,9 +1321,11 @@ function beginGameplay() {
   if (!overlay) return;
 
   isStartupLoading = false;
+  gunshotAudio.unlock();
+  itemClackAudio.unlock();
 
-  // Drain accumulated clock time so the first real frame gets a clean dt.
-  clock.getDelta();
+  lastFrameSampleMs = performance.now();
+  cappedFrameAccumulatorMs = 0;
 
   try {
     player.lock();
@@ -1193,7 +1349,10 @@ if (overlay) {
 }
 
 // ─── Clock & Loop ──────────────────────────────────────────────────────────
-const clock = new THREE.Clock();
+const DEBUG_FPS_CAP_60_INTERVAL_MS = 1000 / 60;
+let debug60FpsCapEnabled = false;
+let lastFrameSampleMs = performance.now();
+let cappedFrameAccumulatorMs = 0;
 
 const shadowCameraPosRef = new THREE.Vector3();
 const shadowCameraQuatRef = new THREE.Quaternion();
@@ -1271,9 +1430,53 @@ window.addEventListener('keydown', e => {
   }
 });
 
-function loop() {
+function handleImmediateActionInput(menuOpen) {
+  if (menuOpen) return;
+
+  if (player.keys['KeyR']) {
+    gun.reload();
+  }
+
+  if (player.keys['MouseLeft']) {
+    const fireResult = gun.fire();
+    if (fireResult.success) {
+      const ammoConfig = getAmmoConfigForItem(fireResult.ammoItemType);
+      const shockResult = shockwave.fire(
+        fireResult.shockwaveOrigin,
+        fireResult.shockwaveDirection,
+        ammoConfig,
+      );
+      shockwaveFx.spawnMuzzleWave(
+        fireResult.shockwaveOrigin,
+        fireResult.shockwaveDirection,
+        ammoConfig,
+        fireResult.hitInfo,
+      );
+      gunshotAudio.playShot(ammoConfig);
+      itemClackAudio.triggerFromShockwave(shockResult.hits, fireResult.shockwaveOrigin);
+    }
+  }
+}
+
+function loop(frameTimeMs = performance.now()) {
   requestAnimationFrame(loop);
-  const dt = Math.min(clock.getDelta(), 0.05);
+
+  const rawDtMs = Math.max(0, frameTimeMs - lastFrameSampleMs);
+  lastFrameSampleMs = frameTimeMs;
+
+  let dt = rawDtMs / 1000;
+  if (debug60FpsCapEnabled) {
+    cappedFrameAccumulatorMs += rawDtMs;
+    if (cappedFrameAccumulatorMs + 0.1 < DEBUG_FPS_CAP_60_INTERVAL_MS) {
+      return;
+    }
+    dt = cappedFrameAccumulatorMs / 1000;
+    cappedFrameAccumulatorMs = Math.max(0, cappedFrameAccumulatorMs - DEBUG_FPS_CAP_60_INTERVAL_MS);
+  } else {
+    cappedFrameAccumulatorMs = 0;
+  }
+
+  dt = Math.min(dt, 0.05);
 
   const noclipActive = !!(player.isNoclipEnabled && player.isNoclipEnabled());
   if (noclipActive !== lastNoclipState) {
@@ -1311,6 +1514,7 @@ function loop() {
   }
 
   const dead = playerHealth.isDead();
+  const menuOpen = inventoryUI.isOpen() || debugMenuUI.isOpen();
 
   if (!dead) gun.update(dt);
 
@@ -1319,6 +1523,15 @@ function loop() {
     muzzleShadowBurstTimer = 0.18;
   } else if (muzzleShadowBurstTimer > 0) {
     muzzleShadowBurstTimer = Math.max(0, muzzleShadowBurstTimer - dt);
+  }
+
+  // Freeze camera rotation while a menu is open.
+  if (menuOpen && savedCameraQuaternion) {
+    camera.quaternion.copy(savedCameraQuaternion);
+  }
+
+  if (!dead) {
+    handleImmediateActionInput(menuOpen);
   }
 
   stepPhysics(physicsWorld, dt);
@@ -1346,13 +1559,6 @@ function loop() {
 
   roomCulling.update();
 
-  const menuOpen = inventoryUI.isOpen() || debugMenuUI.isOpen();
-
-  // Freeze camera rotation while a menu is open
-  if (menuOpen && savedCameraQuaternion) {
-    camera.quaternion.copy(savedCameraQuaternion);
-  }
-
   // ─── Input ──────────────────────────────────────────────────────────────
   if (!dead) {
     // E key: pickup item
@@ -1363,26 +1569,6 @@ function loop() {
       }
     }
     lastEKeyState = eKeyPressed;
-
-    // Gun reload (R key)
-    if (player.keys['KeyR'] && !menuOpen) {
-      gun.reload();
-    }
-
-    // Gun fire (left-click) — triggers shockwave
-    if (player.keys['MouseLeft'] && !menuOpen) {
-      const fireResult = gun.fire();
-      if (fireResult.success) {
-        const ammoConfig = getAmmoConfigForItem(fireResult.ammoItemType);
-        shockwave.fire(fireResult.shockwaveOrigin, fireResult.shockwaveDirection, ammoConfig);
-        shockwaveFx.spawnMuzzleWave(
-          fireResult.shockwaveOrigin,
-          fireResult.shockwaveDirection,
-          ammoConfig,
-          fireResult.hitInfo,
-        );
-      }
-    }
   }
 
   // ─── Hazard tick damage ─────────────────────────────────────────────────
@@ -1408,6 +1594,7 @@ function loop() {
 
   const roomStats = roomCulling.getStats();
   perfOverlay.update(dt, {
+    fpsCapEnabled: debug60FpsCapEnabled,
     currentRoomId: roomStats.currentRoomId,
     currentRoomLabel: roomStats.currentRoomLabel,
     currentZone: roomStats.currentZone,

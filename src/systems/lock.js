@@ -45,10 +45,10 @@ export function createLock({
     return Math.abs(dy) <= verticalTolerance;
   }
 
-  function unlock() {
+  function unlock(options = {}) {
     if (!locked) return false;
     locked = false;
-    if (typeof onUnlock === 'function') {
+    if (options.notify !== false && typeof onUnlock === 'function') {
       onUnlock({ id, requiredKeyId, requiredItemType, position: lockPosition.clone() });
     }
     return true;

@@ -65,6 +65,15 @@ export function createSpawnTriggers({ world, enemyAI, player, doorSystems, onEne
     return spider;
   }
 
+  function spawnSpiders(spawnDefs = [], onSpawn = null) {
+    const spawnedEnemies = [];
+    for (const spawnDef of spawnDefs) {
+      spawnedEnemies.push(spawnSpider(spawnDef));
+    }
+    if (typeof onSpawn === 'function') onSpawn(spawnedEnemies);
+    return spawnedEnemies;
+  }
+
   // ── Public: evaluate all triggers each frame ──────────────────────────────
   function update(dt) {
     const playerPos  = player.getPosition();
@@ -106,11 +115,7 @@ export function createSpawnTriggers({ world, enemyAI, player, doorSystems, onEne
           pendingBatches.push({ spawns: batch, delay, elapsed: 0, onSpawn: t.onSpawn });
         }
       } else {
-        const spawnedEnemies = [];
-        for (const spawnDef of t.spawns) {
-          spawnedEnemies.push(spawnSpider(spawnDef));
-        }
-        if (t.onSpawn) t.onSpawn(spawnedEnemies);
+        spawnSpiders(t.spawns, t.onSpawn);
       }
 
       if (t.oneShot) t._fired = true;
@@ -124,11 +129,7 @@ export function createSpawnTriggers({ world, enemyAI, player, doorSystems, onEne
         const batch = pendingBatches[i];
         batch.elapsed += frameDt;
         if (batch.elapsed >= batch.delay) {
-          const spawnedEnemies = [];
-          for (const spawnDef of batch.spawns) {
-            spawnedEnemies.push(spawnSpider(spawnDef));
-          }
-          if (batch.onSpawn) batch.onSpawn(spawnedEnemies);
+          spawnSpiders(batch.spawns, batch.onSpawn);
           pendingBatches.splice(i, 1);
         }
       }
@@ -146,5 +147,5 @@ export function createSpawnTriggers({ world, enemyAI, player, doorSystems, onEne
     pendingBatches.length = 0;
   }
 
-  return { addTrigger, update, reset, getTriggers: () => triggers };
+  return { addTrigger, update, reset, getTriggers: () => triggers, spawnSpiders };
 }

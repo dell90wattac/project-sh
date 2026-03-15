@@ -47,6 +47,7 @@ export function createPerfOverlay(options = {}) {
     const fps = smoothedMs > 0 ? (1000 / smoothedMs) : 0;
     const lines = [
       `fps ${fps.toFixed(1)}  ms ${smoothedMs.toFixed(2)}`,
+      `cap ${stats.fpsCapEnabled ? '60' : 'off'}`,
       `rooms ${stats.visibleRooms ?? '-'} / ${stats.totalRooms ?? '-'}`,
       `vis queue ${stats.pendingVisibilityChanges ?? 0}`,
       `mesh ops ${stats.meshOpsPerFrame ?? '-'}`,

@@ -10,6 +10,9 @@
 export const AMMO_TYPES = {
   standard: {
     label: 'Standard',
+    audioProfileKey: 'standard',
+    audioGain: 0.18,
+    audioPitchJitter: 0.03,
     shape: 'cone',
     radius: 5.75,                     // max reach (meters)
     coneHalfAngle: (52 * Math.PI) / 180, // 52° half-angle
@@ -39,6 +42,9 @@ export const AMMO_TYPES = {
   },
   heavyHandgun: {
     label: 'Heavy Handgun',
+    audioProfileKey: 'heavyHandgun',
+    audioGain: 0.23,
+    audioPitchJitter: 0.02,
     shape: 'cone',
     // 3x depth and widened cone so heavy rounds cover camera-edge targets.
     radius: 17.25,

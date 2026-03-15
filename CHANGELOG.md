@@ -86,6 +86,47 @@ All notable changes to Project SH are documented here.
 
 ---
 
+## [Session 29] — 2026-03-14
+
+### Added
+- **Procedural weapon audio systems** (`src/systems/audioShared.js`, `src/systems/gunshotAudio.js`, `src/systems/itemClackAudio.js`, `src/main.js`, `src/systems/ammoTypes.js`)
+  - Added shared Web Audio context helper (`audioShared.js`) with lazy initialization and gesture resume support.
+  - Added procedural gunshot synthesis with ammo-profile tuning (`standard` vs `heavyHandgun`).
+  - Added shockwave-driven environmental clack synthesis path using shockwave hit metadata.
+  - Added ammo audio tuning fields in `AMMO_TYPES`: `audioProfileKey`, `audioGain`, `audioPitchJitter`.
+
+- **Clack debug mode** (`src/main.js`, `src/systems/itemClackAudio.js`)
+  - `?audioDebug=1` enables clack diagnostics.
+  - Exposes `window.__CLACK_DEBUG__.ping()` and `window.__CLACK_DEBUG__.snapshot()` for in-browser verification.
+  - Debug counters include trigger calls, eligible hit counts, queued requests, scheduled taps, fallback calls, and context state.
+
+### Changed
+- **Shockwave return payload expanded** (`src/systems/shockwave.js`)
+  - `fire(...)` now returns `{ hitCount, hits }` instead of only `hitCount`.
+  - Each hit includes `type`, `targetRef`, `position`, `distance`, `magnitude`, `falloff`, and `forceMult` for downstream audio/effects.
+
+- **Shockwave clack targeting policy** (`src/systems/itemClackAudio.js`)
+  - Moved from nearest-5 clack selection to all eligible affected targets (sorted by distance).
+  - Eligible types are environmental-only: `shakeable`, `chandelier`, `door` (enemies excluded).
+  - Tail taps are limited to an early subset (`FOLLOWUP_TAIL_ITEMS`) to avoid runaway layering at high hit counts.
+
+- **Gunshot and clack tuning pass** (`src/systems/gunshotAudio.js`, `src/systems/itemClackAudio.js`)
+  - Added extra crunch transient + soft saturation shaping to gunshots.
+  - Increased clack audibility with stronger body, longer decay, higher clack bus ceiling, minimum bus scale guard, and stronger wall fallback clatter.
+  - Delayed first clack tap slightly to reduce masking by muzzle transient.
+
+### Fixed
+- **Clack fallback path not executing** (`src/systems/itemClackAudio.js`)
+  - Removed early-return condition that prevented fallback wall clatter from running when no eligible targets remained.
+
+- **Potential stereo panner compatibility issue** (`src/systems/itemClackAudio.js`)
+  - Added panner-node fallback when `createStereoPanner` is unavailable.
+
+- **Audio reset lifecycle** (`src/main.js`)
+  - Added `gunshotAudio.clear()` and `itemClackAudio.clear()` in `resetGame()` to avoid stale active voices after reset.
+
+---
+
 ## [Session 27] — 2026-03-14
 
 ### Added

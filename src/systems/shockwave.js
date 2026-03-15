@@ -49,6 +49,7 @@ export function createShockwaveSystem() {
     const { radius, force, damage, falloffExponent, shape, coneHalfAngle, splashForceMult } = ammoConfig;
     const cosHalfAngle = Math.cos(coneHalfAngle || 0);
     let hitCount = 0;
+    const hits = [];
 
     for (let i = 0; i < targets.length; i++) {
       const target = targets[i];
@@ -95,6 +96,15 @@ export function createShockwaveSystem() {
         forceMult,
       });
       hitCount++;
+      hits.push({
+        type: target.type,
+        targetRef: target,
+        position: new THREE.Vector3(targetPos.x, targetPos.y, targetPos.z),
+        distance: dist,
+        magnitude,
+        falloff,
+        forceMult,
+      });
 
       // Apply damage to damageable targets
       if (target.takeDamage) {
@@ -105,7 +115,7 @@ export function createShockwaveSystem() {
       }
     }
 
-    return hitCount;
+    return { hitCount, hits };
   }
 
   // ─── Furniture Shake (Canned Rattle) ────────────────────────────────────

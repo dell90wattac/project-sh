@@ -12,6 +12,12 @@ export function createDebugMenuUI(bindings = {}) {
   let setInvincibleEnabled = bindings.setInvincibleEnabled || (() => {});
   let getLeaveHitboxEnabled = bindings.getLeaveHitboxEnabled || (() => false);
   let setLeaveHitboxEnabled = bindings.setLeaveHitboxEnabled || (() => {});
+  let spawnLobbySpiders = bindings.spawnLobbySpiders || (() => {});
+  let addAmmoStacks = bindings.addAmmoStacks || (() => {});
+  let unlockAllDoors = bindings.unlockAllDoors || (() => {});
+  let killAllSpiders = bindings.killAllSpiders || (() => {});
+  let get60FpsCapEnabled = bindings.get60FpsCapEnabled || (() => false);
+  let set60FpsCapEnabled = bindings.set60FpsCapEnabled || (() => {});
 
   const uiRoot = document.getElementById('ui-root') || document.body;
   const container = document.createElement('div');
@@ -52,7 +58,8 @@ export function createDebugMenuUI(bindings = {}) {
   `;
   panel.appendChild(title);
 
-  function makeRow(label, hotkey) {
+  function makeRow(label, hotkey, options = {}) {
+    const indicatorText = options.indicatorText || '[ ]';
     const row = document.createElement('button');
     row.type = 'button';
     row.style.cssText = `
@@ -73,7 +80,7 @@ export function createDebugMenuUI(bindings = {}) {
     const left = document.createElement('div');
     left.style.cssText = `display: flex; align-items: center; gap: 10px;`;
     const check = document.createElement('span');
-    check.textContent = '[ ]';
+    check.textContent = indicatorText;
     check.style.cssText = `width: 32px; text-align: left; font-weight: 800;`;
     const text = document.createElement('span');
     text.textContent = label;
@@ -94,9 +101,19 @@ export function createDebugMenuUI(bindings = {}) {
   const noclipRow = makeRow('NO CLIP', '1');
   const invRow = makeRow('PLAYER INVINCIBLE', '2');
   const leaveHitboxRow = makeRow('LEAVE HITBOX (ENEMY TARGET LOCK, AI ONLY)', '3');
+  const spawnSpidersRow = makeRow('SPAWN 10 SPIDERS (LOBBY BACK)', '4', { indicatorText: '[>]' });
+  const addAmmoRow = makeRow('ADD AMMO STACKS', '5', { indicatorText: '[>]' });
+  const unlockDoorsRow = makeRow('UNLOCK ALL DOORS', '6', { indicatorText: '[>]' });
+  const killSpidersRow = makeRow('KILL ALL SPIDERS', '7', { indicatorText: '[>]' });
+  const fpsCapRow = makeRow('60 FPS CAP', '8');
   panel.appendChild(noclipRow.row);
   panel.appendChild(invRow.row);
   panel.appendChild(leaveHitboxRow.row);
+  panel.appendChild(spawnSpidersRow.row);
+  panel.appendChild(addAmmoRow.row);
+  panel.appendChild(unlockDoorsRow.row);
+  panel.appendChild(killSpidersRow.row);
+  panel.appendChild(fpsCapRow.row);
 
   const hint = document.createElement('div');
   hint.textContent = 'ESC CLOSE';
@@ -107,9 +124,11 @@ export function createDebugMenuUI(bindings = {}) {
     const noclipOn = !!getNoclipEnabled();
     const invOn = !!getInvincibleEnabled();
     const leaveOn = !!getLeaveHitboxEnabled();
+    const fpsCapOn = !!get60FpsCapEnabled();
     noclipRow.check.textContent = noclipOn ? '[X]' : '[ ]';
     invRow.check.textContent = invOn ? '[X]' : '[ ]';
     leaveHitboxRow.check.textContent = leaveOn ? '[X]' : '[ ]';
+    fpsCapRow.check.textContent = fpsCapOn ? '[X]' : '[ ]';
   }
 
   function setOpen(next) {
@@ -133,6 +152,23 @@ export function createDebugMenuUI(bindings = {}) {
   leaveHitboxRow.row.addEventListener('click', () => {
     const next = !getLeaveHitboxEnabled();
     setLeaveHitboxEnabled(!!next);
+    refresh();
+  });
+  spawnSpidersRow.row.addEventListener('click', () => {
+    spawnLobbySpiders();
+  });
+  addAmmoRow.row.addEventListener('click', () => {
+    addAmmoStacks();
+  });
+  unlockDoorsRow.row.addEventListener('click', () => {
+    unlockAllDoors();
+  });
+  killSpidersRow.row.addEventListener('click', () => {
+    killAllSpiders();
+  });
+  fpsCapRow.row.addEventListener('click', () => {
+    const next = !get60FpsCapEnabled();
+    set60FpsCapEnabled(!!next);
     refresh();
   });
 
@@ -162,6 +198,33 @@ export function createDebugMenuUI(bindings = {}) {
       const next = !getLeaveHitboxEnabled();
       setLeaveHitboxEnabled(!!next);
       refresh();
+      return;
+    }
+    if (e.code === 'Digit4') {
+      e.preventDefault();
+      spawnLobbySpiders();
+      return;
+    }
+    if (e.code === 'Digit5') {
+      e.preventDefault();
+      addAmmoStacks();
+      return;
+    }
+    if (e.code === 'Digit6') {
+      e.preventDefault();
+      unlockAllDoors();
+      return;
+    }
+    if (e.code === 'Digit7') {
+      e.preventDefault();
+      killAllSpiders();
+      return;
+    }
+    if (e.code === 'Digit8') {
+      e.preventDefault();
+      const next = !get60FpsCapEnabled();
+      set60FpsCapEnabled(!!next);
+      refresh();
     }
   }
   window.addEventListener('keydown', onKeyDown);
@@ -186,6 +249,12 @@ export function createDebugMenuUI(bindings = {}) {
       if (typeof nextBindings.setInvincibleEnabled === 'function') setInvincibleEnabled = nextBindings.setInvincibleEnabled;
       if (typeof nextBindings.getLeaveHitboxEnabled === 'function') getLeaveHitboxEnabled = nextBindings.getLeaveHitboxEnabled;
       if (typeof nextBindings.setLeaveHitboxEnabled === 'function') setLeaveHitboxEnabled = nextBindings.setLeaveHitboxEnabled;
+      if (typeof nextBindings.spawnLobbySpiders === 'function') spawnLobbySpiders = nextBindings.spawnLobbySpiders;
+      if (typeof nextBindings.addAmmoStacks === 'function') addAmmoStacks = nextBindings.addAmmoStacks;
+      if (typeof nextBindings.unlockAllDoors === 'function') unlockAllDoors = nextBindings.unlockAllDoors;
+      if (typeof nextBindings.killAllSpiders === 'function') killAllSpiders = nextBindings.killAllSpiders;
+      if (typeof nextBindings.get60FpsCapEnabled === 'function') get60FpsCapEnabled = nextBindings.get60FpsCapEnabled;
+      if (typeof nextBindings.set60FpsCapEnabled === 'function') set60FpsCapEnabled = nextBindings.set60FpsCapEnabled;
       refresh();
     },
   };

@@ -20,6 +20,9 @@ Goal: preserve one coherent system architecture as content scales.
 - Inventory and item definitions: `src/systems/inventory.js`, `src/systems/itemRegistry.js`
 - World pickup lifecycle: `src/systems/worldItems.js`
 - Weapons and firing state: `src/systems/weapons.js`
+- Shared runtime audio context and master gain: `src/systems/audioShared.js`
+- Procedural gunshot playback: `src/systems/gunshotAudio.js`
+- Shockwave clack playback and diagnostics: `src/systems/itemClackAudio.js`
 - Shockwave gameplay force/damage orchestration: `src/systems/shockwave.js`
 - Shockwave visuals only: `src/systems/shockwaveFx.js`
 - Ammo tuning source of truth: `src/systems/ammoTypes.js`
@@ -39,7 +42,9 @@ Rule: extend the existing owner system first; do not create parallel authority f
 - Locks are key-driven (`key:<id>`) and entity-agnostic. Per-lock `consumeKey` flag controls whether the key item is removed from inventory on unlock.
 - Doors support world-rotated placement and expose `applyExternalTorque(...)` for non-player forces. Doors on X-running walls require `hingeRotY: Math.PI / 2` (or `-Math.PI / 2`); doors on Z-running walls use default `hingeRotY: 0`.
 - Shockwave uses decoupled target registration (`registerTarget`); target systems own their response behavior.
+- Shockwave `fire(...)` returns `{ hitCount, hits }`; downstream systems may consume `hits` metadata but must not mutate target ownership/state outside their authority.
 - Ammo profiles are data-driven; tune shockwave behavior in `ammoTypes.js` only.
+- Ammo audio tuning (`audioProfileKey`, `audioGain`, `audioPitchJitter`) is profile-driven in `ammoTypes.js`; do not hardcode ammo audio routing in the main loop.
 - Weapons enforce one ammo type per loaded magazine.
 - Enemy component keys remain stable: `visual`, `animation`, `pathing`, `controller`, `collision`, `health`, `knockback`.
 - Dynamically spawned enemies must go through `world.addEnemy(entity, halfExtents, footOffsetY)` — this registers the mesh, creates the AABB collider with `_enemyCollider = true`, and pushes to the live `enemies` array. `enemyRuntime` picks them up automatically the next frame.
@@ -61,6 +66,7 @@ Rule: extend the existing owner system first; do not create parallel authority f
 - Camera is parented to player body; use `camera.getWorldPosition()` / `camera.getWorldDirection()` for world-space weapon math.
 - Dynamic shadows are budgeted runtime behavior, not default-everywhere visuals.
 - Debug menu: `N` opens a lightweight debug menu UI (`src/ui/debugMenu.js`) with toggles for `NO CLIP`, `PLAYER INVINCIBLE` (`playerHealth.setInvincible(true)`), and `LEAVE HITBOX` (enemy targeting lock, AI-only). Gameplay inputs are blocked while inventory or debug menu is open.
+- Audio debug mode: `?audioDebug=1` enables clack diagnostics and registers `window.__CLACK_DEBUG__` helpers (`ping`, `snapshot`) for runtime verification.
 - Spider perf: spider runtime uses distance-based update throttling (LOD) to reduce raycast cost for far-away spiders; shockwave airborne/knockback paths always run full updates (`src/systems/enemyRuntime.js`).
 
 ## Fast Change Chains
@@ -132,5 +138,5 @@ Rule: extend the existing owner system first; do not create parallel authority f
 2. Zombie reintroduction — zombie sentry removed; reintroduce when AI + damage pipeline is ready.
 3. Shockwave Phase 2: lightweight debris (cap around 30 active objects).
 4. Enemy pathing follow-up: room-transition portal waypoints + richer local route generation for dense furniture layouts.
-5. Event-driven audio system (subscribed to gameplay events).
+5. Expand audio event coverage (impact/hit/ambient layers) using the existing procedural audio pipeline.
 6. If scaling to large room counts, evaluate `THREE.Layers` culling or static-merge strategies before `visible` toggling.
