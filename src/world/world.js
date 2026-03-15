@@ -185,6 +185,49 @@ export function createWorld(scene, physicsWorld) {
     ceramic:    new THREE.MeshStandardMaterial({ color: 0xF0EEE8, roughness: 0.4 }),
   };
 
+  // ─── Wall Y-Gradient Shader ──────────────────────────────────────────────
+  // Inject a GLSL fragment hook that darkens walls near the floor and near the
+  // ceiling, with the brightest band around sconce/eye height. Pure math —
+  // no texture sample — preserves the flat art style while adding depth.
+  function applyWallGradient(material, { floorDark = 0.40, ceilDark = 0.20, wallH = 5.5 } = {}) {
+    material.onBeforeCompile = (shader) => {
+      shader.uniforms.uWallH      = { value: wallH };
+      shader.uniforms.uFloorDark  = { value: floorDark };
+      shader.uniforms.uCeilDark   = { value: ceilDark };
+
+      // Pass world-space Y from vertex shader
+      shader.vertexShader = shader.vertexShader
+        .replace('void main() {', 'varying float vWorldY;\nvoid main() {')
+        .replace(
+          '#include <worldpos_vertex>',
+          '#include <worldpos_vertex>\nvWorldY = worldPosition.y;'
+        );
+
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          'void main() {',
+          'varying float vWorldY;\nuniform float uWallH;\nuniform float uFloorDark;\nuniform float uCeilDark;\nvoid main() {'
+        )
+        .replace(
+          '#include <dithering_fragment>',
+          `#include <dithering_fragment>
+  {
+    float ny = clamp(vWorldY / uWallH, 0.0, 1.0);
+    // Floor darkening: peaks at y=0, fades by y=0.35
+    float floorShadow = uFloorDark * (1.0 - smoothstep(0.0, 0.38, ny));
+    // Ceiling darkening: builds above y=0.72
+    float ceilShadow  = uCeilDark  * smoothstep(0.72, 1.0, ny);
+    gl_FragColor.rgb *= (1.0 - floorShadow - ceilShadow);
+  }`
+        );
+    };
+    material.needsUpdate = true;
+  }
+
+  applyWallGradient(M.wall,    { floorDark: 0.40, ceilDark: 0.20 });
+  applyWallGradient(M.wainscot,{ floorDark: 0.25, ceilDark: 0.10 });
+  applyWallGradient(M.ceiling, { floorDark: 0.12, ceilDark: 0.0, wallH: 5.5 });
+
   function box(w, h, d, x, y, z, mat, options = {}) {
     const mesh = registerObject(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat));
     mesh.position.set(x, y, z);
@@ -1005,17 +1048,31 @@ export function createWorld(scene, physicsWorld) {
     // Left wall
     decor(0.22, 0.08, 0.32, -6.85, 2.5, sz, M.lamp);           // bracket
     decor(0.28, 0.22, 0.28, -6.68, 2.58, sz, M.lampShade);     // shade
-    const sl = new THREE.PointLight(0xFFE0A0, 1.2, 6);
-    sl.position.set(-6.1, 2.5, sz);
+    const sl = new THREE.SpotLight(0xFFE0A0, 2.2, 10, Math.PI / 3.2, 0.45, 1.8);
+    sl.position.set(-6.4, 2.5, sz);
+    sl.target.position.set(0, 1.0, sz);
+    sl.castShadow = true;
+    sl.shadow.mapSize.set(512, 512);
+    sl.shadow.bias = -0.002;
+    sl.shadow.camera.near = 0.1;
+    sl.shadow.camera.far = 12;
     registerLight(sl);
+    scene.add(sl.target);
   }
   for (const sz of rightSconceZPositions) {
     // Right wall
     decor(0.22, 0.08, 0.32, 6.85, 2.5, sz, M.lamp);
     decor(0.28, 0.22, 0.28, 6.68, 2.58, sz, M.lampShade);
-    const sr = new THREE.PointLight(0xFFE0A0, 1.2, 6);
-    sr.position.set(6.1, 2.5, sz);
+    const sr = new THREE.SpotLight(0xFFE0A0, 2.2, 10, Math.PI / 3.2, 0.45, 1.8);
+    sr.position.set(6.4, 2.5, sz);
+    sr.target.position.set(0, 1.0, sz);
+    sr.castShadow = true;
+    sr.shadow.mapSize.set(512, 512);
+    sr.shadow.bias = -0.002;
+    sr.shadow.camera.near = 0.1;
+    sr.shadow.camera.far = 12;
     registerLight(sr);
+    scene.add(sr.target);
   }
 
   // ─── Lighting ─────────────────────────────────────────────────────────────
@@ -1034,6 +1091,29 @@ export function createWorld(scene, physicsWorld) {
     pl.position.set(x, y, z);
     registerLight(pl);
   });
+
+  // ─── Wall-Wash SpotLights (grazing angle → wainscot + trim cast shadows) ──
+  // 2 per side wall, aimed at shallow angle across wall surface.
+  // Static lights → shadows baked once on startup, zero per-frame cost.
+  const wallWashDefs = [
+    // [ posX,  posY, posZ,  tgtX,  tgtY, tgtZ ]
+    [ -4.8,  4.8,  5.5,  -7.05,  0.4,  5.5 ],  // left wall, front zone
+    [ -4.8,  4.8, -3.5,  -7.05,  0.4, -3.5 ],  // left wall, back zone
+    [  4.8,  4.8,  5.5,   7.05,  0.4,  5.5 ],  // right wall, front zone
+    [  4.8,  4.8, -3.5,   7.05,  0.4, -3.5 ],  // right wall, back zone
+  ];
+  for (const [px, py, pz, tx, ty, tz] of wallWashDefs) {
+    const ww = new THREE.SpotLight(0xFFD070, 1.1, 14, Math.PI / 4.5, 0.55, 2.0);
+    ww.position.set(px, py, pz);
+    ww.target.position.set(tx, ty, tz);
+    ww.castShadow = true;
+    ww.shadow.mapSize.set(512, 512);
+    ww.shadow.bias = -0.0015;
+    ww.shadow.camera.near = 0.2;
+    ww.shadow.camera.far = 16;
+    scene.add(ww.target);
+    registerLight(ww);
+  }
 
   // ─── Damage Pillar (deals 1 damage/sec on contact) ────────────────────────
   const pillarMat = new THREE.MeshStandardMaterial({ color: 0x3a1a1a, roughness: 0.7, metalness: 0.3 });
