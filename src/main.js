@@ -4,6 +4,7 @@ import { createPlayer } from './player/player.js';
 import { createPhysicsWorld, stepPhysics } from './systems/physics.js';
 import { createInventory } from './systems/inventory.js';
 import { createInventoryUI } from './ui/inventory.js';
+import { createDebugMenuUI } from './ui/debugMenu.js';
 import { createGun } from './systems/weapons.js';
 import { createHUD } from './ui/hud.js';
 import { createHealth } from './systems/health.js';
@@ -182,7 +183,26 @@ const inventoryUI = createInventoryUI(inventory, playerHealth, {
 });
 
 // ─── Player ────────────────────────────────────────────────────────────────
-const player = createPlayer(camera, scene, world, physicsWorld, inventoryUI, playerHealth);
+const debugMenuUI = createDebugMenuUI({
+  getNoclipEnabled: () => false,
+  setNoclipEnabled: () => {},
+  getInvincibleEnabled: () => !!(playerHealth.isInvincible && playerHealth.isInvincible()),
+  setInvincibleEnabled: (enabled) => {
+    if (playerHealth.setInvincible) playerHealth.setInvincible(!!enabled);
+  },
+});
+
+const player = createPlayer(camera, scene, world, physicsWorld, inventoryUI, playerHealth, debugMenuUI);
+debugMenuUI.setBindings({
+  getNoclipEnabled: () => !!(player.isNoclipEnabled && player.isNoclipEnabled()),
+  setNoclipEnabled: (enabled) => {
+    if (player.setNoclipEnabled) player.setNoclipEnabled(!!enabled);
+  },
+  getLeaveHitboxEnabled: () => !!(player.isEnemyTargetLocked && player.isEnemyTargetLocked()),
+  setLeaveHitboxEnabled: (enabled) => {
+    if (player.setEnemyTargetLocked) player.setEnemyTargetLocked(!!enabled);
+  },
+});
 const enemyRuntime = createEnemyRuntime(world, player, { playerHealth });
 const worldDoors = Array.isArray(world.doors) && world.doors.length > 0
   ? world.doors
@@ -306,6 +326,18 @@ const perfOverlay = createPerfOverlay({ buildVersion: BUILD_VERSION });
 let savedCameraQuaternion = null;
 
 inventoryUI.setToggleCallback((isOpen) => {
+  if (isOpen) {
+    savedCameraQuaternion = camera.quaternion.clone();
+  } else {
+    savedCameraQuaternion = null;
+  }
+
+  if (player.refreshCursorMode) {
+    player.refreshCursorMode();
+  }
+});
+
+debugMenuUI.setToggleCallback((isOpen) => {
   if (isOpen) {
     savedCameraQuaternion = camera.quaternion.clone();
   } else {
@@ -806,7 +838,7 @@ function updateStartupLoading(dt) {
     overlay.style.cursor = 'pointer';
     overlay.style.pointerEvents = 'all';
   }
-  setOverlayText('Project SH', 'click to begin\nQ inventory  R reload  F flashlight  N noclip debug\n\n⚠ mild arachnophobia warning');
+  setOverlayText('Project SH', 'click to begin\nQ inventory  R reload  F flashlight  N debug menu\n\n⚠ mild arachnophobia warning');
 }
 
 // ─── Clock & Loop ──────────────────────────────────────────────────────────
@@ -858,10 +890,28 @@ window.addEventListener('keydown', e => {
   if (e.code !== 'KeyQ' || e.repeat) return;
   if (isStartupLoading || playerHealth.isDead()) return;
 
+  if (debugMenuUI.isOpen()) debugMenuUI.close();
   inventoryUI.toggle();
 
   // Closing inventory from this keydown is a user gesture, so attempt immediate relock.
   if (!inventoryUI.isOpen() && !player.controls.isLocked) {
+    try {
+      player.lock();
+    } catch {
+      // Some browsers may still deny; click-to-relock fallback remains active.
+    }
+  }
+});
+
+window.addEventListener('keydown', e => {
+  if (e.code !== 'KeyN' || e.repeat) return;
+  if (isStartupLoading || playerHealth.isDead()) return;
+
+  if (inventoryUI.isOpen()) inventoryUI.toggle();
+  debugMenuUI.toggle();
+
+  // Closing debug menu from this keydown is a user gesture, so attempt immediate relock.
+  if (!debugMenuUI.isOpen() && !player.controls.isLocked) {
     try {
       player.lock();
     } catch {
@@ -876,7 +926,7 @@ function loop() {
 
   const noclipActive = !!(player.isNoclipEnabled && player.isNoclipEnabled());
   if (noclipActive !== lastNoclipState) {
-    showActionLabel(noclipActive ? 'NOCLIP ON: ENEMY TARGET LOCKED' : 'NOCLIP OFF');
+    showActionLabel(noclipActive ? 'NOCLIP ON' : 'NOCLIP OFF');
     lastNoclipState = noclipActive;
   }
 
@@ -940,8 +990,10 @@ function loop() {
 
   roomCulling.update();
 
-  // Freeze camera rotation while inventory open
-  if (inventoryUI.isOpen() && savedCameraQuaternion) {
+  const menuOpen = inventoryUI.isOpen() || debugMenuUI.isOpen();
+
+  // Freeze camera rotation while a menu is open
+  if (menuOpen && savedCameraQuaternion) {
     camera.quaternion.copy(savedCameraQuaternion);
   }
 
@@ -950,19 +1002,19 @@ function loop() {
     // E key: pickup item
     const eKeyPressed = player.keys['KeyE'];
     if (eKeyPressed && !lastEKeyState) {
-      if (!inventoryUI.isOpen() && worldItems.getHovered()) {
+      if (!menuOpen && worldItems.getHovered()) {
         worldItems.tryPickup();
       }
     }
     lastEKeyState = eKeyPressed;
 
     // Gun reload (R key)
-    if (player.keys['KeyR'] && !inventoryUI.isOpen()) {
+    if (player.keys['KeyR'] && !menuOpen) {
       gun.reload();
     }
 
     // Gun fire (left-click) — triggers shockwave
-    if (player.keys['MouseLeft'] && !inventoryUI.isOpen()) {
+    if (player.keys['MouseLeft'] && !menuOpen) {
       const fireResult = gun.fire();
       if (fireResult.success) {
         const ammoConfig = getAmmoConfigForItem(fireResult.ammoItemType);
@@ -984,6 +1036,7 @@ function loop() {
   chandelierMotion.update(dt);
 
   inventoryUI.update(dt);
+  debugMenuUI.update(dt);
   hud.update(dt);
   damageEffects.update(dt);
   fog.update(dt);
@@ -991,8 +1044,8 @@ function loop() {
   const flashlightShadowsActive = !dead
     && player.getFlashlightOn
     && player.getFlashlightOn()
-    && !inventoryUI.isOpen();
-  const muzzleShadowsActive = !dead && muzzleShadowBurstTimer > 0 && !inventoryUI.isOpen();
+    && !menuOpen;
+  const muzzleShadowsActive = !dead && muzzleShadowBurstTimer > 0 && !menuOpen;
   updateFlashlightShadowRefresh(dt, flashlightShadowsActive || muzzleShadowsActive);
 
   renderer.render(scene, camera);

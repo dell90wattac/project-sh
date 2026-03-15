@@ -16,7 +16,7 @@ const MOUSE_SENS    = 0.002;
 const NOCLIP_SPEED  = 5.5;
 const NOCLIP_SPRINT_MULT = 2.2;
 
-export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, playerHealth = null) {
+export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, playerHealth = null, debugMenuUI = null) {
   // ─── Body / camera hierarchy ─────────────────────────────────────────────
   const body = new THREE.Group();
   body.position.set(0, 1.2 + PLAYER_HEIGHT, 4);
@@ -33,6 +33,7 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
   let fallbackActive = false;   // true once the player clicks to start in fallback
   let hasEverPointerLock = false;
   let noclipEnabled = false;
+  let enemyTargetLocked = false; // "leave hitbox": enemies keep targeting a frozen position
   let windowFocused = document.hasFocus();
   let tabVisible = document.visibilityState !== 'hidden';
   const keys = {};
@@ -42,7 +43,8 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
 
   function applyCursorMode() {
     const inventoryOpen = !!(inventoryUI && inventoryUI.isOpen && inventoryUI.isOpen());
-    if (inventoryOpen || controls.isLocked || fallbackActive) {
+    const debugOpen = !!(debugMenuUI && debugMenuUI.isOpen && debugMenuUI.isOpen());
+    if (inventoryOpen || debugOpen || controls.isLocked || fallbackActive) {
       document.body.style.cursor = 'none';
       return;
     }
@@ -51,9 +53,10 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
 
   function canCaptureGameplayMouse() {
     const inventoryOpen = !!(inventoryUI && inventoryUI.isOpen && inventoryUI.isOpen());
+    const debugOpen = !!(debugMenuUI && debugMenuUI.isOpen && debugMenuUI.isOpen());
     const overlay = document.getElementById('overlay');
     const overlayVisible = !!(overlay && window.getComputedStyle(overlay).display !== 'none');
-    return windowFocused && tabVisible && !inventoryOpen && !overlayVisible;
+    return windowFocused && tabVisible && !inventoryOpen && !debugOpen && !overlayVisible;
   }
 
   function tryLockFromUserGesture() {
@@ -108,16 +111,6 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
   // ─── Input ───────────────────────────────────────────────────────────────
   let flashlightOn = false;
   window.addEventListener('keydown', e => { 
-    if (e.code === 'KeyN' && !e.repeat) {
-      noclipEnabled = !noclipEnabled;
-      enemyTargetPosition.copy(body.position);
-      velY = 0;
-      onGround = false;
-      wasOnGround = false;
-      if (!noclipEnabled) {
-        velocity.set(0, 0, 0);
-      }
-    }
     keys[e.code] = true; 
     if (e.code === 'KeyF') flashlightOn = !flashlightOn; 
   });
@@ -142,7 +135,9 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
     if (!active) return;
 
     // Don't process mouse look if inventory is open (but still track movement for sway)
-    const shouldUpdateLook = !(inventoryUI && inventoryUI.isOpen());
+    const inventoryOpen = !!(inventoryUI && inventoryUI.isOpen && inventoryUI.isOpen());
+    const debugOpen = !!(debugMenuUI && debugMenuUI.isOpen && debugMenuUI.isOpen());
+    const shouldUpdateLook = !(inventoryOpen || debugOpen);
 
     // movementX/Y work even without pointer lock in most browsers
     const dx = e.movementX || 0;
@@ -373,7 +368,9 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
 
     world.update(dt);
 
-    enemyTargetPosition.copy(pos);
+    if (!enemyTargetLocked) {
+      enemyTargetPosition.copy(pos);
+    }
   }
 
   function getPosition() {
@@ -392,6 +389,7 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
     onGround = false;
     wasOnGround = false;
     noclipEnabled = false;
+    enemyTargetLocked = false;
     lowHealthSwayPhase = 0;
   }
 
@@ -409,6 +407,23 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
     getVelocity,
     getFlashlightOn: () => flashlightOn,
     isNoclipEnabled: () => noclipEnabled,
+    setNoclipEnabled: (enabled) => {
+      const next = !!enabled;
+      if (next === noclipEnabled) return;
+      noclipEnabled = next;
+      velY = 0;
+      onGround = false;
+      wasOnGround = false;
+      if (!noclipEnabled) {
+        velocity.set(0, 0, 0);
+      }
+    },
+    isEnemyTargetLocked: () => enemyTargetLocked,
+    setEnemyTargetLocked: (enabled) => {
+      enemyTargetLocked = !!enabled;
+      // When locking (or unlocking), snap the target to current player position.
+      enemyTargetPosition.copy(body.position);
+    },
     resetPosition,
   };
 }

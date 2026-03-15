@@ -7,6 +7,7 @@
 export function createHealth(maxHealth = 10) {
   let health = maxHealth;
   let dead = false;
+  let invincible = false;
 
   // Resistance map — reduces damage of a given type by a flat amount.
   // Example: { fire: 2 } means fire damage is reduced by 2.
@@ -23,6 +24,7 @@ export function createHealth(maxHealth = 10) {
     // Returns actual damage dealt after resistances.
     takeDamage(amount, type = 'generic') {
       if (dead) return 0;
+      if (invincible) return 0;
 
       // Apply resistance if one exists for this damage type
       let finalDamage = amount;
@@ -56,6 +58,7 @@ export function createHealth(maxHealth = 10) {
     getHealth()    { return health; },
     getMaxHealth() { return maxHealth; },
     isDead()       { return dead; },
+    isInvincible() { return invincible; },
 
     // Set a resistance for a damage type (flat reduction).
     // e.g. setResistance('fire', 2) — fire attacks do 2 less damage.
@@ -71,7 +74,10 @@ export function createHealth(maxHealth = 10) {
     reset() {
       health = maxHealth;
       dead = false;
+      invincible = false;
     },
+
+    setInvincible(enabled) { invincible = !!enabled; },
 
     // Event hooks
     onDamage(fn) { onDamageCallback = fn; },

@@ -53,12 +53,15 @@ Rule: extend the existing owner system first; do not create parallel authority f
 - Current chase local avoidance uses continuous direction-sampling steering in `enemyAI`; treat this as the baseline local solver until waypoint/portal routing is layered in.
 - Each enemy's `pathing.homeZone` (room ID) and `pathing.aggroDepth` (hop count) define territorial behavior.
 - Post-knockback recovery: `enemyRuntime` notifies `enemyAI.notifyKnockbackEnd()` so enemies re-evaluate immediately after shockwave displacement.
-- Spider impact damage only fires on non-floor surfaces: `onSpiderSurfaceImpact(enemy, speed, normal)` skips damage when `normal.y > 0.58`. Always pass the resolved surface normal at all landing call sites.
-- Spider debug toggles: `?spiderGroundDebug=1` enables ring-buffer ground event logging; `?spiderInvincible=1` or `window.__SPIDER_INVINCIBLE__ = true` disables all spider damage at runtime.
+- Spider impact damage: speed-based and applies on all surfaces (current tuning in `src/systems/enemyRuntime.js`: 1.2–8.0 m/s maps to 4–12 damage) when `spiderCombat.impactArmed` is set by shockwave launch.
+- Spider debug toggles: `?spiderGroundDebug=1` enables ring-buffer ground event logging; `?spiderInvincible=1` or `window.__SPIDER_INVINCIBLE__ = true` disables spider damage intake at runtime.
+- Leave-hitbox contract: `player.getEnemyTargetPosition()` may return a frozen debug target for AI; damage/contact checks must use `player.getPosition()` (see `scratchPlayerTruePos` in `enemyRuntime`).
 - `attachEnemyComponents()` in `entities/zombies.js` is the canonical way to equip bare archetype meshes with AI-ready component sets.
 - Each room must have a unique zone identifier (fog + overlay usage).
 - Camera is parented to player body; use `camera.getWorldPosition()` / `camera.getWorldDirection()` for world-space weapon math.
 - Dynamic shadows are budgeted runtime behavior, not default-everywhere visuals.
+- Debug menu: `N` opens a lightweight debug menu UI (`src/ui/debugMenu.js`) with toggles for `NO CLIP`, `PLAYER INVINCIBLE` (`playerHealth.setInvincible(true)`), and `LEAVE HITBOX` (enemy targeting lock, AI-only). Gameplay inputs are blocked while inventory or debug menu is open.
+- Spider perf: spider runtime uses distance-based update throttling (LOD) to reduce raycast cost for far-away spiders; shockwave airborne/knockback paths always run full updates (`src/systems/enemyRuntime.js`).
 
 ## Fast Change Chains
 - Add a room/wing:

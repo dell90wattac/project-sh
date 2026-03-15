@@ -953,7 +953,7 @@ export function createSpider() {
     group.add(lower);
   });
 
-  setShadowFlags(group, false);
+  setShadowFlags(group, true);
 
   const entity = createEnemyContainer({
     type: 'spider',

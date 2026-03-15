@@ -18,7 +18,8 @@ import * as THREE from 'three';
  */
 export function createEnemyRuntime(world, player, options = {}) {
   const { playerHealth } = options;
-  const scratchPlayerPos = new THREE.Vector3();
+  const scratchPlayerPos = new THREE.Vector3();      // AI target position (may be locked for debugging)
+  const scratchPlayerTruePos = new THREE.Vector3();  // actual player position (used for damage/contact)
   const scratchNudge = new THREE.Vector3();
   let lastPlayerDamageTime = -Infinity;
   const SPIDER_DEBUG = (() => {
@@ -1366,8 +1367,8 @@ export function createEnemyRuntime(world, player, options = {}) {
     const NUDGE_SPEED     = 1.4;  // m/s — gentle push-away on contact
 
     const pos = enemy.mesh.position;
-    const dx = pos.x - scratchPlayerPos.x;
-    const dz = pos.z - scratchPlayerPos.z;
+    const dx = pos.x - scratchPlayerTruePos.x;
+    const dz = pos.z - scratchPlayerTruePos.z;
     // Use XZ-only distance — the player's body.position.y is at eye/head level
     // (~1.7 m) while spiders hover near the floor (~0.08 m), so a full 3D distance
     // would always exceed any reasonable attack range.
@@ -2277,9 +2278,19 @@ export function createEnemyRuntime(world, player, options = {}) {
     if (!enemies || enemies.length === 0) return;
 
     if (player && (player.getEnemyTargetPosition || player.getPosition)) {
-      scratchPlayerPos.copy(
-        player.getEnemyTargetPosition ? player.getEnemyTargetPosition() : player.getPosition()
-      );
+      if (player.getEnemyTargetPosition) {
+        scratchPlayerPos.copy(player.getEnemyTargetPosition());
+      } else {
+        scratchPlayerPos.copy(player.getPosition());
+      }
+
+      // Damage checks should always use the real player position so "leave hitbox"
+      // debug targeting doesn't cause remote damage.
+      if (player.getPosition) {
+        scratchPlayerTruePos.copy(player.getPosition());
+      } else {
+        scratchPlayerTruePos.copy(scratchPlayerPos);
+      }
     }
 
     // AI decision pass

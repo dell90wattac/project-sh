@@ -7,6 +7,13 @@ All notable changes to Project SH are documented here.
 ## [Session 27] — 2026-03-14
 
 ### Added
+- **Debug menu on `N`** (`src/ui/debugMenu.js`, `src/main.js`, `src/player/player.js`)
+  - `N` now opens a debug menu (inventory-style overlay) instead of directly toggling noclip.
+  - Toggles: `NO CLIP`, `PLAYER INVINCIBLE`, `LEAVE HITBOX (ENEMY TARGET LOCK, AI ONLY)`.
+
+- **Player invincibility toggle** (`src/systems/health.js`)
+  - Added `setInvincible(enabled)` / `isInvincible()`; `takeDamage(...)` returns 0 when invincible.
+
 - **Spider-to-player melee damage** (`src/systems/enemyRuntime.js`, `src/entities/zombies.js`, `src/main.js`)
   - Spiders deal 1 HP per bite when within 0.9 m (XZ-only distance — player `body.position.y` is eye-level, not feet).
   - Per-spider cooldown: 2 s (`spiderCombat.lastPlayerHitTime`). Global cooldown: 0.5 s (`lastPlayerDamageTime` closure).
@@ -28,6 +35,17 @@ All notable changes to Project SH are documented here.
   - Wall-spawned spiders restore their wall surface normal (stored as `enemy._spawnNormal`) rather than defaulting to floor normal.
 
 ### Changed
+- **Spider shadows** (`src/entities/zombies.js`)
+  - Re-enabled `castShadow` / `receiveShadow` for spider meshes (was briefly disabled during perf testing).
+
+- **Spider impact + death tuning** (`src/entities/zombies.js`, `src/systems/enemyRuntime.js`)
+  - Spider HP set to `14`.
+  - Impact damage retuned to 1.2–8.0 m/s maps to 4–12 damage; impacts apply on all surfaces after shockwave launch.
+  - Spider death animation raised slightly above the floor to avoid sinking.
+
+- **Spider update throttling (distance LOD)** (`src/systems/enemyRuntime.js`)
+  - Far-away spiders update less frequently to reduce raycast cost; airborne/knockback spiders always run full updates.
+
 - **Spider spawn overhaul** (`src/world/world.js`)
   - Removed 140-spider stress-test grid and zombie sentry from the lobby.
   - 6 spiders now spawn on lobby walls: 3 on the left wall, 3 on the right, at height 4 m, spread at Z = 2 / 4 / 6. Surface normal pre-set so they crawl down toward the player.
@@ -35,6 +53,9 @@ All notable changes to Project SH are documented here.
   - Spider count can now be controlled entirely through spawn triggers rather than hardcoded grid arrays.
 
 ### Fixed
+- **Leave-hitbox debug no longer causes remote spider damage** (`src/systems/enemyRuntime.js`, `src/player/player.js`)
+  - Spider melee damage uses the real player position; AI can still target the debug-locked position.
+
 - **Spider damage never fired** — distance check was 3D; `scratchPlayerPos.y` ≈ 1.7 m (eye level) vs spider at ≈ 0.08 m made distance always > 0.9 m. Fixed to XZ-only.
 - **Continuous nudge repelled spiders permanently** — original nudge fired every frame within range, acting as an invisible wall. Tied nudge to per-spider cooldown so it fires once per bite cycle.
 - **Player stepping onto spiders** — `resolveCollisions()` in `player.js` now skips boxes with `_enemyCollider = true`.
