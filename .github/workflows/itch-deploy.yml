@@ -76,8 +76,34 @@ jobs:
           set -euo pipefail
           [ -n "${ITCH_API_KEY:-}" ] || (echo "Missing secret ITCH_API_KEY" && exit 1)
 
+      - name: Compute itch version label
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          COMMIT_MSG: ${{ github.event.head_commit.message }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT_NAME" = "push" ] && [ -n "${COMMIT_MSG:-}" ]; then
+            version="$(printf '%s' "$COMMIT_MSG" | head -n1)"
+          else
+            version="nightly-$(date -u +%Y%m%d)-${GITHUB_SHA::7}"
+          fi
+
+          target_tail="${ITCH_TARGET#*/}"
+          game_slug="${target_tail%%:*}"
+          channel_name="${target_tail##*:}"
+          upload_name="${game_slug}-${channel_name}.zip"
+
+          version="$(printf '%s' "$version" | tr -cd '[:alnum:]._ -' | sed 's/  */ /g; s/^ *//; s/ *$//')"
+          [ -n "$version" ] || version="${GITHUB_SHA::7}"
+          version="$version | $upload_name"
+
+          echo "ITCH_USER_VERSION=$version" >> "$GITHUB_ENV"
+          echo "Using itch user version: $version"
+
       - name: Push to itch.io
         shell: bash
         env:
           BUTLER_API_KEY: ${{ secrets.ITCH_API_KEY }}
-        run: ./butler/butler push deploy "$ITCH_TARGET"
+        run: ./butler/butler push deploy "$ITCH_TARGET" --userversion "$ITCH_USER_VERSION"
