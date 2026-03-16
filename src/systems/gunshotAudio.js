@@ -14,84 +14,100 @@ function createSeededRandom(seed) {
   };
 }
 
-function envelope(t, attack, decay) {
-  if (t <= 0) return 0;
-  if (t < attack) {
-    return t / Math.max(attack, 0.00001);
-  }
-  return Math.exp(-(t - attack) * decay);
-}
-
-function buildShotBuffer(context, recipe) {
+// ─── Crack Layer ─────────────────────────────────────────────────────────────
+// The sharp high-frequency snap of the shot — very short, bright, punchy.
+function buildCrackBuffer(context, seed) {
+  const duration = 0.038;
   const sampleRate = context.sampleRate;
-  const sampleCount = Math.max(1, Math.floor(recipe.duration * sampleRate));
+  const sampleCount = Math.max(1, Math.floor(duration * sampleRate));
   const buffer = context.createBuffer(1, sampleCount, sampleRate);
   const out = buffer.getChannelData(0);
-  const rand = createSeededRandom(recipe.seed);
+  const rand = createSeededRandom(seed);
 
-  let phase = 0;
-  let lastFiltered = 0;
+  let lp1 = 0;
+  let hp1 = 0;
 
   for (let i = 0; i < sampleCount; i++) {
     const t = i / sampleRate;
-    const normalized = clamp(t / recipe.duration, 0, 1);
-    const freq = recipe.freqStart + (recipe.freqEnd - recipe.freqStart) * normalized;
-    phase += (freq / sampleRate) * TWO_PI;
+    const env = Math.exp(-170 * t);
 
-    const noise = (rand() * 2 - 1);
-    const tone = Math.sin(phase);
+    const noise = rand() * 2 - 1;
 
-    const env = envelope(t, recipe.attack, recipe.decay);
-    const mixed = tone * recipe.toneMix + noise * recipe.noiseMix;
-    const crunchEnv = Math.exp(-t * recipe.crunchDecay);
-    const crunch = noise * recipe.crunchNoiseMix * crunchEnv;
+    // Band-shape via LP then HP: passes ~500Hz–7kHz band.
+    lp1 += (noise - lp1) * 0.88;       // LP cutoff ~8kHz
+    hp1 += (lp1 - hp1) * 0.068;        // HP cutoff ~500Hz
+    const band = lp1 - hp1;
 
-    // Gentle one-pole lowpass to avoid harsh digital fizz.
-    const alpha = recipe.lowpassAlpha;
-    lastFiltered += (mixed - lastFiltered) * alpha;
-
-    const preDrive = (lastFiltered * env) + crunch;
-    const driven = Math.tanh(preDrive * recipe.drive) / Math.tanh(recipe.drive);
-    out[i] = driven * recipe.outputGain;
+    const driven = Math.tanh(band * env * 3.4) / Math.tanh(3.4);
+    out[i] = driven * 0.92;
   }
 
-  return buffer;
+  return { buffer, duration };
 }
 
+// ─── Body Layer ───────────────────────────────────────────────────────────────
+// The low bassy boom — a descending sine sweep with noise texture.
+function buildBodyBuffer(context, recipe) {
+  const duration = recipe.bodyDuration;
+  const sampleRate = context.sampleRate;
+  const sampleCount = Math.max(1, Math.floor(duration * sampleRate));
+  const buffer = context.createBuffer(1, sampleCount, sampleRate);
+  const out = buffer.getChannelData(0);
+  const rand = createSeededRandom(recipe.bodySeed);
+
+  let phase = 0;
+  let lp = 0;
+
+  for (let i = 0; i < sampleCount; i++) {
+    const t = i / sampleRate;
+    const normalized = t / duration;
+    const env = Math.exp(-recipe.bodyDecay * t);
+
+    // Frequency sweep: high start drops to low end (non-linear, faster at start)
+    const freq = recipe.freqStart + (recipe.freqEnd - recipe.freqStart) * Math.pow(normalized, 0.6);
+    phase += (freq / sampleRate) * TWO_PI;
+
+    const tone = Math.sin(phase);
+    const noise = (rand() * 2 - 1) * 0.22;
+    const raw = tone * 0.78 + noise;
+
+    // Heavy lowpass gives warm, bassy character
+    lp += (raw - lp) * recipe.bodyLpAlpha;
+
+    const driven = Math.tanh(lp * env * recipe.bodyDrive) / Math.tanh(recipe.bodyDrive);
+    out[i] = driven * 0.9;
+  }
+
+  return { buffer, duration };
+}
+
+// ─── Recipes ─────────────────────────────────────────────────────────────────
 const RECIPES = Object.freeze({
   standard: {
-    seed: 1337,
-    duration: 0.13,
-    attack: 0.002,
-    decay: 34,
-    freqStart: 265,
-    freqEnd: 112,
-    toneMix: 0.52,
-    noiseMix: 0.48,
-    lowpassAlpha: 0.36,
-    crunchNoiseMix: 0.17,
-    crunchDecay: 42,
-    drive: 1.5,
-    outputGain: 0.92,
-    gain: 0.18,
-    pitchJitter: 0.03,
+    crackSeed: 1337,
+    crackGain: 0.20,
+    bodySeed: 1338,
+    bodyDuration: 0.17,
+    freqStart: 205,
+    freqEnd: 55,
+    bodyDecay: 21,
+    bodyLpAlpha: 0.13,
+    bodyDrive: 1.55,
+    bodyGain: 0.17,
+    pitchJitter: 0.025,
   },
   heavyHandgun: {
-    seed: 4242,
-    duration: 0.2,
-    attack: 0.003,
-    decay: 24,
-    freqStart: 178,
-    freqEnd: 64,
-    toneMix: 0.58,
-    noiseMix: 0.42,
-    lowpassAlpha: 0.28,
-    crunchNoiseMix: 0.2,
-    crunchDecay: 34,
-    drive: 1.8,
-    outputGain: 0.95,
-    gain: 0.23,
-    pitchJitter: 0.02,
+    crackSeed: 4242,
+    crackGain: 0.23,
+    bodySeed: 4243,
+    bodyDuration: 0.24,
+    freqStart: 165,
+    freqEnd: 40,
+    bodyDecay: 13,
+    bodyLpAlpha: 0.09,
+    bodyDrive: 1.9,
+    bodyGain: 0.21,
+    pitchJitter: 0.018,
   },
 });
 
@@ -99,9 +115,9 @@ export function createGunshotAudio() {
   let warned = false;
   let initialized = false;
   let audioNodes = null;
-  const buffersByProfile = new Map();
+  const buffersByProfile = new Map(); // profileKey → { crack, body }
   const activeVoices = [];
-  const maxVoices = 6;
+  const maxVoices = 8;
 
   function warnOnce(message, error) {
     if (warned) return;
@@ -117,8 +133,11 @@ export function createGunshotAudio() {
       audioNodes = getSharedAudioNodes();
       if (!audioNodes) return false;
 
-      for (const [profileKey, recipe] of Object.entries(RECIPES)) {
-        buffersByProfile.set(profileKey, buildShotBuffer(audioNodes.context, recipe));
+      for (const [key, recipe] of Object.entries(RECIPES)) {
+        buffersByProfile.set(key, {
+          crack: buildCrackBuffer(audioNodes.context, recipe.crackSeed),
+          body: buildBodyBuffer(audioNodes.context, recipe),
+        });
       }
 
       return true;
@@ -139,13 +158,30 @@ export function createGunshotAudio() {
   function stealOldestVoice() {
     if (activeVoices.length < maxVoices) return;
     activeVoices.sort((a, b) => a.endTime - b.endTime);
-    const voice = activeVoices.shift();
-    if (!voice) return;
-    try {
-      voice.source.stop();
-    } catch {
-      // Ignore stop races.
+    const victim = activeVoices.shift();
+    if (!victim) return;
+    for (const src of victim.sources) {
+      try { src.stop(); } catch { /* ignore stop races */ }
     }
+  }
+
+  function playLayer(layerData, gainAmount, playbackRate, now) {
+    if (!layerData?.buffer || !audioNodes) return null;
+
+    const ctx = audioNodes.context;
+    const source = ctx.createBufferSource();
+    source.buffer = layerData.buffer;
+    source.playbackRate.value = playbackRate;
+
+    const gainNode = ctx.createGain();
+    gainNode.gain.setValueAtTime(clamp(gainAmount, 0.01, 0.35), now);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + layerData.duration);
+
+    source.connect(gainNode);
+    gainNode.connect(audioNodes.masterGain);
+    source.start(now);
+
+    return { source, endTime: now + layerData.duration + 0.02 };
   }
 
   function playShot(ammoConfig) {
@@ -153,8 +189,8 @@ export function createGunshotAudio() {
 
     const profileKey = ammoConfig?.audioProfileKey || 'standard';
     const recipe = RECIPES[profileKey] || RECIPES.standard;
-    const buffer = buffersByProfile.get(profileKey) || buffersByProfile.get('standard');
-    if (!buffer) return;
+    const layers = buffersByProfile.get(profileKey) || buffersByProfile.get('standard');
+    if (!layers) return;
 
     const ctx = audioNodes.context;
     const now = ctx.currentTime;
@@ -164,32 +200,32 @@ export function createGunshotAudio() {
     const jitterBase = Number.isFinite(ammoConfig?.audioPitchJitter)
       ? ammoConfig.audioPitchJitter
       : recipe.pitchJitter;
-    const gainBase = Number.isFinite(ammoConfig?.audioGain)
-      ? ammoConfig.audioGain
-      : recipe.gain;
-
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-
-    const gainNode = ctx.createGain();
-    const startGain = clamp(gainBase, 0.02, 0.28);
-    gainNode.gain.setValueAtTime(startGain, now);
-    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + recipe.duration);
-
     const jitter = (Math.random() * 2 - 1) * clamp(jitterBase, 0, 0.08);
-    source.playbackRate.value = 1 + jitter;
+    const rate = 1 + jitter;
 
-    source.connect(gainNode);
-    gainNode.connect(audioNodes.masterGain);
+    const crackVoice = playLayer(layers.crack, recipe.crackGain, rate, now);
+    const bodyVoice  = playLayer(layers.body,  recipe.bodyGain,  rate * 0.98, now);
 
-    source.start(now);
+    const endTime = Math.max(
+      crackVoice?.endTime ?? now,
+      bodyVoice?.endTime ?? now,
+    );
 
-    const endTime = now + recipe.duration + 0.02;
-    activeVoices.push({ source, endTime });
-    source.onended = () => {
-      const idx = activeVoices.findIndex(v => v.source === source);
-      if (idx >= 0) activeVoices.splice(idx, 1);
-    };
+    const sources = [
+      crackVoice?.source,
+      bodyVoice?.source,
+    ].filter(Boolean);
+
+    if (sources.length > 0) {
+      const voiceEntry = { sources, endTime };
+      activeVoices.push(voiceEntry);
+      for (const src of sources) {
+        src.onended = () => {
+          const idx = activeVoices.indexOf(voiceEntry);
+          if (idx >= 0) activeVoices.splice(idx, 1);
+        };
+      }
+    }
   }
 
   async function unlock() {
@@ -198,10 +234,8 @@ export function createGunshotAudio() {
 
   function clear() {
     for (const voice of activeVoices) {
-      try {
-        voice.source.stop();
-      } catch {
-        // Ignore stop races.
+      for (const src of voice.sources) {
+        try { src.stop(); } catch { /* ignore */ }
       }
     }
     activeVoices.length = 0;

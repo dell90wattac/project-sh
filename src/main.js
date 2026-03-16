@@ -25,6 +25,7 @@ import { createShockwaveFx } from './systems/shockwaveFx.js';
 import { getAmmoConfigForItem } from './systems/ammoTypes.js';
 import { createGunshotAudio } from './systems/gunshotAudio.js';
 import { createItemClackAudio } from './systems/itemClackAudio.js';
+import { createAudioSystem } from './systems/audio.js';
 import { createSpawnTriggers } from './systems/spawnTriggers.js';
 
 const BUILD_VERSION = '22.7';
@@ -137,6 +138,7 @@ const damageEffects = createDamageEffects(playerHealth);
 
 playerHealth.onDamage((amount, currentHP) => {
   damageEffects.flashDamage();
+  audioSystem.onPlayerDamage();
 });
 
 playerHealth.onDeath(() => {
@@ -552,6 +554,7 @@ const gunshotAudio = createGunshotAudio();
 const itemClackAudio = createItemClackAudio(() => camera.position, {
   debug: AUDIO_DEBUG,
 });
+const audioSystem = createAudioSystem();
 
 if (AUDIO_DEBUG && typeof window !== 'undefined') {
   window.__CLACK_DEBUG__ = {
@@ -924,20 +927,12 @@ function debugKillAllSpiders() {
   showActionLabel(`KILLED ${livingSpiders.length} SPIDERS`);
 }
 
-function debugSet60FpsCapEnabled(enabled) {
-  debug60FpsCapEnabled = !!enabled;
-  cappedFrameAccumulatorMs = 0;
-  lastFrameSampleMs = performance.now();
-  showActionLabel(debug60FpsCapEnabled ? '60 FPS CAP ON' : '60 FPS CAP OFF');
-}
 
 debugMenuUI.setBindings({
   spawnLobbySpiders: debugSpawnLobbySpiders,
   addAmmoStacks: debugAddAmmoStacks,
   unlockAllDoors: debugUnlockAllDoors,
   killAllSpiders: debugKillAllSpiders,
-  get60FpsCapEnabled: () => debug60FpsCapEnabled,
-  set60FpsCapEnabled: debugSet60FpsCapEnabled,
 });
 
 // ─── Gameplay Loop: Spawn Trigger Definitions ──────────────────────────────
@@ -1183,6 +1178,7 @@ function resetGame() {
   shockwaveFx.clear();
   gunshotAudio.clear();
   itemClackAudio.clear();
+  audioSystem.clear();
   player.resetPosition();
   for (const key in hazardTimers) hazardTimers[key] = 0;
   enemyRuntime.reset();
@@ -1323,6 +1319,7 @@ function beginGameplay() {
   isStartupLoading = false;
   gunshotAudio.unlock();
   itemClackAudio.unlock();
+  audioSystem.unlock();
 
   lastFrameSampleMs = performance.now();
   cappedFrameAccumulatorMs = 0;
@@ -1360,6 +1357,7 @@ let shadowRefInitialized = false;
 let shadowUpdateCooldown = 0;
 let lastFlashlightShadowEnabled = false;
 let muzzleShadowBurstTimer = 0;
+let wasReloading = false;
 
 function updateFlashlightShadowRefresh(dt, flashlightEnabled) {
   const shadowEnabled = !!flashlightEnabled;
@@ -1517,6 +1515,13 @@ function loop(frameTimeMs = performance.now()) {
   const menuOpen = inventoryUI.isOpen() || debugMenuUI.isOpen();
 
   if (!dead) gun.update(dt);
+
+  // ── Audio system update ──────────────────────────────────────────────────
+  const reloadingNow = gun.isReloading();
+  if (reloadingNow && !wasReloading) audioSystem.onReloadStart();
+  if (!reloadingNow && wasReloading) audioSystem.onReloadComplete();
+  wasReloading = reloadingNow;
+  audioSystem.update(dt, player.getVelocity(), player.isNoclipEnabled());
 
   const gunState = gun.getAmmoState();
   if (gunState.isFiring) {

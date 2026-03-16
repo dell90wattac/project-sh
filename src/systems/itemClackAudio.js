@@ -14,35 +14,44 @@ function createSeededRandom(seed) {
 }
 
 function buildClackBuffer(context) {
-  const duration = 0.16;
+  // A deep, heavy thud — stone or wood shifting in a dark space.
+  // Low woody thump (~280Hz) + slow resonance ring (~85Hz) + bandpass noise burst.
+  const duration = 0.22;
   const sampleRate = context.sampleRate;
   const sampleCount = Math.max(1, Math.floor(duration * sampleRate));
   const buffer = context.createBuffer(1, sampleCount, sampleRate);
   const out = buffer.getChannelData(0);
-  const rand = createSeededRandom(777);
+  const rand = createSeededRandom(889);
 
-  let hpIntegrator = 0;
-  let tonePhaseA = 0;
-  let tonePhaseB = 0;
+  let lp = 0;
+  let hp = 0;
+  let woodPhase = 0;
+  let resonPhase = 0;
 
   for (let i = 0; i < sampleCount; i++) {
     const t = i / sampleRate;
-    const env = Math.exp(-24 * t);
 
-    tonePhaseA += (980 / sampleRate) * Math.PI * 2;
-    tonePhaseB += (1520 / sampleRate) * Math.PI * 2;
+    // Sharp initial hit decays fast; low resonance rings on longer.
+    const transientEnv = Math.exp(-38 * t);
+    const resonEnv    = Math.exp(-7 * t);
 
-    const tone = Math.sin(tonePhaseA) * 0.65 + Math.sin(tonePhaseB) * 0.35;
-    const lowBody = Math.sin(tonePhaseA * 0.5) * 0.35;
-    const noise = (rand() * 2 - 1) * 0.45;
+    // Woody thump at 280Hz — much lower and darker than the old 980Hz tone.
+    woodPhase  += (280 / sampleRate) * Math.PI * 2;
+    const wood  = Math.sin(woodPhase) * 0.62;
 
-    const raw = (tone * 0.5 + lowBody * 0.25 + noise * 0.25) * env;
+    // Sub resonance at 85Hz — adds physical weight.
+    resonPhase += (85 / sampleRate) * Math.PI * 2;
+    const reson = Math.sin(resonPhase) * resonEnv * 0.44;
 
-    // Soft high-pass retains attack while preserving enough body to remain audible.
-    const hp = raw - hpIntegrator;
-    hpIntegrator += raw * 0.1;
+    // Bandpass noise ~200–700Hz for texture (not bright, not muddy).
+    const noise = rand() * 2 - 1;
+    lp += (noise - lp) * 0.52;       // LP cutoff ~3.5kHz
+    hp += (lp - hp) * 0.045;         // HP cutoff ~300Hz
+    const bandNoise = lp - hp;
 
-    out[i] = hp * 1.35;
+    const raw = (wood + bandNoise * 0.55) * transientEnv + reson;
+
+    out[i] = Math.tanh(raw * 1.65) / Math.tanh(1.65) * 1.1;
   }
 
   return { buffer, duration };
