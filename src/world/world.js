@@ -169,7 +169,7 @@ export function createWorld(scene, physicsWorld) {
     railing:    new THREE.MeshStandardMaterial({ color: 0xC8A840, roughness: 0.35, metalness: 0.85 }),
     bench:      new THREE.MeshStandardMaterial({ color: 0x5C3A1E, roughness: 0.8 }),
     lamp:       new THREE.MeshStandardMaterial({ color: 0x282828, roughness: 0.45, metalness: 0.92 }),
-    lampShade:  new THREE.MeshStandardMaterial({ color: 0xFFF8CC, roughness: 0.6, emissive: 0x443300, emissiveIntensity: 0.3 }),
+    lampShade:  new THREE.MeshStandardMaterial({ color: 0xFFF8CC, roughness: 0.6, emissive: 0xFFBB22, emissiveIntensity: 1.5 }),
     column:     new THREE.MeshStandardMaterial({ color: 0xC8C0B0, roughness: 0.88 }),
     wainscot:   new THREE.MeshStandardMaterial({ color: 0xC8BA98, roughness: 0.95 }),
     metal:      new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.5, metalness: 0.8 }),
@@ -228,8 +228,78 @@ export function createWorld(scene, physicsWorld) {
   applyWallGradient(M.wainscot,{ floorDark: 0.25, ceilDark: 0.10 });
   applyWallGradient(M.ceiling, { floorDark: 0.12, ceilDark: 0.0, wallH: 5.5 });
 
+  // ─── Vertex Displacement Shader ─────────────────────────────────────────
+  // Pushes vertices along their normals using world-space sine waves so adjacent
+  // panels warp continuously (no seams). Composes with any existing onBeforeCompile.
+  function applyVertexDisplacement(material, { amp = 0.018 } = {}) {
+    const prev = material.onBeforeCompile;
+    material.onBeforeCompile = (shader, renderer) => {
+      if (prev) prev(shader, renderer);
+      shader.uniforms.uDispAmp = { value: amp };
+      shader.vertexShader = shader.vertexShader
+        .replace('void main() {', 'uniform float uDispAmp;\nvoid main() {')
+        .replace(
+          '#include <worldpos_vertex>',
+          `#include <worldpos_vertex>
+          {
+            vec3 wp = worldPosition.xyz;
+            float w1 = sin(wp.x * 3.7 + wp.y * 1.3) * sin(wp.z * 2.9 + wp.x * 0.7);
+            float w2 = sin(wp.z * 4.1 + wp.y * 2.2) * sin(wp.x * 1.7 + wp.z * 0.9);
+            float w3 = sin(wp.y * 5.3 + wp.z * 1.1) * sin(wp.x * 3.1 + wp.y * 0.5);
+            float disp = (w1 * 0.55 + w2 * 0.30 + w3 * 0.15) * uDispAmp;
+            transformed += normal * disp;
+          }`
+        );
+    };
+    material.needsUpdate = true;
+  }
+
+  applyVertexDisplacement(M.wall,    { amp: 0.018 });
+  applyVertexDisplacement(M.wainscot,{ amp: 0.010 });
+  applyVertexDisplacement(M.ceiling, { amp: 0.012 });
+  applyVertexDisplacement(M.floor,   { amp: 0.008 });
+  applyVertexDisplacement(M.column,  { amp: 0.015 });
+
+  // ─── Fresnel Rim Lighting ────────────────────────────────────────────────
+  // Adds a faint warm highlight on surface edges facing the camera, giving
+  // walls and columns a carved/deep feel without any texture maps.
+  function applyFresnelRim(material, { rimColor = new THREE.Color(0xFFE0B0), rimStrength = 0.22, rimPower = 3.2 } = {}) {
+    const prev = material.onBeforeCompile;
+    material.onBeforeCompile = (shader, renderer) => {
+      if (prev) prev(shader, renderer);
+      shader.uniforms.uRimColor    = { value: rimColor };
+      shader.uniforms.uRimStrength = { value: rimStrength };
+      shader.uniforms.uRimPower    = { value: rimPower };
+
+      shader.vertexShader = shader.vertexShader
+        .replace('void main() {',
+          'varying vec3 vViewNormal;\nvarying vec3 vViewDir;\nvoid main() {')
+        .replace('#include <worldpos_vertex>',
+          `#include <worldpos_vertex>
+          vViewNormal = normalize(normalMatrix * normal);
+          vViewDir    = normalize(cameraPosition - worldPosition.xyz);`);
+
+      shader.fragmentShader = shader.fragmentShader
+        .replace('void main() {',
+          'varying vec3 vViewNormal;\nvarying vec3 vViewDir;\nuniform vec3 uRimColor;\nuniform float uRimStrength;\nuniform float uRimPower;\nvoid main() {')
+        .replace('#include <dithering_fragment>',
+          `#include <dithering_fragment>
+          {
+            float rimDot = 1.0 - max(dot(vViewNormal, vViewDir), 0.0);
+            float rim    = pow(rimDot, uRimPower) * uRimStrength;
+            gl_FragColor.rgb += uRimColor * rim;
+          }`);
+    };
+    material.needsUpdate = true;
+  }
+
+  applyFresnelRim(M.wall,    { rimStrength: 0.22, rimPower: 3.2 });
+  applyFresnelRim(M.column,  { rimStrength: 0.30, rimPower: 2.5 });
+  applyFresnelRim(M.wainscot,{ rimStrength: 0.18, rimPower: 3.5 });
+
   function box(w, h, d, x, y, z, mat, options = {}) {
-    const mesh = registerObject(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat));
+    const segs = (n) => Math.min(Math.ceil(n / 1.5), 6);
+    const mesh = registerObject(new THREE.Mesh(new THREE.BoxGeometry(w, h, d, segs(w), segs(h), segs(d)), mat));
     mesh.position.set(x, y, z);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -240,7 +310,8 @@ export function createWorld(scene, physicsWorld) {
 
   // Non-collider decoration (no Box3 push)
   function decor(w, h, d, x, y, z, mat, options = {}) {
-    const mesh = registerObject(new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat));
+    const segs = (n) => Math.min(Math.ceil(n / 1.5), 6);
+    const mesh = registerObject(new THREE.Mesh(new THREE.BoxGeometry(w, h, d, segs(w), segs(h), segs(d)), mat));
     mesh.position.set(x, y, z);
     mesh.castShadow = true;
     mesh.receiveShadow = true;
@@ -1072,6 +1143,9 @@ export function createWorld(scene, physicsWorld) {
     // Left wall
     decor(0.22, 0.08, 0.32, -6.85, 2.5, sz, M.lamp);           // bracket
     decor(0.28, 0.22, 0.28, -6.68, 2.58, sz, M.lampShade);     // shade
+    const slg = new THREE.PointLight(0xFFE0A0, 0.6, 3.5);      // shade glow
+    slg.position.set(-6.4, 2.69, sz);
+    registerLight(slg);
     const sl = new THREE.SpotLight(0xFFE0A0, 2.2, 10, Math.PI / 3.2, 0.45, 1.8);
     sl.position.set(-6.4, 2.5, sz);
     sl.target.position.set(0, 1.0, sz);
@@ -1087,6 +1161,9 @@ export function createWorld(scene, physicsWorld) {
     // Right wall
     decor(0.22, 0.08, 0.32, 6.85, 2.5, sz, M.lamp);
     decor(0.28, 0.22, 0.28, 6.68, 2.58, sz, M.lampShade);
+    const srg = new THREE.PointLight(0xFFE0A0, 0.6, 3.5);      // shade glow
+    srg.position.set(6.4, 2.69, sz);
+    registerLight(srg);
     const sr = new THREE.SpotLight(0xFFE0A0, 2.2, 10, Math.PI / 3.2, 0.45, 1.8);
     sr.position.set(6.4, 2.5, sz);
     sr.target.position.set(0, 1.0, sz);
@@ -1103,18 +1180,7 @@ export function createWorld(scene, physicsWorld) {
   // Very dim ambient — let point lights do the heavy lifting for mood
   registerLight(new THREE.AmbientLight(0x30282C, 0.12));
 
-  // Ceiling point lights (tighter falloff for smaller room)
-  [
-    [ 0, CEIL - 0.3,  9  ],
-    [ 0, CEIL - 0.3,  3  ],
-    [ 0, CEIL - 0.3,  0  ],
-    [-3, CEIL - 0.3, -3  ],
-    [ 3, CEIL - 0.3, -3  ],
-  ].forEach(([x, y, z]) => {
-    const pl = new THREE.PointLight(0xFFF4E8, 2.2, 15, 1.8);
-    pl.position.set(x, y, z);
-    registerLight(pl);
-  });
+  // (sourceless ceiling fill lights removed — chandeliers and sconces handle illumination)
 
   // ─── Wall-Wash SpotLights (grazing angle → wainscot + trim cast shadows) ──
   // 2 per side wall, aimed at shallow angle across wall surface.
@@ -1506,12 +1572,18 @@ export function createWorld(scene, physicsWorld) {
       const sn = new THREE.PointLight(0xFFE0A0, 1.2, 6);
       sn.position.set(sx, 2.5, EAST_HALL_MAX_Z - 0.6);
       registerLight(sn);
+      const sng = new THREE.PointLight(0xFFE0A0, 0.6, 3.5);   // shade glow
+      sng.position.set(sx, 2.69, EAST_HALL_MAX_Z - 0.32);
+      registerLight(sng);
       // South wall sconces
       decor(0.32, 0.08, 0.22, sx, 2.5, EAST_HALL_MIN_Z + 0.15, M.lamp);
       decor(0.28, 0.22, 0.28, sx, 2.58, EAST_HALL_MIN_Z + 0.32, M.lampShade);
       const ss = new THREE.PointLight(0xFFE0A0, 1.2, 6);
       ss.position.set(sx, 2.5, EAST_HALL_MIN_Z + 0.6);
       registerLight(ss);
+      const ssg = new THREE.PointLight(0xFFE0A0, 0.6, 3.5);   // shade glow
+      ssg.position.set(sx, 2.69, EAST_HALL_MIN_Z + 0.32);
+      registerLight(ssg);
     }
 
     // ─── Hallway Furniture ───
@@ -1607,6 +1679,9 @@ export function createWorld(scene, physicsWorld) {
       const scLight = new THREE.PointLight(0xFFE0A0, 1.2, 6);
       scLight.position.set(cx, 2.5, farZ + lightOffsetZ);
       registerLight(scLight);
+      const scGlow = new THREE.PointLight(0xFFE0A0, 0.6, 3.5);  // shade glow
+      scGlow.position.set(cx, 2.69, farZ + shadeOffsetZ);
+      registerLight(scGlow);
     });
   }
 
@@ -1818,6 +1893,9 @@ export function createWorld(scene, physicsWorld) {
       const dsl = new THREE.PointLight(0xFFE0A0, 1.2, 6);
       dsl.position.set(EAST_DIR_MAX_X - 0.6, 2.5, sz);
       registerLight(dsl);
+      const dsg = new THREE.PointLight(0xFFE0A0, 0.6, 3.5);   // shade glow
+      dsg.position.set(EAST_DIR_MAX_X - 0.32, 2.69, sz);
+      registerLight(dsg);
     }
 
     // ─── Director's Office Furniture ───

@@ -27,6 +27,7 @@ import { createGunshotAudio } from './systems/gunshotAudio.js';
 import { createItemClackAudio } from './systems/itemClackAudio.js';
 import { createAudioSystem } from './systems/audio.js';
 import { createSpawnTriggers } from './systems/spawnTriggers.js';
+import { createPostProcessing } from './systems/postProcessing.js';
 
 const BUILD_VERSION = '22.7';
 const AUDIO_DEBUG = (() => {
@@ -92,7 +93,7 @@ renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.shadowMap.autoUpdate = false;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 0.85;
 document.body.insertBefore(renderer.domElement, document.getElementById('ui-root'));
 
 await yieldToUI(5, 'creating scene');
@@ -104,6 +105,7 @@ scene.fog = new THREE.FogExp2(0x1A1510, 0.12);
 
 // ─── Camera ────────────────────────────────────────────────────────────────
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.05, 100);
+const postProcessing = createPostProcessing(renderer, scene, camera);
 
 // ─── Physics ────────────────────────────────────────────────────────────────
 const physicsWorld = createPhysicsWorld();
@@ -515,9 +517,14 @@ function createChandelier(x, y, z, seed) {
   );
   mainBulb.position.set(0, -1.5, 0);
   group.add(mainBulb);
-  // Light source
-  const light = new THREE.PointLight(0xFFEFCC, 4.5, 16);
+  // Downward spotlight — shines from the bulb cluster toward the floor only,
+  // so no stray glow appears on the ceiling above the fixture.
+  const light = new THREE.SpotLight(0xFFEFCC, 20, 14, Math.PI / 2.5, 0.35, 1.5);
   light.position.set(0, -1.5, 0);
+  const lightTarget = new THREE.Object3D();
+  lightTarget.position.set(0, -10, 0); // straight down in group-local space
+  group.add(lightTarget);
+  light.target = lightTarget;
   group.add(light);
   group.position.set(x, y, z);
   return { group, chains, arms, bulbs, mainBulb, light, seed };
@@ -546,6 +553,28 @@ const chandelierMotion = createChandelierMotionSystem(lobbyChandeliers, {
   maxSwing: 0.11,
   damping: 1.85,
 });
+
+// ─── Chandelier Flicker ─────────────────────────────────────────────────────
+const flickerLights = [];
+for (const ch of lobbyChandeliers) {
+  flickerLights.push({
+    light:         ch.light,
+    baseIntensity: ch.light.intensity,
+    phase:         Math.random() * Math.PI * 2,
+  });
+}
+let flickerTime = 0;
+
+function updateFlickerLights(dt) {
+  flickerTime += dt;
+  for (const { light, baseIntensity, phase } of flickerLights) {
+    const noise =
+      Math.sin(flickerTime *  7.3 + phase)       * 0.04  +
+      Math.sin(flickerTime * 13.7 + phase * 1.3) * 0.025 +
+      Math.sin(flickerTime * 31.1 + phase * 0.7) * 0.015;
+    light.intensity = baseIntensity * (1.0 + noise);
+  }
+}
 
 // ─── Shockwave System ──────────────────────────────────────────────────────
 const shockwave = createShockwaveSystem();
@@ -1286,6 +1315,7 @@ for (let i = 0; i < WARMUP_FRAMES; i++) {
   shockwave.update(WARMUP_DT);
   shockwaveFx.update(WARMUP_DT);
   chandelierMotion.update(WARMUP_DT);
+  updateFlickerLights(WARMUP_DT);
 
   inventoryUI.update(WARMUP_DT);
   debugMenuUI.update(WARMUP_DT);
@@ -1297,7 +1327,7 @@ for (let i = 0; i < WARMUP_FRAMES; i++) {
   if (i < 2) {
     renderer.shadowMap.needsUpdate = true;
   }
-  renderer.render(scene, camera);
+  postProcessing.render();
 }
 
 // One last yield at 100% then transition to ready
@@ -1493,8 +1523,9 @@ function loop(frameTimeMs = performance.now()) {
   if (isStartupLoading) {
     updateFlashlightShadowRefresh(dt, false);
     chandelierMotion.update(dt);
+    updateFlickerLights(dt);
     fog.update(dt);
-    renderer.render(scene, camera);
+    postProcessing.render();
 
     const startupStats = roomCulling.getStats();
     perfOverlay.update(dt, {
@@ -1558,7 +1589,7 @@ function loop(frameTimeMs = performance.now()) {
   }
 
   if (gameWon) {
-    renderer.render(scene, camera);
+    postProcessing.render();
     return;
   }
 
@@ -1581,6 +1612,7 @@ function loop(frameTimeMs = performance.now()) {
   shockwave.update(dt);
   shockwaveFx.update(dt);
   chandelierMotion.update(dt);
+  updateFlickerLights(dt);
 
   inventoryUI.update(dt);
   debugMenuUI.update(dt);
@@ -1595,7 +1627,7 @@ function loop(frameTimeMs = performance.now()) {
   const muzzleShadowsActive = !dead && muzzleShadowBurstTimer > 0 && !menuOpen;
   updateFlashlightShadowRefresh(dt, flashlightShadowsActive || muzzleShadowsActive);
 
-  renderer.render(scene, camera);
+  postProcessing.render();
 
   const roomStats = roomCulling.getStats();
   perfOverlay.update(dt, {
@@ -1619,4 +1651,5 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  postProcessing.resize(window.innerWidth, window.innerHeight);
 });

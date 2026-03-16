@@ -117,9 +117,9 @@ export function createViewModel(camera) {
   leftHandGroup.add(flashlightTarget);
   flashlightLight.target = flashlightTarget;
 
-  // Secondary spill cone keeps very close walls/doors from collapsing into a tiny hotspot.
-  const flashlightSpill = new THREE.SpotLight(0xFFEED2, 9, 22, Math.PI / 180 * 78, 0.98);
-  flashlightSpill.decay = 1.05;
+  // Secondary spill cone softens close-range hotspot — kept dim so nearby surfaces don't blow out.
+  const flashlightSpill = new THREE.SpotLight(0xFFEED2, 0.5, 8, Math.PI / 180 * 78, 0.98);
+  flashlightSpill.decay = 1.6;
   flashlightSpill.position.set(0.01, 0.01, -0.17);
   flashlightSpill.castShadow = false;
   leftHandGroup.add(flashlightSpill);
