@@ -406,6 +406,8 @@ export function createPlayer(camera, scene, world, physicsWorld, inventoryUI, pl
     getEnemyTargetPosition: () => enemyTargetPosition,
     getVelocity,
     getFlashlightOn: () => flashlightOn,
+    isReady: () => controls.isLocked || fallbackActive,
+    isOnGround: () => onGround,
     isNoclipEnabled: () => noclipEnabled,
     setNoclipEnabled: (enabled) => {
       const next = !!enabled;

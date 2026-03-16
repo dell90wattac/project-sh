@@ -17,7 +17,8 @@ export function createPostProcessing(renderer, scene, camera) {
   // ─── SSAO — ambient occlusion for depth in corners/crevices ───────────────
   const ssaoPass = new SSAOPass(scene, camera, w, h);
   ssaoPass.kernelRadius = 10;
-  ssaoPass.minDistance  = 0.002;
+  // Ignore tiny depth gaps from stylized surface warping to avoid filament-like AO noise.
+  ssaoPass.minDistance  = 0.012;
   ssaoPass.maxDistance  = 0.15;
   composer.addPass(ssaoPass);
 

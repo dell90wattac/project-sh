@@ -100,7 +100,7 @@ export function createViewModel(camera) {
   leftHandGroup.add(box(0.075, 0.075, 0.32, -0.08, -0.08, 0.18, skin, 0.4, 0.15));
 
   // Spotlight mounted on flashlight (child of left hand so it follows the hand automatically)
-  const flashlightLight = new THREE.SpotLight(0xFFF8EA, 24, 80, Math.PI / 180 * 40, 0.78);
+  const flashlightLight = new THREE.SpotLight(0xFFF8EA, 6.5, 80, Math.PI / 180 * 40, 0.78);
   flashlightLight.decay = 1.3;
   flashlightLight.position.set(0.01, 0.01, -0.19); // Slightly behind lens so nearby geometry catches light correctly
   flashlightLight.castShadow = true;

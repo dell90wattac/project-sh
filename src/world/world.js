@@ -247,6 +247,7 @@ export function createWorld(scene, physicsWorld) {
             float w2 = sin(wp.z * 4.1 + wp.y * 2.2) * sin(wp.x * 1.7 + wp.z * 0.9);
             float w3 = sin(wp.y * 5.3 + wp.z * 1.1) * sin(wp.x * 3.1 + wp.y * 0.5);
             float disp = (w1 * 0.55 + w2 * 0.30 + w3 * 0.15) * uDispAmp;
+            disp = clamp(disp, -0.012, 0.012);
             transformed += normal * disp;
           }`
         );
@@ -257,7 +258,6 @@ export function createWorld(scene, physicsWorld) {
   applyVertexDisplacement(M.wall,    { amp: 0.018 });
   applyVertexDisplacement(M.wainscot,{ amp: 0.010 });
   applyVertexDisplacement(M.ceiling, { amp: 0.012 });
-  applyVertexDisplacement(M.floor,   { amp: 0.008 });
   applyVertexDisplacement(M.column,  { amp: 0.015 });
 
   // ─── Fresnel Rim Lighting ────────────────────────────────────────────────

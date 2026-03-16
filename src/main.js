@@ -1270,6 +1270,9 @@ const startPrompt = document.getElementById('start-prompt');
 const loadingBarTrack = document.getElementById('loading-bar-track');
 
 let isStartupLoading = true;
+let waitingForControl = false;
+let settleTimer = 0;
+const SETTLE_TIME = 0.4; // seconds to let physics ground the player before revealing
 
 // ─── Warm-up: run full simulation frames so first gameplay frame is instant ─
 // The goal is to exercise every code path the real loop uses: player update,
@@ -1365,10 +1368,19 @@ function beginGameplay() {
     player.enableFallback();
   }
 
-  overlay.style.opacity = '0';
-  setTimeout(() => {
-    overlay.style.display = 'none';
-  }, 1000);
+  // Don't fade yet — wait until the player has control and has settled
+  waitingForControl = true;
+  settleTimer = SETTLE_TIME;
+
+  // Show a secondary loading bar so the player knows the game isn't frozen
+  if (startPrompt) startPrompt.style.display = 'none';
+  const ctrlsEl = document.getElementById('loading-controls');
+  if (ctrlsEl) ctrlsEl.style.display = 'none';
+  const warnEl = document.getElementById('loading-warning');
+  if (warnEl) warnEl.style.display = 'none';
+  if (loadingBarTrack) loadingBarTrack.style.display = '';
+  if (_loadBarFill) _loadBarFill.style.width = '0%';
+  if (_loadStatus) { _loadStatus.style.display = ''; _loadStatus.textContent = 'preparing world'; }
 }
 
 if (overlay) {
@@ -1540,6 +1552,33 @@ function loop(frameTimeMs = performance.now()) {
       triangles: renderer.info.render.triangles,
     });
     return;
+  }
+
+  // ── Overlay fade: wait until player has control and is grounded ────────
+  if (waitingForControl) {
+    const ready = player.isReady();
+    const grounded = player.isOnGround();
+
+    // Animate loading bar through milestones
+    if (!ready) {
+      setLoadProgress(20, 'acquiring input');
+    } else if (!grounded) {
+      setLoadProgress(55, 'settling physics');
+    } else if (settleTimer > 0) {
+      const progress = 70 + Math.round((1 - settleTimer / SETTLE_TIME) * 30);
+      setLoadProgress(progress, 'ready');
+    }
+
+    if (ready && grounded) {
+      settleTimer -= dt;
+      if (settleTimer <= 0) {
+        setLoadProgress(100, 'ready');
+        waitingForControl = false;
+        overlay.style.opacity = '0';
+        setTimeout(() => { overlay.style.display = 'none'; }, 1000);
+      }
+    }
+    // Don't return — let the full game loop run so physics/viewmodel settle behind the overlay
   }
 
   const dead = playerHealth.isDead();
