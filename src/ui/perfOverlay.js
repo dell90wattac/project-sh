@@ -54,8 +54,9 @@ export function createPerfOverlay(options = {}) {
       `room ${stats.currentRoomLabel ?? stats.currentRoomId ?? '-'}`,
       `zone ${stats.currentZone ?? '-'}`,
       `calls ${stats.drawCalls ?? '-'}  tris ${stats.triangles ?? '-'}`,
+      stats.perfMode ? 'PERFORMANCE MODE' : '',
       `session ${buildVersion} | F3 hide/show`,
-    ];
+    ].filter(Boolean);
 
     panel.textContent = lines.join('\n');
   }

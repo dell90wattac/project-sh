@@ -147,5 +147,11 @@ export function createFog(scene) {
     }
   }
 
-  return { update };
+  /** Hide/show all fog wisps and ground planes (for performance mode). */
+  function setVisible(visible) {
+    for (const wisp of wisps) wisp.mesh.visible = visible;
+    for (const gf of groundFogs) gf.visible = visible;
+  }
+
+  return { update, setVisible };
 }

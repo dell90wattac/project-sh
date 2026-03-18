@@ -7,7 +7,8 @@ import { createLobbyZombieSentry, createSpider } from '../entities/zombies.js';
  * Reworked for claustrophobic grandeur: columns, wainscoting, dense balustrades,
  * layered lighting, and heavy furniture to make the space feel enclosed despite its scale.
  */
-export function createWorld(scene, physicsWorld) {
+export function createWorld(scene, physicsWorld, options = {}) {
+  const lowQuality = !!options.lowQuality;
   const colliders = [];
   const spiderCrawlColliders = [];
   const hazards = [];
@@ -255,10 +256,12 @@ export function createWorld(scene, physicsWorld) {
     material.needsUpdate = true;
   }
 
-  applyVertexDisplacement(M.wall,    { amp: 0.018 });
-  applyVertexDisplacement(M.wainscot,{ amp: 0.010 });
-  applyVertexDisplacement(M.ceiling, { amp: 0.012 });
-  applyVertexDisplacement(M.column,  { amp: 0.015 });
+  if (!lowQuality) {
+    applyVertexDisplacement(M.wall,    { amp: 0.018 });
+    applyVertexDisplacement(M.wainscot,{ amp: 0.010 });
+    applyVertexDisplacement(M.ceiling, { amp: 0.012 });
+    applyVertexDisplacement(M.column,  { amp: 0.015 });
+  }
 
   // ─── Fresnel Rim Lighting ────────────────────────────────────────────────
   // Adds a faint warm highlight on surface edges facing the camera, giving
@@ -293,9 +296,11 @@ export function createWorld(scene, physicsWorld) {
     material.needsUpdate = true;
   }
 
-  applyFresnelRim(M.wall,    { rimStrength: 0.22, rimPower: 3.2 });
-  applyFresnelRim(M.column,  { rimStrength: 0.30, rimPower: 2.5 });
-  applyFresnelRim(M.wainscot,{ rimStrength: 0.18, rimPower: 3.5 });
+  if (!lowQuality) {
+    applyFresnelRim(M.wall,    { rimStrength: 0.22, rimPower: 3.2 });
+    applyFresnelRim(M.column,  { rimStrength: 0.30, rimPower: 2.5 });
+    applyFresnelRim(M.wainscot,{ rimStrength: 0.18, rimPower: 3.5 });
+  }
 
   function box(w, h, d, x, y, z, mat, options = {}) {
     const segs = (n) => Math.min(Math.ceil(n / 1.5), 6);

@@ -66,5 +66,10 @@ export function createPostProcessing(renderer, scene, camera) {
       ssaoPass.setSize(nw, nh);
       bloomPass.resolution.set(nw, nh);
     },
+    /** Toggle expensive passes for performance mode. */
+    setLowQuality(low) {
+      ssaoPass.enabled  = !low;
+      bloomPass.enabled = !low;
+    },
   };
 }

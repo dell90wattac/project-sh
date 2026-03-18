@@ -28,6 +28,7 @@ import { createItemClackAudio } from './systems/itemClackAudio.js';
 import { createAudioSystem } from './systems/audio.js';
 import { createSpawnTriggers } from './systems/spawnTriggers.js';
 import { createPostProcessing } from './systems/postProcessing.js';
+import { isLowQuality, setQuality } from './systems/qualitySettings.js';
 
 const BUILD_VERSION = '22.7';
 const AUDIO_DEBUG = (() => {
@@ -113,7 +114,7 @@ const physicsWorld = createPhysicsWorld();
 await yieldToUI(10, 'building world');
 
 // ─── World ──────────────────────────────────────────────────────────────────
-const world = createWorld(scene, physicsWorld);
+const world = createWorld(scene, physicsWorld, { lowQuality: isLowQuality() });
 const fog = createFog(scene);
 
 await yieldToUI(40, 'baking shadows');
@@ -962,6 +963,11 @@ debugMenuUI.setBindings({
   addAmmoStacks: debugAddAmmoStacks,
   unlockAllDoors: debugUnlockAllDoors,
   killAllSpiders: debugKillAllSpiders,
+  getPerfModeEnabled: () => isLowQuality(),
+  setPerfModeEnabled: (enabled) => {
+    setQuality(enabled ? 'low' : 'high');
+    applyQualitySettings();
+  },
 });
 
 // ─── Gameplay Loop: Spawn Trigger Definitions ──────────────────────────────
@@ -1336,15 +1342,38 @@ for (let i = 0; i < WARMUP_FRAMES; i++) {
 // One last yield at 100% then transition to ready
 await yieldToUI(100, 'ready');
 
-// Loading complete — show start prompt
+// Loading complete — show quality-choice buttons
 if (loadingBarTrack) loadingBarTrack.style.display = 'none';
-if (startPrompt) startPrompt.style.display = '';
+if (startPrompt) startPrompt.style.display = 'none';
+const startQualityRow = document.getElementById('start-quality-row');
+if (startQualityRow) startQualityRow.style.display = 'flex';
 if (_loadStatus) _loadStatus.style.display = 'none';
 
 if (overlay) {
-  overlay.style.cursor = 'pointer';
   overlay.style.pointerEvents = 'all';
 }
+
+// ─── Quality Settings ──────────────────────────────────────────────────────
+let perfModeActive = isLowQuality();
+
+function applyQualitySettings() {
+  const low = isLowQuality();
+  perfModeActive = low;
+  postProcessing.setLowQuality(low);
+  fog.setVisible(!low);
+  renderer.setPixelRatio(low ? 1.0 : Math.min(window.devicePixelRatio, 1.5));
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  postProcessing.resize(window.innerWidth, window.innerHeight);
+  if (low) {
+    renderer.shadowMap.enabled = false;
+  } else {
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.needsUpdate = true;
+  }
+}
+
+// Apply on first load so ?quality=low or localStorage carry over
+applyQualitySettings();
 
 function beginGameplay() {
   if (!overlay) return;
@@ -1374,6 +1403,7 @@ function beginGameplay() {
 
   // Show a secondary loading bar so the player knows the game isn't frozen
   if (startPrompt) startPrompt.style.display = 'none';
+  if (startQualityRow) startQualityRow.style.display = 'none';
   const ctrlsEl = document.getElementById('loading-controls');
   if (ctrlsEl) ctrlsEl.style.display = 'none';
   const warnEl = document.getElementById('loading-warning');
@@ -1383,9 +1413,11 @@ function beginGameplay() {
   if (_loadStatus) { _loadStatus.style.display = ''; _loadStatus.textContent = 'preparing world'; }
 }
 
-if (overlay) {
-  overlay.addEventListener('click', beginGameplay);
-}
+// Quality-choice buttons (shown alongside the old click-to-begin prompt)
+const btnPlay = document.getElementById('btn-play');
+const btnPerf = document.getElementById('btn-perf');
+if (btnPlay) btnPlay.addEventListener('click', (e) => { e.stopPropagation(); setQuality('high'); applyQualitySettings(); beginGameplay(); });
+if (btnPerf) btnPerf.addEventListener('click', (e) => { e.stopPropagation(); setQuality('low');  applyQualitySettings(); beginGameplay(); });
 
 // ─── Clock & Loop ──────────────────────────────────────────────────────────
 const DEBUG_FPS_CAP_60_INTERVAL_MS = 1000 / 60;
@@ -1541,6 +1573,7 @@ function loop(frameTimeMs = performance.now()) {
 
     const startupStats = roomCulling.getStats();
     perfOverlay.update(dt, {
+      perfMode: perfModeActive,
       currentRoomId: startupStats.currentRoomId,
       currentRoomLabel: startupStats.currentRoomLabel,
       currentZone: startupStats.currentZone,
@@ -1649,9 +1682,9 @@ function loop(frameTimeMs = performance.now()) {
   // ─── Hazard tick damage ─────────────────────────────────────────────────
   updateHazards(dt);
   shockwave.update(dt);
-  shockwaveFx.update(dt);
+  if (!perfModeActive) shockwaveFx.update(dt);
   chandelierMotion.update(dt);
-  updateFlickerLights(dt);
+  if (!perfModeActive) updateFlickerLights(dt);
 
   inventoryUI.update(dt);
   debugMenuUI.update(dt);
@@ -1671,6 +1704,7 @@ function loop(frameTimeMs = performance.now()) {
   const roomStats = roomCulling.getStats();
   perfOverlay.update(dt, {
     fpsCapEnabled: debug60FpsCapEnabled,
+    perfMode: perfModeActive,
     currentRoomId: roomStats.currentRoomId,
     currentRoomLabel: roomStats.currentRoomLabel,
     currentZone: roomStats.currentZone,

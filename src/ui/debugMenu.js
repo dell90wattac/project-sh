@@ -18,6 +18,8 @@ export function createDebugMenuUI(bindings = {}) {
   let killAllSpiders = bindings.killAllSpiders || (() => {});
   let get60FpsCapEnabled = bindings.get60FpsCapEnabled || (() => false);
   let set60FpsCapEnabled = bindings.set60FpsCapEnabled || (() => {});
+  let getPerfModeEnabled = bindings.getPerfModeEnabled || (() => false);
+  let setPerfModeEnabled = bindings.setPerfModeEnabled || (() => {});
 
   const uiRoot = document.getElementById('ui-root') || document.body;
   const container = document.createElement('div');
@@ -106,6 +108,7 @@ export function createDebugMenuUI(bindings = {}) {
   const unlockDoorsRow = makeRow('UNLOCK ALL DOORS', '6', { indicatorText: '[>]' });
   const killSpidersRow = makeRow('KILL ALL SPIDERS', '7', { indicatorText: '[>]' });
   const fpsCapRow = makeRow('60 FPS CAP', '8');
+  const perfModeRow = makeRow('PERFORMANCE MODE', '9');
   panel.appendChild(noclipRow.row);
   panel.appendChild(invRow.row);
   panel.appendChild(leaveHitboxRow.row);
@@ -114,6 +117,7 @@ export function createDebugMenuUI(bindings = {}) {
   panel.appendChild(unlockDoorsRow.row);
   panel.appendChild(killSpidersRow.row);
   panel.appendChild(fpsCapRow.row);
+  panel.appendChild(perfModeRow.row);
 
   const hint = document.createElement('div');
   hint.textContent = 'ESC CLOSE';
@@ -125,10 +129,12 @@ export function createDebugMenuUI(bindings = {}) {
     const invOn = !!getInvincibleEnabled();
     const leaveOn = !!getLeaveHitboxEnabled();
     const fpsCapOn = !!get60FpsCapEnabled();
+    const perfModeOn = !!getPerfModeEnabled();
     noclipRow.check.textContent = noclipOn ? '[X]' : '[ ]';
     invRow.check.textContent = invOn ? '[X]' : '[ ]';
     leaveHitboxRow.check.textContent = leaveOn ? '[X]' : '[ ]';
     fpsCapRow.check.textContent = fpsCapOn ? '[X]' : '[ ]';
+    perfModeRow.check.textContent = perfModeOn ? '[X]' : '[ ]';
   }
 
   function setOpen(next) {
@@ -169,6 +175,11 @@ export function createDebugMenuUI(bindings = {}) {
   fpsCapRow.row.addEventListener('click', () => {
     const next = !get60FpsCapEnabled();
     set60FpsCapEnabled(!!next);
+    refresh();
+  });
+  perfModeRow.row.addEventListener('click', () => {
+    const next = !getPerfModeEnabled();
+    setPerfModeEnabled(!!next);
     refresh();
   });
 
@@ -225,6 +236,13 @@ export function createDebugMenuUI(bindings = {}) {
       const next = !get60FpsCapEnabled();
       set60FpsCapEnabled(!!next);
       refresh();
+      return;
+    }
+    if (e.code === 'Digit9') {
+      e.preventDefault();
+      const next = !getPerfModeEnabled();
+      setPerfModeEnabled(!!next);
+      refresh();
     }
   }
   window.addEventListener('keydown', onKeyDown);
@@ -255,6 +273,8 @@ export function createDebugMenuUI(bindings = {}) {
       if (typeof nextBindings.killAllSpiders === 'function') killAllSpiders = nextBindings.killAllSpiders;
       if (typeof nextBindings.get60FpsCapEnabled === 'function') get60FpsCapEnabled = nextBindings.get60FpsCapEnabled;
       if (typeof nextBindings.set60FpsCapEnabled === 'function') set60FpsCapEnabled = nextBindings.set60FpsCapEnabled;
+      if (typeof nextBindings.getPerfModeEnabled === 'function') getPerfModeEnabled = nextBindings.getPerfModeEnabled;
+      if (typeof nextBindings.setPerfModeEnabled === 'function') setPerfModeEnabled = nextBindings.setPerfModeEnabled;
       refresh();
     },
   };
